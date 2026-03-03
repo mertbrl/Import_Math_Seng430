@@ -1,242 +1,201 @@
-# IMP ML Tool Backend + Frontend
+# 🏥 HEALTH-AI: ML Visualization Tool
 
-Bu proje, saglik alanina yonelik 7 adimli bir ML egitim/pipeline deneyimini backend ve frontend katmanlariyla sunar.
-Yapi Docker'siz gelistirme akisini hedefler.
+## 📖 Project Overview
+HEALTH-AI is an interactive, web-based educational platform built for healthcare professionals (doctors, nurses, clinical researchers) and students.
+Its main goal is to make AI and ML in clinical workflows understandable, transparent, and practical.
 
-## 1. Ne Saglar
+The platform is designed as a guided 7-step experience where users can:
+- work with clinical datasets,
+- train ML models,
+- interpret predictions,
+- evaluate fairness,
+- and generate a structured summary certificate.
 
-1. Session bazli pipeline yonetimi
-2. Dataset yukleme/degistirme ve versiyonlama (`dataset_version`)
-3. Mapping dogrulama ve step kilit acma mantigi
-4. Preprocessing config + run
-5. Training config + coklu run yonetimi
-6. Evaluation, explainability, fairness ciktilari
-7. Certificate olusturma
-8. Legacy endpointlerle geriye donuk uyumluluk
+## ✨ Core Features: 7-Step Clinical ML Journey
+1. **Clinical Context**
+   Define the medical specialty, use case, and prediction objective.
 
-## 2. Mimarinin Omurgasi
+2. **Data Exploration**
+   Use built-in datasets (20 specialties) or upload a custom CSV file (up to 50 MB).
+   Includes schema checks and column/target validation.
 
-1. `Session`:
-- Her kullanici akisi bir `session_id` altinda tutulur.
-- Tum adim ciktilari session state icinde saklanir.
+3. **Data Preparation**
+   Configure train/test split, missing value handling, normalization, and optional SMOTE.
 
-2. `Dataset Versioning`:
-- Dataset create/patch/delete islemlerinde `dataset_version` artar.
-- Eski run ve analizler stale kabul edilir.
+4. **Model Selection & Parameters**
+   Train and tune 6 model families:
+   KNN, SVM, Decision Tree, Random Forest, Logistic Regression, Naive Bayes.
 
-3. `Pipeline Revision`:
-- Session state degistikce `pipeline_revision` artar.
-- Hangi cikti hangi revizyonda olustu takip edilir.
+5. **Results & Evaluation**
+   Review Accuracy, Sensitivity, Specificity, Precision, F1, AUC-ROC and confusion matrix outputs.
 
-4. `Run`:
-- Training sonucu `run_id` ile tutulur.
-- Evaluation/Explainability/Fairness run bazli sorgulanir.
+6. **Explainability**
+   Inspect global feature effects and local (single-patient) explanations.
 
-## 3. Invalidation Kurallari
+7. **Ethics & Certificate**
+   Run subgroup fairness checks and generate a final PDF-style summary output.
 
-1. Dataset degisirse:
-- Mapping, preprocessing, training runs, evaluation, explainability, fairness, certificate invalid edilir.
+## 🏗️ Technical Architecture
+The project follows a component-based frontend and layered backend architecture.
 
-2. Mapping degisirse:
-- Preprocessing ve sonrasi invalid edilir.
+### Frontend Layer
+- **Framework:** React 18 + Vite
+- **HTTP Client:** Axios
+- **Flow Model:** Step-based pipeline state (7-step UI)
+- **Current Styling:** Component-level styles
+- **Planned UI Upgrade:** Tailwind CSS based design system
 
-3. Preprocessing degisirse:
-- Training ve sonrasi invalid edilir.
+### Backend Layer
+- **Framework:** FastAPI
+- **Validation:** Pydantic v2
+- **Server:** Uvicorn
+- **API Contract:** OpenAPI/Swagger
+- **Execution Model:**
+  - synchronous endpoints for data, explainability, fairness, certificate
+  - asynchronous train start + status polling for model training
 
-4. Training config/run degisirse:
-- Evaluation, explainability, fairness, certificate invalid edilir.
+### ML/Domain Layer
+- Structured service and engine folders for:
+  - data preparation,
+  - model training,
+  - evaluation,
+  - explainability,
+  - fairness,
+  - certificate generation.
 
-## 4. Klasor Yapisi
+### Data/State Strategy
+- **Current state storage:** In-memory session/task state (no database yet)
+- **Implication:** Good for demo/education; not production-persistent.
 
-1. Backend:
-- `backend-service/app/main.py`: FastAPI app girisi
-- `backend-service/app/api/v1/router.py`: tum router baglantilari
-- `backend-service/app/api/v1/endpoints/`: endpoint katmani
-- `backend-service/app/services/`: is kurali ve orchestration
-- `backend-service/app/schemas/`: request/response modelleri
-- `backend-service/app/core/`: config ve exception altyapisi
-- `backend-service/tests/`: backend testleri
+## 🧰 Tools & Technologies
+### Core Runtime
+- Python 3.11+
+- Node.js 20+
+- npm 10+
 
-2. Frontend:
-- `frontend-app/src/pages/HomePage.jsx`: ana ekran ve step akisi
-- `frontend-app/src/features/`: step bazli UI modulleri
-- `frontend-app/src/services/pipelineApi.js`: API cagrilari
-- `frontend-app/src/store/pipelineStore.js`: ilk state ve step sabitleri
+### Frontend
+- React 18
+- Vite
+- Axios
+- (Planned) Tailwind CSS
 
-## 5. Gereksinimler
+### Backend
+- FastAPI
+- Pydantic
+- Uvicorn
+- python-multipart
 
-1. Python `3.11+` (projede `3.13` ile test edildi)
-2. Node `20+` (projede `24.x` ile test edildi)
-3. npm `10+`
+### Testing & Quality
+- pytest
+- httpx (API testing)
+- Lighthouse / axe (accessibility and UX quality)
 
-## 6. Docker'siz Calistirma
+### Product & Collaboration
+- Jira (stories and acceptance criteria)
+- Figma (UI/UX)
+- GitHub (code + wiki/docs)
 
-1. Backend kurulum:
+## 🔌 API Endpoints (Current Active v1)
+Base prefix: `/api/v1`
 
+### 1) System & Data
+1. `GET /health`
+   - API health check.
+
+2. `GET /data/datasets`
+   - Returns built-in clinical datasets (20 specialties).
+
+3. `POST /data/upload`
+   - Upload CSV (max 50 MB), profile columns, missing rates, class balance.
+
+4. `POST /data/validate-mapping`
+   - Validates target column and mapping rules.
+
+5. `POST /data/prepare`
+   - Applies split + preprocessing configuration + optional SMOTE summary.
+
+### 2) Model Training (Async)
+6. `GET /models`
+   - Returns supported models and parameter bounds.
+
+7. `POST /models/train/start`
+   - Starts background model training, returns `task_id`.
+
+8. `GET /models/train/status/{task_id}`
+   - Poll training status and retrieve results when completed.
+
+### 3) Explainability, Fairness, Certificate
+9. `POST /insights/explain/global`
+   - Global explanation output.
+
+10. `POST /insights/explain/local`
+    - Local, single-patient explanation output.
+
+11. `POST /insights/fairness`
+    - Subgroup fairness metrics + bias flag.
+
+12. `POST /certificate/generate`
+    - Generates final summary certificate payload.
+
+### Extra Health Route
+- `GET /healthz` (non-schema quick health route)
+
+## 🗂️ Repository Structure
+```text
+imp_math_back/
+├── backend-service/
+│   ├── app/
+│   │   ├── api/v1/endpoints/
+│   │   ├── core/
+│   │   ├── ml_core/
+│   │   ├── schemas/
+│   │   └── services/
+│   ├── tests/
+│   └── requirements.txt
+├── frontend-app/
+│   ├── src/
+│   │   ├── components/
+│   │   ├── features/
+│   │   ├── hooks/
+│   │   ├── pages/
+│   │   ├── services/
+│   │   └── store/
+│   └── package.json
+└── README.md
+```
+
+## ▶️ Run Locally (No Docker)
+### Backend
 ```bash
 cd /Users/mertbursalioglu/workspace/imp_math_back/backend-service
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-```
-
-2. Backend calistirma (5001):
-
-```bash
-cd /Users/mertbursalioglu/workspace/imp_math_back/backend-service
-source .venv/bin/activate
 uvicorn app.main:app --reload --host 0.0.0.0 --port 5001
 ```
 
-3. Frontend kurulum:
-
+### Frontend
 ```bash
 cd /Users/mertbursalioglu/workspace/imp_math_back/frontend-app
 npm install
-```
-
-4. Frontend calistirma:
-
-```bash
-cd /Users/mertbursalioglu/workspace/imp_math_back/frontend-app
 npm run dev -- --host 0.0.0.0 --port 5173
 ```
 
-## 7. URL'ler
+## 🌐 Local URLs
+- Backend API: `http://localhost:5001`
+- Swagger UI: `http://localhost:5001/docs`
+- OpenAPI JSON: `http://localhost:5001/openapi.json`
+- Frontend: `http://localhost:5173`
 
-1. Backend health:
-- `http://localhost:5001/healthz`
+## ✅ Current Status & Scope
+- Structure-first educational implementation is ready.
+- Endpoint flow is aligned with the 7-step product journey.
+- Sessions/tasks are currently in-memory (no DB persistence yet).
+- Suitable for demo, course, and iteration workflows.
 
-2. Swagger:
-- `http://localhost:5001/docs`
-
-3. OpenAPI JSON:
-- `http://localhost:5001/openapi.json`
-
-4. Frontend:
-- `http://localhost:5173`
-
-## 8. API Ozeti (Yeni Session-First Yapi)
-
-### 8.1 Session
-
-1. `POST /api/v1/sessions`
-2. `GET /api/v1/sessions`
-3. `GET /api/v1/sessions/{session_id}`
-4. `PATCH /api/v1/sessions/{session_id}`
-5. `DELETE /api/v1/sessions/{session_id}`
-
-### 8.2 Dataset
-
-1. `POST /api/v1/sessions/{session_id}/dataset`
-2. `GET /api/v1/sessions/{session_id}/dataset`
-3. `PATCH /api/v1/sessions/{session_id}/dataset`
-4. `DELETE /api/v1/sessions/{session_id}/dataset`
-
-### 8.3 Mapping
-
-1. `PUT /api/v1/sessions/{session_id}/mapping`
-2. `GET /api/v1/sessions/{session_id}/mapping`
-3. `POST /api/v1/sessions/{session_id}/mapping/validate`
-4. `DELETE /api/v1/sessions/{session_id}/mapping`
-
-### 8.4 Preprocessing
-
-1. `PUT /api/v1/sessions/{session_id}/preprocessing`
-2. `POST /api/v1/sessions/{session_id}/preprocessing/run`
-3. `GET /api/v1/sessions/{session_id}/preprocessing/result`
-4. `DELETE /api/v1/sessions/{session_id}/preprocessing/result`
-
-### 8.5 Training
-
-1. `PUT /api/v1/sessions/{session_id}/training/config`
-2. `POST /api/v1/sessions/{session_id}/training/run`
-3. `GET /api/v1/sessions/{session_id}/training/runs`
-4. `GET /api/v1/sessions/{session_id}/training/runs/{run_id}`
-5. `DELETE /api/v1/sessions/{session_id}/training/runs/{run_id}`
-
-### 8.6 Analysis
-
-1. `GET /api/v1/sessions/{session_id}/evaluation/{run_id}`
-2. `GET /api/v1/sessions/{session_id}/explainability/{run_id}/global`
-3. `POST /api/v1/sessions/{session_id}/explainability/{run_id}/local`
-4. `GET /api/v1/sessions/{session_id}/fairness/{run_id}`
-
-### 8.7 Certificate
-
-1. `POST /api/v1/sessions/{session_id}/certificate`
-2. `GET /api/v1/sessions/{session_id}/certificate`
-3. `DELETE /api/v1/sessions/{session_id}/certificate`
-
-## 9. Legacy Endpointler (Geriye Donuk)
-
-Asagidaki endpointler korunmustur:
-
-1. `POST /api/v1/context`
-2. `POST /api/v1/data/explore`
-3. `POST /api/v1/preprocess`
-4. `POST /api/v1/train`
-5. `POST /api/v1/evaluation`
-6. `POST /api/v1/explainability`
-7. `POST /api/v1/fairness`
-8. `POST /api/v1/certificate`
-9. `GET /api/v1/model/catalog`
-10. `GET /api/v1/insights/session/{session_id}`
-
-## 10. Hizli E2E Ornek Akis
-
-```bash
-# 1) Session olustur
-curl -X POST http://localhost:5001/api/v1/sessions \
-  -H "Content-Type: application/json" \
-  -d '{"domain":"Cardiology","use_case":"Demo"}'
-
-# 2) Dataset set et
-curl -X POST http://localhost:5001/api/v1/sessions/<SESSION_ID>/dataset \
-  -H "Content-Type: application/json" \
-  -d '{"source":"upload","target_column":"DEATH_EVENT","file_name":"demo.csv","row_count":400,"column_count":14}'
-
-# 3) Mapping + validate
-curl -X PUT http://localhost:5001/api/v1/sessions/<SESSION_ID>/mapping \
-  -H "Content-Type: application/json" \
-  -d '{"problem_type":"binary_classification","target_column":"DEATH_EVENT","roles":{"patient_id":"ignore"}}'
-
-curl -X POST http://localhost:5001/api/v1/sessions/<SESSION_ID>/mapping/validate
-
-# 4) Preprocessing
-curl -X PUT http://localhost:5001/api/v1/sessions/<SESSION_ID>/preprocessing \
-  -H "Content-Type: application/json" \
-  -d '{"train_split":80,"missing_strategy":"median","normalization":"zscore","imbalance_strategy":"smote"}'
-
-curl -X POST http://localhost:5001/api/v1/sessions/<SESSION_ID>/preprocessing/run
-
-# 5) Training
-curl -X PUT http://localhost:5001/api/v1/sessions/<SESSION_ID>/training/config \
-  -H "Content-Type: application/json" \
-  -d '{"algorithm":"knn","parameters":{"k":5}}'
-
-curl -X POST http://localhost:5001/api/v1/sessions/<SESSION_ID>/training/run
-```
-
-## 11. Test ve Build
-
-1. Backend test:
-
-```bash
-cd /Users/mertbursalioglu/workspace/imp_math_back
-PYTHONPATH=/Users/mertbursalioglu/workspace/imp_math_back/backend-service \
-/Users/mertbursalioglu/workspace/imp_math_back/backend-service/.venv/bin/pytest -q backend-service/tests
-```
-
-2. Frontend build:
-
-```bash
-cd /Users/mertbursalioglu/workspace/imp_math_back/frontend-app
-npm run build
-```
-
-## 12. Notlar
-
-1. Bu repo su anda "structure-first" bir implementasyondur.
-2. ML hesaplamalari demonstratif/mock degerler doner.
-3. Uretim icin kalici depolama, auth, audit trail, ve gercek model pipeline entegrasyonu gerekir.
+## 🚀 Recommended Next Technical Iterations
+1. Add persistent storage (PostgreSQL + migration layer).
+2. Add auth/roles and audit logging.
+3. Move long-running training tasks to a worker queue.
+4. Integrate Tailwind UI system and shared component tokens.
+5. Extend CI with API contract tests and frontend E2E checks.
