@@ -187,15 +187,4 @@ npm run dev -- --host 0.0.0.0 --port 5173
 - OpenAPI JSON: `http://localhost:5001/openapi.json`
 - Frontend: `http://localhost:5173`
 
-## ✅ Current Status & Scope
-- Structure-first educational implementation is ready.
-- Endpoint flow is aligned with the 7-step product journey.
-- Sessions/tasks are currently in-memory (no DB persistence yet).
-- Suitable for demo, course, and iteration workflows.
 
-## 🚀 Recommended Next Technical Iterations
-1. Add persistent storage (PostgreSQL + migration layer).
-2. Add auth/roles and audit logging.
-3. Move long-running training tasks to a worker queue.
-4. Integrate Tailwind UI system and shared component tokens.
-5. Extend CI with API contract tests and frontend E2E checks.
