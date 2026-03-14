@@ -4,6 +4,7 @@ import { domains } from '../config/domainConfig';
 
 export const Step1_ClinicalContext: React.FC = () => {
   const selectedDomainId = useDomainStore((state) => state.selectedDomainId);
+  const setCurrentStep = useDomainStore((state) => state.setCurrentStep);
   const domain = domains.find((d) => d.id === selectedDomainId) || domains[0];
 
   return (
@@ -29,8 +30,10 @@ export const Step1_ClinicalContext: React.FC = () => {
           <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold tracking-wide bg-slate-200/50 px-3 py-1.5 rounded-md border border-slate-200">
             <span>⏱</span> Estimated Time: 3 mins
           </div>
-          <button className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-6 py-2.5 rounded-xl transition-all shadow-sm hover:shadow-md active:scale-[0.98] w-full md:w-auto">
-            Proceed to Data Exploration →
+          <button 
+            onClick={() => setCurrentStep(2)}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-6 py-2.5 rounded-xl transition-all shadow-sm hover:shadow-md active:scale-[0.98] w-full md:w-auto"
+          >            Proceed to Data Exploration →
           </button>
         </div>
       </div>

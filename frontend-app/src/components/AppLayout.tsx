@@ -3,6 +3,7 @@ import { TopNavbar } from './TopNavbar';
 import { HelpChatbotDrawer } from './HelpChatbotDrawer';
 import { useDomainStore } from '../store/useDomainStore';
 import { domains } from '../config/domainConfig';
+import { Check } from 'lucide-react';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -19,7 +20,23 @@ const STEPS = [
 ];
 
 export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
-  const { selectedDomainId, setDomain } = useDomainStore();
+  const { selectedDomainId, setDomain, currentStep, setCurrentStep, schemaValid } = useDomainStore();
+
+  // Dynamic step state driven by currentStep from Zustand
+  const getStepState = (id: number): 'completed' | 'active' | 'locked' => {
+    if (id < currentStep) return 'completed';
+    if (id === currentStep) return 'active';
+    // Step 3 is unlockable when schemaValid is true
+    if (id === 3 && schemaValid) return 'active';
+    return 'locked';
+  };
+
+  const handleStepClick = (stepId: number) => {
+    const state = getStepState(stepId);
+    if (state === 'completed' || state === 'active') {
+      setCurrentStep(stepId);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
@@ -57,29 +74,41 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           {/* Visual Stepper */}
           <section className="bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 flex overflow-x-auto gap-2 scrollbar-hide">
             {STEPS.map((step) => {
-               // Only Step 1 is active for now
-               const isActive = step.id === 1;
+               const state = getStepState(step.id);
+               const isActive = state === 'active';
+               const isCompleted = state === 'completed';
+               const isLocked = state === 'locked';
+               const isClickable = !isLocked;
                return (
                  <div 
                    key={step.id} 
+                   onClick={() => handleStepClick(step.id)}
                    className={`flex-none w-[160px] flex items-start gap-2.5 p-2 rounded-lg transition-all ${
                      isActive 
                        ? 'bg-indigo-50/50 border border-indigo-100' 
+                       : isCompleted
+                       ? 'bg-emerald-50/50 border border-emerald-100'
                        : 'bg-transparent border border-transparent opacity-60'
-                   }`}
+                   } ${isClickable ? 'cursor-pointer hover:shadow-sm' : 'cursor-not-allowed'}`}
                  >
                    <div className={`w-7 h-7 rounded-md flex items-center justify-center text-xs font-bold shrink-0 ${
                      isActive 
                        ? 'bg-indigo-600 text-white shadow-sm' 
+                       : isCompleted
+                       ? 'bg-emerald-500 text-white shadow-sm'
                        : 'bg-slate-100 text-slate-400 border border-slate-200'
                    }`}>
-                     {step.id}
+                     {isCompleted ? <Check size={14} /> : step.id}
                    </div>
                    <div className="flex flex-col flex-1 overflow-hidden">
-                     <span className={`text-[13px] font-semibold truncate ${isActive ? 'text-slate-900' : 'text-slate-600'}`}>
+                     <span className={`text-[13px] font-semibold truncate ${
+                       isActive ? 'text-slate-900' : isCompleted ? 'text-emerald-800' : 'text-slate-600'
+                     }`}>
                        {step.name}
                      </span>
-                     <span className="text-[11px] text-slate-400 font-medium truncate mt-0.5">
+                     <span className={`text-[11px] font-medium truncate mt-0.5 ${
+                       isLocked ? 'text-slate-400' : 'text-slate-400'
+                     }`}>
                        {step.desc}
                      </span>
                    </div>

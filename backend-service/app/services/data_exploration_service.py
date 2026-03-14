@@ -1,13 +1,69 @@
-from app.schemas.request import DataExplorationRequest
+"""Data Exploration Service — orchestration layer.
+
+Reads an uploaded ``UploadFile`` into a Pandas ``DataFrame`` and
+delegates all analytical work to the ML core EDA engine.
+"""
+
+from __future__ import annotations
+
+import io
+from typing import Any
+
+import pandas as pd
+from fastapi import UploadFile
+
+from app.core.exceptions import PipelineError
+from app.ml_core.data_engine.eda import run_full_eda
 
 
 class DataExplorationService:
-    def profile(self, payload: DataExplorationRequest) -> dict[str, object]:
-        return {
-            "source": payload.source,
-            "target_column": payload.target_column,
-            "rows": 304,
-            "columns": 12,
-            "missing_ratio": 0.068,
-            "class_balance": {"negative": 0.67, "positive": 0.33},
-        }
+    """Stateless service that bridges HTTP uploads and the EDA engine."""
+
+    async def explore(self, file: UploadFile) -> dict[str, Any]:
+        """Run the full EDA pipeline on an uploaded CSV file.
+
+        Parameters
+        ----------
+        file : UploadFile
+            A FastAPI upload handle whose content is raw CSV bytes.
+
+        Returns
+        -------
+        dict
+            A dict whose structure matches ``EDAProfileResponse``.
+
+        Raises
+        ------
+        PipelineError
+            If the file is not a CSV or cannot be parsed by Pandas.
+        """
+        # ── validation ───────────────────────────────────────────────
+        filename = (file.filename or "").lower()
+        if not filename.endswith(".csv"):
+            raise PipelineError("Only .csv files are accepted.", status_code=400)
+
+        content = await file.read()
+        if not content:
+            raise PipelineError("Uploaded file is empty.", status_code=400)
+
+        # ── parse ────────────────────────────────────────────────────
+        try:
+            df: pd.DataFrame = pd.read_csv(io.BytesIO(content))
+        except Exception as exc:
+            raise PipelineError(
+                f"Failed to parse CSV: {exc}",
+                status_code=400,
+            ) from exc
+
+        if df.empty or df.shape[1] == 0:
+            raise PipelineError(
+                "CSV file is empty or contains no columns.",
+                status_code=400,
+            )
+
+        # ── analyse ──────────────────────────────────────────────────
+        return run_full_eda(df)
+
+
+# Module-level singleton (matches existing services pattern).
+data_exploration_service = DataExplorationService()

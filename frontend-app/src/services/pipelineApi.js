@@ -10,6 +10,20 @@ export async function exploreData(payload) {
   return response.data;
 }
 
+/**
+ * Upload a CSV File and run full EDA on the backend.
+ * Uses FormData for multipart/form-data transfer.
+ */
+export async function exploreDataset(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await api.post("/data/explore", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+    timeout: 30000, // EDA can take longer on large files
+  });
+  return response.data;
+}
+
 export async function preprocessData(payload) {
   const response = await api.post("/preprocess", payload);
   return response.data;

@@ -7,17 +7,50 @@ from fastapi import APIRouter, File, Form, UploadFile
 from pydantic import BaseModel, Field
 
 from app.core.exceptions import PipelineError
+from app.schemas.exploration import EDAProfileResponse
 from app.schemas.request import (
     DatasetUpsertRequest,
     MappingUpsertRequest,
     PreprocessRequest,
 )
+from app.services.data_exploration_service import data_exploration_service
 from app.services.pipeline_service import pipeline_service
 from app.services.session_service import session_service
 
 router = APIRouter(prefix="/data", tags=["data"])
 
 MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024
+
+
+# ── EDA Explore Endpoint ─────────────────────────────────────────────
+
+@router.post("/explore", response_model=EDAProfileResponse)
+async def explore_data(
+    file: UploadFile = File(...),
+) -> dict[str, Any]:
+    """Upload a CSV and receive a full EDA profile.
+
+    The response JSON matches the frontend ``MockEDADataset`` interface
+    so it can be used as a drop-in replacement for the mocked data.
+
+    Raises
+    ------
+    PipelineError (400)
+        If the file is not a CSV, is empty, or cannot be parsed.
+    PipelineError (413)
+        If the file exceeds the 50 MB size limit.
+    """
+    # Size guard — read content and check length
+    content = await file.read()
+    if len(content) > MAX_UPLOAD_SIZE_BYTES:
+        raise PipelineError("CSV file exceeds 50 MB limit.", status_code=413)
+
+    # Reset the file cursor so the service can re-read
+    await file.seek(0)
+
+    return await data_exploration_service.explore(file)
+
+
 DEFAULT_DATASETS = [
     {"code": "cardiology_hf", "domain": "Cardiology", "target_column": "DEATH_EVENT"},
     {"code": "radiology_pneumonia", "domain": "Radiology", "target_column": "Finding_Label"},
