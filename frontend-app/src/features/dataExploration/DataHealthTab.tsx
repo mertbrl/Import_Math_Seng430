@@ -1,12 +1,13 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import type { SummaryStats, Alert } from './mockEDAData';
+import { useEDAStore, detectMultimodality } from '../../store/useEDAStore';
+import DataHealthAlerts from './DataHealthAlerts';
 import {
   BarChart3,
   Database,
   AlertTriangle,
   Rows3,
   Columns3,
-  HardDrive,
   Copy,
   Hash,
   ToggleLeft,
@@ -35,10 +36,48 @@ const StatCard: React.FC<{
 interface DataHealthTabProps {
   summary: SummaryStats;
   alerts: Alert[];
+  columns: import('./mockEDAData').ColumnStats[];
 }
 
-const DataHealthTab: React.FC<DataHealthTabProps> = ({ summary, alerts }) => {
+const DataHealthTab: React.FC<DataHealthTabProps> = ({ summary, alerts, columns }) => {
+  // Detect class imbalance from the last column (assumed target)
+  const targetColumn = columns[columns.length - 1];
+  const targetDist = targetColumn?.distribution ?? [];
+  const totalTargetCount = targetDist.reduce((s, d) => s + d.value, 0);
 
+  // Compute advanced heuristic alerts dynamically on the frontend via useEDAStore
+  const enrichedAlerts = useMemo(() => {
+    let newAlerts = [...alerts];
+
+    // 1. High Imbalance Detection
+    if (targetColumn && targetColumn.type === 'Categorical' && targetDist.length > 0) {
+      const highestClassCount = Math.max(...targetDist.map(d => d.value));
+      const majorityPct = highestClassCount / totalTargetCount;
+      if (majorityPct >= 0.9) {
+        newAlerts.push({
+          severity: 'severe',
+          title: 'Extreme Class Imbalance',
+          message: `The target variable '${targetColumn.name}' has a minority class of less than 10%. This will cause standard models to trivially guess the majority class and fail.`,
+          icon: '⚖️'
+        });
+      }
+    }
+
+    // 2. Multimodal Form Detection
+    const multimodalCols = columns.filter(col => detectMultimodality(col) === 'multimodal');
+    if (multimodalCols.length > 0) {
+      newAlerts.push({
+        severity: 'warning',
+        title: 'Multimodal Distributions Detected',
+        message: `${multimodalCols.length} variables (e.g. ${multimodalCols[0].name}) have complex, multi-peaked distributions. Global linear models might struggle to fit this data effectively.`,
+        icon: '📊'
+      });
+    }
+
+    return newAlerts;
+  }, [alerts, columns, targetColumn, targetDist, totalTargetCount]);
+
+  const isClassImbalanceAlert = enrichedAlerts.some((a) => a.title.includes('Class Imbalance'));
 
   return (
     <div className="space-y-6">
@@ -76,15 +115,10 @@ const DataHealthTab: React.FC<DataHealthTabProps> = ({ summary, alerts }) => {
             sub={`${summary.duplicateRowsPct}% of rows`}
           />
           <StatCard
-            icon={<HardDrive size={18} />}
-            label="Total Size in Memory"
-            value={summary.totalMemory}
-          />
-          <StatCard
             icon={<Database size={18} />}
-            label="Variable Types"
-            value=""
-            sub={`Numeric: ${summary.variableTypes.Numeric} · Categorical: ${summary.variableTypes.Categorical} · Boolean: ${summary.variableTypes.Boolean}`}
+            label="Total Data Source"
+            value="Clean & Extracted"
+            sub="Ready for pipeline"
           />
         </div>
 
@@ -124,51 +158,59 @@ const DataHealthTab: React.FC<DataHealthTabProps> = ({ summary, alerts }) => {
         </div>
       </div>
 
-      {/* Smart Alerts */}
+      {/* ── Class Imbalance Panel ───────────────────────────────── */}
+      {isClassImbalanceAlert && targetDist.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <AlertTriangle size={18} className="text-orange-500" />
+            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
+              Class Imbalance — Target Distribution
+            </h3>
+          </div>
+          <div className="bg-white border border-orange-200 rounded-xl p-5 shadow-sm space-y-3">
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Target variable <strong className="text-slate-800">{targetColumn.name}</strong> is imbalanced.
+              Consider <strong>SMOTE</strong> or <strong>class-weight balancing</strong> in Step&nbsp;3.
+            </p>
+            <div className="space-y-2.5">
+              {targetDist.map((cls) => {
+                const pct = totalTargetCount > 0 ? Math.round((cls.value / totalTargetCount) * 100) : 0;
+                const filled = Math.round(pct / 10);
+                const bar = '▓'.repeat(filled) + '░'.repeat(10 - filled);
+                const isMajority = cls.value === Math.max(...targetDist.map((d) => d.value));
+                return (
+                  <div key={cls.label} className="flex items-center gap-3">
+                    <span className={`text-[11px] font-bold min-w-[70px] truncate ${isMajority ? 'text-orange-700' : 'text-slate-600'}`}>
+                      Class {cls.label}:
+                    </span>
+                    <div className="flex-1 bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${isMajority ? 'bg-orange-400' : 'bg-indigo-400'}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] font-mono text-slate-500 min-w-[80px] shrink-0">
+                      [{bar}] {pct}%
+                    </span>
+                    <span className="text-[10px] text-slate-400 shrink-0">({cls.value.toLocaleString()})</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Enhanced Educational Alerts */}
       <div>
         <div className="flex items-center gap-2 mb-4">
           <AlertTriangle size={18} className="text-amber-600" />
           <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-            Smart Alerts &amp; Red Flags
+            Machine Learning Data Health Diagnostics
           </h3>
         </div>
 
-        <div className="space-y-3">
-          {alerts.map((alert, i) => {
-            const bgMap = {
-              warning: 'bg-yellow-50 border-yellow-200',
-              severe: 'bg-red-50 border-red-200',
-              info: 'bg-blue-50 border-blue-200',
-            };
-            const textMap = {
-              warning: 'text-yellow-900',
-              severe: 'text-red-900',
-              info: 'text-blue-900',
-            };
-            const titleMap = {
-              warning: 'text-yellow-950',
-              severe: 'text-red-950',
-              info: 'text-blue-950',
-            };
-
-            return (
-              <div
-                key={i}
-                className={`flex items-start gap-3 p-4 rounded-xl border ${bgMap[alert.severity]} shadow-sm`}
-              >
-                <span className="text-lg leading-none mt-0.5 shrink-0">{alert.icon}</span>
-                <div>
-                  <p className={`text-sm font-semibold ${titleMap[alert.severity]} mb-0.5`}>
-                    {alert.title}
-                  </p>
-                  <p className={`text-[13px] ${textMap[alert.severity]} leading-relaxed`}>
-                    {alert.message}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <DataHealthAlerts alerts={enrichedAlerts} />
       </div>
     </div>
   );

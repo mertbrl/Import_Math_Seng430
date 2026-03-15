@@ -19,13 +19,15 @@ from app.ml_core.data_engine.eda import run_full_eda
 class DataExplorationService:
     """Stateless service that bridges HTTP uploads and the EDA engine."""
 
-    async def explore(self, file: UploadFile) -> dict[str, Any]:
+    async def explore(self, file: UploadFile, ignored_columns: list[str] | None = None) -> dict[str, Any]:
         """Run the full EDA pipeline on an uploaded CSV file.
 
         Parameters
         ----------
         file : UploadFile
             A FastAPI upload handle whose content is raw CSV bytes.
+        ignored_columns : list[str], optional
+            A list of column names to ignore during EDA, by default None.
 
         Returns
         -------
@@ -62,7 +64,9 @@ class DataExplorationService:
             )
 
         # ── analyse ──────────────────────────────────────────────────
-        return run_full_eda(df)
+        # Pass DataFrame and explicitly ignored columns to the EDA engine
+        eda_profile = run_full_eda(df, ignored_columns=ignored_columns)
+        return eda_profile
 
 
 # Module-level singleton (matches existing services pattern).

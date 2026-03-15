@@ -1,6 +1,6 @@
 import csv
 import io
-from collections import Counter
+import json
 from typing import Any
 
 from fastapi import APIRouter, File, Form, UploadFile
@@ -13,42 +13,69 @@ from app.schemas.request import (
     MappingUpsertRequest,
     PreprocessRequest,
 )
-from app.services.data_exploration_service import data_exploration_service
-from app.services.pipeline_service import pipeline_service
-from app.services.session_service import session_service
+from app.services import (
+    data_exploration_service,
+    pipeline_service,
+    session_service
+)
 
-router = APIRouter(prefix="/data", tags=["data"])
+MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB
 
-MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024
-
+router = APIRouter()
 
 # ── EDA Explore Endpoint ─────────────────────────────────────────────
 
-@router.post("/explore", response_model=EDAProfileResponse)
-async def explore_data(
-    file: UploadFile = File(...),
-) -> dict[str, Any]:
-    """Upload a CSV and receive a full EDA profile.
-
-    The response JSON matches the frontend ``MockEDADataset`` interface
-    so it can be used as a drop-in replacement for the mocked data.
-
-    Raises
-    ------
-    PipelineError (400)
-        If the file is not a CSV, is empty, or cannot be parsed.
-    PipelineError (413)
-        If the file exceeds the 50 MB size limit.
-    """
+async def process_upload_for_eda(file: UploadFile, ignored_columns: list[str] | None) -> dict[str, Any]:
+    """Helper function to process the uploaded file for EDA."""
     # Size guard — read content and check length
-    content = await file.read()
+    content: bytes = await file.read()
     if len(content) > MAX_UPLOAD_SIZE_BYTES:
         raise PipelineError("CSV file exceeds 50 MB limit.", status_code=413)
 
     # Reset the file cursor so the service can re-read
     await file.seek(0)
 
-    return await data_exploration_service.explore(file)
+    return await data_exploration_service.explore(file, ignored_columns=ignored_columns)
+
+
+@router.post("/explore", response_model=EDAProfileResponse, summary="Automated Data Exploration (EDA)")
+async def explore_data(
+    file: UploadFile = File(...),
+    ignored_columns: str | None = Form(
+        default=None,
+        description="JSON string array of column names to ignore in correlations",
+    ),
+) -> dict[str, Any]:
+    """
+    Accepts a dataset (CSV) and returns a comprehensive EDA profile matching the React frontend's required JSON structure.
+
+    Raises
+    ------
+    HTTPException (400)
+        If the file is not a CSV.
+    PipelineError (400)
+        If the file is empty or cannot be parsed.
+    PipelineError (413)
+        If the file exceeds the 50 MB size limit.
+    """
+    ignored: list[str] = []
+    if ignored_columns:
+        try:
+            decoded = json.loads(ignored_columns)
+        except json.JSONDecodeError as exc:
+            raise PipelineError(
+                "ignored_columns must be a JSON array of strings.",
+                status_code=400,
+            ) from exc
+
+        if not isinstance(decoded, list) or not all(isinstance(item, str) for item in decoded):
+            raise PipelineError(
+                "ignored_columns must be a JSON array of strings.",
+                status_code=400,
+            )
+        ignored = [item.strip() for item in decoded if item.strip()]
+
+    return await process_upload_for_eda(file, ignored)
 
 
 DEFAULT_DATASETS = [
@@ -93,12 +120,13 @@ class DataPrepareRequest(BaseModel):
 def _profile_csv(content: bytes, target_column: str) -> dict[str, Any]:
     text = content.decode("utf-8", errors="replace")
     reader = csv.DictReader(io.StringIO(text))
-    if not reader.fieldnames:
+    fieldnames = reader.fieldnames
+    if not fieldnames:
         raise PipelineError("CSV header is missing or invalid.")
 
-    columns = [col.strip() for col in reader.fieldnames]
-    missing_count = {col: 0 for col in columns}
-    class_counts: Counter[str] = Counter()
+    columns = [col.strip() for col in fieldnames]
+    missing_count: dict[str, int] = {col: 0 for col in columns}
+    class_counts: dict[str, int] = {}
     rows = 0
 
     for row in reader:
@@ -106,11 +134,11 @@ def _profile_csv(content: bytes, target_column: str) -> dict[str, Any]:
         for col in columns:
             value = (row.get(col) or "").strip()
             if value == "":
-                missing_count[col] += 1
+                missing_count[col] = missing_count.get(col, 0) + 1
         if target_column in row:
             label = (row.get(target_column) or "").strip()
             if label:
-                class_counts[label] += 1
+                class_counts[label] = class_counts.get(label, 0) + 1
 
     if rows == 0:
         raise PipelineError("CSV file must include at least one data row.")
@@ -119,12 +147,12 @@ def _profile_csv(content: bytes, target_column: str) -> dict[str, Any]:
         {
             "column": col,
             "missing_count": missing_count[col],
-            "missing_ratio": round(missing_count[col] / rows, 4),
+            "missing_ratio": float(f"{missing_count[col] / rows:.4f}"),
         }
         for col in columns
     ]
     class_balance = {
-        label: round(count / rows, 4)
+        label: float(f"{count / rows:.4f}")
         for label, count in class_counts.items()
     }
 
@@ -134,7 +162,7 @@ def _profile_csv(content: bytes, target_column: str) -> dict[str, Any]:
         "column_names": columns,
         "column_summary": column_summary,
         "class_balance": class_balance,
-        "missing_ratio_overall": round(sum(missing_count.values()) / (rows * len(columns)), 4),
+        "missing_ratio_overall": float(f"{sum(missing_count.values()) / (rows * len(columns)):.4f}"),
     }
 
 
@@ -149,7 +177,7 @@ async def upload_data(
     session_id: str = Form(default="demo-session"),
     target_column: str = Form(default="DEATH_EVENT"),
 ) -> dict[str, Any]:
-    content = await file.read()
+    content: bytes = await file.read()
     if len(content) > MAX_UPLOAD_SIZE_BYTES:
         raise PipelineError("CSV file exceeds 50 MB limit.", status_code=413)
 
@@ -252,4 +280,3 @@ def prepare_data(payload: DataPrepareRequest) -> dict[str, Any]:
         },
         "recipe": recipe,
     }
-

@@ -8,6 +8,8 @@ React components expect.
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -68,6 +70,7 @@ class ColumnStatsSchema(BaseModel):
     outliers_count: int | None = Field(default=None, alias="outliersCount")
     skewness: float | None = None
     kurtosis: float | None = None
+    distribution_shape: str | None = Field(default=None, alias="distributionShape")
     distinct: int
     missing: int
     missing_pct: float = Field(alias="missingPct")
@@ -80,6 +83,27 @@ class CorrelationEntrySchema(BaseModel):
     row: str
     col: str
     value: float
+
+
+class PreviewSchema(BaseModel):
+    """First N rows of the dataset for the Data Preview tab."""
+
+    headers: list[str]
+    rows: list[dict[str, Any]]
+
+
+class MissingColumnSchema(BaseModel):
+    """Missing data analysis for one column."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    column: str
+    type: str
+    missing_count: int = Field(alias="missingCount")
+    missing_pct: float = Field(alias="missingPct")
+    mechanism: str  # 'MCAR' | 'MAR' | 'MNAR'
+    mechanism_detail: str = Field(alias="mechanismDetail")
+    missing_rows: list[int] = Field(alias="missingRows")
 
 
 class EDAProfileResponse(BaseModel):
@@ -96,3 +120,5 @@ class EDAProfileResponse(BaseModel):
         alias="correlationMatrix",
     )
     numeric_column_names: list[str] = Field(alias="numericColumnNames")
+    preview: PreviewSchema
+    missing_analysis: list[MissingColumnSchema] = Field(alias="missingAnalysis")

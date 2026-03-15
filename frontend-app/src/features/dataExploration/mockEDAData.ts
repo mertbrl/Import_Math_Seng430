@@ -15,6 +15,7 @@ export interface ColumnStats {
   outliersCount?: number;
   skewness?: number;
   kurtosis?: number;
+  distributionShape?: 'Unimodal' | 'Bimodal' | 'Multimodal' | null;
   distinct: number;
   missing: number;
   missingPct: number;
@@ -45,12 +46,29 @@ export interface CorrelationEntry {
   value: number;
 }
 
+export interface PreviewData {
+  headers: string[];
+  rows: Record<string, string | number | null>[];
+}
+
+export interface MissingColumnAnalysis {
+  column: string;
+  type: string;
+  missingCount: number;
+  missingPct: number;
+  mechanism: 'MCAR' | 'MAR' | 'MNAR';
+  mechanismDetail: string;
+  missingRows: number[];
+}
+
 export interface MockEDADataset {
   summary: SummaryStats;
   alerts: Alert[];
   columns: ColumnStats[];
   correlationMatrix: CorrelationEntry[];
   numericColumnNames: string[];
+  preview: PreviewData;
+  missingAnalysis: MissingColumnAnalysis[];
 }
 
 // ─── Summary Stats ──────────────────────────────────────────────────
@@ -516,4 +534,6 @@ export const mockEDA: MockEDADataset = {
   columns,
   correlationMatrix,
   numericColumnNames,
+  preview: { headers: [], rows: [] },
+  missingAnalysis: [],
 };

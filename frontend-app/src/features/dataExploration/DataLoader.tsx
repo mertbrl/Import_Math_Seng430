@@ -1,5 +1,7 @@
 import React, { useState, useCallback, useRef } from 'react';
+import Papa from 'papaparse';
 import { useDomainStore } from '../../store/useDomainStore';
+import { useEDAStore } from '../../store/useEDAStore';
 import {
   Upload,
   FileSpreadsheet,
@@ -27,14 +29,53 @@ const DataLoader: React.FC<DataLoaderProps> = ({ onFileLoaded, isLoading = false
 
   const loading = isLoading || fetchingDefault;
 
-  // ─── Deliver file to parent ──────────────────────────────────────
+  // Use the global store to hold the pending file and extracted headers
+  const { setRawFileAndHeadersAndPreview, rawFile } = useEDAStore();
+
+  // ─── Deliver file to Configurator ────────────────────────────────
   const deliverFile = useCallback(
     (file: File) => {
       setLoadedFile(file.name);
       setError('');
-      onFileLoaded(file);
+      
+      // Parse the first 21 lines to get headers and 20 preview rows
+      Papa.parse<any>(file, {
+        preview: 21,
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          if (results.meta.fields && results.meta.fields.length > 0) {
+            const headers = results.meta.fields.map((h: string) => h.trim());
+            
+            // Re-map keys if they had leading/trailing spaces
+            const previewRows = results.data.map((row: any) => {
+              const cleanRow: Record<string, string | number | null> = {};
+              for (const [key, value] of Object.entries(row)) {
+                
+                // try to parsing numbers
+                let val: string | number | null = value as string;
+                if (val === '' || val === null || val === undefined) {
+                    val = null;
+                } else if (!isNaN(Number(val))) {
+                    val = Number(val);
+                }
+                
+                cleanRow[key.trim()] = val;
+              }
+              return cleanRow;
+            });
+
+            setRawFileAndHeadersAndPreview(file, headers, previewRows);
+          } else {
+            setError('Could not extract headers from the CSV file.');
+          }
+        },
+        error: (err: any) => {
+          setError(`Error parsing CSV headers: ${err.message}`);
+        }
+      });
     },
-    [onFileLoaded]
+    [setRawFileAndHeadersAndPreview]
   );
 
   // ─── Default Dataset ────────────────────────────────────────────
@@ -91,7 +132,7 @@ const DataLoader: React.FC<DataLoaderProps> = ({ onFileLoaded, isLoading = false
   };
 
   // ─── Already Loaded State ────────────────────────────────────────
-  if (loadedFile && !loading) {
+  if (loadedFile && !loading && !rawFile) {
     return (
       <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center gap-3 shadow-sm">
         <CheckCircle2 size={20} className="text-emerald-600 shrink-0" />
@@ -114,6 +155,9 @@ const DataLoader: React.FC<DataLoaderProps> = ({ onFileLoaded, isLoading = false
       </div>
     );
   }
+
+  // Do not show the dropzone if a rawFile is pending configuration
+  if (rawFile) return null;
 
   return (
     <div className="flex flex-col sm:flex-row gap-4">

@@ -2,26 +2,32 @@ import React, { useState } from 'react';
 import DataLoader from './DataLoader';
 import SmartEDA from './SmartEDA';
 import { useDomainStore } from '../../store/useDomainStore';
+import { useEDAStore } from '../../store/useEDAStore';
 import { domains } from '../../config/domainConfig';
 import { exploreDataset } from '../../services/pipelineApi';
 import { Loader2, AlertCircle } from 'lucide-react';
+import ColumnConfigurator from './ColumnConfigurator';
+import PreAnalysisPreview from './PreAnalysisPreview';
 
 import type { MockEDADataset } from './mockEDAData';
 
 export const Step2_DataExploration: React.FC = () => {
   const selectedDomainId = useDomainStore((s) => s.selectedDomainId);
   const domain = domains.find((d) => d.id === selectedDomainId) || domains[0];
+  const { clearConfig, previewAccepted } = useEDAStore();
 
   const [edaData, setEdaData] = useState<MockEDADataset | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleFileLoaded = async (file: File) => {
+  const handleFileLoaded = async (file: File, ignoredColumns: string[] = []) => {
     setIsLoading(true);
     setError('');
     setEdaData(null);
+    clearConfig(); // Clear the config state after it's passed to the analysis
+    
     try {
-      const data = await exploreDataset(file);
+      const data = await exploreDataset(file, ignoredColumns);
       setEdaData(data);
     } catch (err: any) {
       const msg =
@@ -61,6 +67,19 @@ export const Step2_DataExploration: React.FC = () => {
       <div className="p-6 sm:px-8 sm:py-8 space-y-6">
         {/* Data Loader */}
         <DataLoader onFileLoaded={handleFileLoaded} isLoading={isLoading} />
+        
+        {/* Pre-Analysis Data Preview (Step 2.1) */}
+        {!previewAccepted && (
+          <PreAnalysisPreview />
+        )}
+
+        {/* Pre-Analysis Column Configurator (Step 2.2) */}
+        {previewAccepted && (
+          <ColumnConfigurator 
+            onConfirm={handleFileLoaded}
+            onCancel={() => clearConfig()}
+          />
+        )}
 
         {/* Loading Spinner */}
         {isLoading && (

@@ -10,7 +10,7 @@ import {
   Cell,
 } from 'recharts';
 import type { ColumnStats } from './mockEDAData';
-import { Search, Hash, Type, ToggleLeft, AlertTriangle, AlertCircle, Tag } from 'lucide-react';
+import { Search, Hash, Type, ToggleLeft, AlertTriangle, AlertCircle, Tag, Waves } from 'lucide-react';
 
 const typeIcon = (type: string) => {
   switch (type) {
@@ -71,6 +71,21 @@ function getColumnBadges(col: ColumnStats): { label: string; color: string; icon
       label: 'Skewed',
       color: 'text-purple-700 bg-purple-50 border-purple-200',
       icon: <AlertTriangle size={10} />,
+    });
+  }
+
+  // Bimodal / Multimodal shape flag
+  if (col.distributionShape === 'Bimodal') {
+    badges.push({
+      label: 'Bimodal',
+      color: 'text-violet-700 bg-violet-50 border-violet-200',
+      icon: <Waves size={10} />,
+    });
+  } else if (col.distributionShape === 'Multimodal') {
+    badges.push({
+      label: 'Multimodal',
+      color: 'text-violet-700 bg-violet-50 border-violet-200',
+      icon: <Waves size={10} />,
     });
   }
 
