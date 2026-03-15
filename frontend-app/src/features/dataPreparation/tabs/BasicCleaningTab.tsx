@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
+import { PREP_TABS } from '../DataPrepTabsConfig';
 import { Trash2, CopyX, Equal, Type, CheckCircle2, ChevronRight, AlertCircle, Loader2 } from 'lucide-react';
 
 const BasicCleaningTab: React.FC = () => {
   const { 
     toggleStepComplete, 
     addPipelineAction, 
+    cleaningPipeline,
     completedSteps, 
     setActiveTab,
     fetchBasicCleaningStats,
@@ -15,16 +17,17 @@ const BasicCleaningTab: React.FC = () => {
     fetchTypeMismatchStats,
     typeMismatchColumns,
     isTypeMismatchLoading,
+    clearSubsequentProgress
   } = useDataPrepStore();
   
   const { ignoredColumns } = useEDAStore();
   
   const isComplete = completedSteps.includes('data_cleaning');
 
-  // Interactive UI State for the 3 Cards
-  const [droppedDuplicates, setDroppedDuplicates] = useState(false);
-  const [droppedZeroVar, setDroppedZeroVar] = useState(false);
-  const [castNumeric, setCastNumeric] = useState(false);
+  // Derive button states from the persistent pipeline store so they survive tab navigation
+  const droppedDuplicates = cleaningPipeline.some(a => a.action === 'drop_duplicates');
+  const droppedZeroVar = cleaningPipeline.some(a => a.action === 'drop_zero_variance');
+  const castNumeric = cleaningPipeline.some(a => a.action === 'cast_to_numeric');
 
   // Dynamic Data Logic
   useEffect(() => {
@@ -40,26 +43,43 @@ const BasicCleaningTab: React.FC = () => {
   const hasNoZeroVar = zeroVarCols.length === 0;
   const hasNoTypeMismatches = typeMismatchColumns.length === 0;
 
+  const checkAndClearSubsequent = () => {
+    const currentIndex = PREP_TABS.findIndex(t => t.id === 'data_cleaning');
+    const stepsToReset = PREP_TABS.slice(currentIndex + 1).map(t => t.id);
+    const hasCompletedAhead = stepsToReset.some(id => completedSteps.includes(id));
+      
+    if (hasCompletedAhead) {
+      if (!window.confirm("Applying this cleaning action will reset your progress in all later steps. Are you sure?")) {
+        return false; // User cancelled
+      }
+      clearSubsequentProgress(stepsToReset);
+    }
+    return true;
+  };
+
   const handleDropDuplicates = () => {
+    if (droppedDuplicates) return; // Already applied
+    if (!checkAndClearSubsequent()) return;
     addPipelineAction({ step: 'data_cleaning', action: 'drop_duplicates', count: duplicateCount });
-    setDroppedDuplicates(true);
   };
 
   const handleDropZeroVar = () => {
+    if (droppedZeroVar) return; // Already applied
+    if (!checkAndClearSubsequent()) return;
     addPipelineAction({ step: 'data_cleaning', action: 'drop_zero_variance', columns: zeroVarCols });
-    setDroppedZeroVar(true);
   };
 
   const handleCastNumeric = () => {
+    if (castNumeric) return; // Already applied
+    if (!checkAndClearSubsequent()) return;
     // Column names pulled from the dynamically detected backend result
     const columnNames = typeMismatchColumns.map(c => c.column);
     addPipelineAction({ step: 'data_cleaning', action: 'cast_to_numeric', columns: columnNames });
-    setCastNumeric(true);
   };
 
   const handleMarkCompleteAndContinue = () => {
     toggleStepComplete('data_cleaning', true);
-    setActiveTab('sampling');
+    setActiveTab('data_split'); // Step 2 is now Data Split
   };
 
   return (

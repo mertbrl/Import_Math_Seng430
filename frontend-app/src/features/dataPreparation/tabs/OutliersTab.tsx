@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
+import { PREP_TABS } from '../DataPrepTabsConfig';
 import { ScanSearch, Activity, AlertTriangle, CheckCircle2, ChevronRight, Settings2, Loader2, Sparkles } from 'lucide-react';
 
 const OutliersTab: React.FC = () => {
@@ -14,7 +15,8 @@ const OutliersTab: React.FC = () => {
     outlierError,
     fetchOutlierStats,
     outlierStrategies,
-    setOutlierStrategy
+    setOutlierStrategy,
+    clearSubsequentProgress
   } = useDataPrepStore();
   
   const ignoredColumns = useEDAStore(s => s.ignoredColumns);
@@ -44,6 +46,17 @@ const OutliersTab: React.FC = () => {
 
 
   const handleConfirm = () => {
+    const currentIndex = PREP_TABS.findIndex(t => t.id === 'outliers');
+    const stepsToReset = PREP_TABS.slice(currentIndex + 1).map(t => t.id);
+    const hasCompletedAhead = stepsToReset.some(id => completedSteps.includes(id));
+      
+    if (hasCompletedAhead) {
+      if (!window.confirm("Applying these changes will reset your progress in all later steps. Are you sure?")) {
+        return; // User cancelled
+      }
+      clearSubsequentProgress(stepsToReset);
+    }
+
     // Log the unified action to the pipeline
     addPipelineAction({
       step: 'outliers',
@@ -51,12 +64,12 @@ const OutliersTab: React.FC = () => {
       strategies: outlierStrategies
     });
     toggleStepComplete('outliers', true);
-    setActiveTab('feature_engineering'); // Move to next step
+    setActiveTab('imputation'); // Step 5 is now Imputation
   };
 
   const handleSkip = () => {
     toggleStepComplete('outliers', true);
-    setActiveTab('feature_engineering');
+    setActiveTab('imputation'); // Step 5 is now Imputation
   };
 
   if (isOutlierLoading) {
@@ -143,16 +156,53 @@ const OutliersTab: React.FC = () => {
 
       {/* Columns List */}
       <div className="space-y-4">
-        <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-          <Settings2 size={16} className="text-indigo-500" />
-          Numerical Features ({outlierColumns.length} affected)
-        </h3>
+        <div className="flex justify-between items-center">
+          <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+            <Settings2 size={16} className="text-indigo-500" />
+            Numerical Features ({outlierColumns.length} affected)
+          </h3>
+          <button
+            onClick={() => {
+              // Apply all system suggestions
+              outlierColumns.forEach(col => {
+                const safeDefault = col.recommendation === 'Isolation Forest' ? 'isolation_forest' : 
+                                    col.recommendation === 'IQR' ? 'iqr' : 'zscore';
+                setOutlierStrategy(col.column, safeDefault);
+              });
+              // Build strategies and advance to next step
+              const strategies: Record<string, string> = {};
+              outlierColumns.forEach(col => {
+                strategies[col.column] = col.recommendation === 'Isolation Forest' ? 'isolation_forest' : 
+                                         col.recommendation === 'IQR' ? 'iqr' : 'zscore';
+              });
+              const currentIndex = PREP_TABS.findIndex(t => t.id === 'outliers');
+              const stepsToReset = PREP_TABS.slice(currentIndex + 1).map(t => t.id);
+              const hasCompletedAhead = stepsToReset.some(id => completedSteps.includes(id));
+              if (hasCompletedAhead) {
+                if (!window.confirm("Applying these changes will reset your progress in all later steps. Are you sure?")) return;
+                clearSubsequentProgress(stepsToReset);
+              }
+              addPipelineAction({ step: 'outliers', action: 'handle_outliers', strategies });
+              toggleStepComplete('outliers', true);
+              setActiveTab('imputation');
+            }}
+            className="flex flex-col items-end gap-0.5 cursor-pointer"
+          >
+            <span className="text-xs font-bold bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors flex items-center gap-1">
+              <Settings2 size={14} /> Use System Suggestions
+            </span>
+            <span className="text-[10px] text-slate-400 pr-1">Applies suggestions &amp; advances to Missing Value Handling →</span>
+          </button>
+        </div>
 
         {outlierColumns.map((col) => {
           
           const isNormal = col.distribution === 'Normal';
           const isSkewed = col.distribution === 'Highly Skewed';
           const isMultimodal = col.distribution === 'Multimodal';
+
+          const systemSuggestion: string = col.recommendation === 'Isolation Forest' ? 'isolation_forest' : 
+                                   col.recommendation === 'IQR' ? 'iqr' : 'zscore';
 
           const currentStrategy = outlierStrategies[col.column] || 'ignore';
 
@@ -179,10 +229,10 @@ const OutliersTab: React.FC = () => {
                     </span>
                   </div>
 
-                  {/* AI Recommendation Box */}
+                  {/* System Suggestion Box */}
                   <div className={`text-xs p-3 rounded-lg border leading-relaxed bg-slate-50 border-slate-200 text-slate-700`}>
                     <span className="font-bold block mb-1 tracking-wide uppercase text-[10px] text-indigo-600 flex items-center gap-1">
-                      <Sparkles size={12} /> AI SUGGESTION
+                      <Settings2 size={12} /> SYSTEM SUGGESTION
                     </span>
                     {isNormal ? (
                       <span>
@@ -213,20 +263,17 @@ const OutliersTab: React.FC = () => {
                     className="w-full appearance-none border-2 border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-800 bg-white focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 cursor-pointer transition-all"
                   >
                     <option value="ignore">Ignore (Keep Outliers)</option>
-                    <option value="drop_rows">Drop Outlier Rows</option>
+                    <option value="drop_rows">Drop Outlier Rows {systemSuggestion === 'drop_rows' ? '(System Suggestion)' : ''}</option>
                     <optgroup label="Capping (Winsorization)">
-                      <option value="cap_1_99">Cap at 1st/99th Percentile</option>
-                      <option value="cap_5_95">Cap at 5th/95th Percentile</option>
+                      <option value="cap_1_99">Cap at 1st/99th Percentile {systemSuggestion === 'cap_1_99' ? '(System Suggestion)' : ''}</option>
+                      <option value="cap_5_95">Cap at 5th/95th Percentile {systemSuggestion === 'cap_5_95' ? '(System Suggestion)' : ''}</option>
                     </optgroup>
                     <optgroup label="Detection Algorithms">
-                      <option value="zscore">Apply Z-Score (±3)</option>
-                      <option value="iqr">Apply IQR Method</option>
-                      {/* Only effectively enable Isolation Forest if it's a good fit or multimodal */}
-                      {isMultimodal ? (
-                        <option value="isolation_forest">Apply Isolation Forest</option>
-                      ) : (
-                        <option value="isolation_forest" disabled>Apply Isolation Forest (Unnecessary)</option>
-                      )}
+                      <option value="zscore">Apply Z-Score (±3) {systemSuggestion === 'zscore' ? '(System Suggestion)' : ''}</option>
+                      <option value="iqr">Apply IQR Method {systemSuggestion === 'iqr' ? '(System Suggestion)' : ''}</option>
+                      <option value="isolation_forest">Apply Isolation Forest {systemSuggestion === 'isolation_forest' ? '(System Suggestion)' : ''}</option>
+                      <option value="lof">Apply LOF – Local Outlier Factor {systemSuggestion === 'lof' ? '(System Suggestion)' : ''}</option>
+                      <option value="dbscan">Apply DBSCAN {systemSuggestion === 'dbscan' ? '(System Suggestion)' : ''}</option>
                     </optgroup>
                   </select>
                   <p className="text-[10px] text-slate-400 mt-2 text-right">
@@ -235,6 +282,8 @@ const OutliersTab: React.FC = () => {
                     {currentStrategy === 'zscore' && 'Best for perfectly normal curves.'}
                     {currentStrategy === 'iqr' && 'Best for skewed data distributions.'}
                     {currentStrategy === 'isolation_forest' && 'Advanced density-based isolation.'}
+                    {currentStrategy === 'lof' && 'Density-comparison model, best for extreme tails.'}
+                    {currentStrategy === 'dbscan' && 'Cluster-based, best for large multimodal datasets.'}
                     {currentStrategy.startsWith('cap') && 'Clips extremes to a fixed maximum ceiling.'}
                   </p>
                 </div>

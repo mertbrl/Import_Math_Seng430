@@ -9,14 +9,11 @@ import { Loader2, AlertCircle } from 'lucide-react';
 import ColumnConfigurator from './ColumnConfigurator';
 import PreAnalysisPreview from './PreAnalysisPreview';
 
-import type { MockEDADataset } from './mockEDAData';
-
 export const Step2_DataExploration: React.FC = () => {
   const selectedDomainId = useDomainStore((s) => s.selectedDomainId);
   const domain = domains.find((d) => d.id === selectedDomainId) || domains[0];
-  const { clearConfig, previewAccepted } = useEDAStore();
+  const { clearConfig, previewAccepted, edaData, setEdaData } = useEDAStore();
 
-  const [edaData, setEdaData] = useState<MockEDADataset | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -24,8 +21,8 @@ export const Step2_DataExploration: React.FC = () => {
     setIsLoading(true);
     setError('');
     setEdaData(null);
-    clearConfig(); // Clear the config state after it's passed to the analysis
-    
+    clearConfig();
+
     try {
       const data = await exploreDataset(file, ignoredColumns);
       setEdaData(data);
@@ -67,15 +64,15 @@ export const Step2_DataExploration: React.FC = () => {
       <div className="p-6 sm:px-8 sm:py-8 space-y-6">
         {/* Data Loader */}
         <DataLoader onFileLoaded={handleFileLoaded} isLoading={isLoading} />
-        
+
         {/* Pre-Analysis Data Preview (Step 2.1) */}
-        {!previewAccepted && (
+        {!previewAccepted && !edaData && (
           <PreAnalysisPreview />
         )}
 
         {/* Pre-Analysis Column Configurator (Step 2.2) */}
-        {previewAccepted && (
-          <ColumnConfigurator 
+        {previewAccepted && !edaData && (
+          <ColumnConfigurator
             onConfirm={handleFileLoaded}
             onCancel={() => clearConfig()}
           />
@@ -93,7 +90,7 @@ export const Step2_DataExploration: React.FC = () => {
             <div className="text-center">
               <p className="text-sm font-bold text-slate-800">Running Exploratory Analysis…</p>
               <p className="text-xs text-slate-500 mt-1">
-                Computing statistics, distributions, correlations & alerts
+                Computing statistics, distributions, correlations &amp; alerts
               </p>
             </div>
           </div>
@@ -118,7 +115,7 @@ export const Step2_DataExploration: React.FC = () => {
           </div>
         )}
 
-        {/* 4-Tab EDA Interface — shown once data arrives */}
+        {/* EDA Interface — persists across navigation, shown when edaData exists */}
         {edaData && !isLoading && (
           <div className="animate-fade-in-up">
             <SmartEDA data={edaData} />

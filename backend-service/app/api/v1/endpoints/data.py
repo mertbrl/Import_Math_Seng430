@@ -33,6 +33,11 @@ from app.schemas.request import (
     TrainRequest,
     TypeMismatchStatsRequest,
     ValidateMappingRequest,
+    TransformationStatsRequest,
+    EncodingStatsRequest,
+    ScalingStatsRequest,
+    DimensionalityStatsRequest,
+    ImbalanceStatsRequest,
 )
 from app.services import (
     data_exploration_service,
@@ -44,6 +49,13 @@ from app.services.data_prep.step01_basic_cleaning import calculate_basic_cleanin
 from app.services.data_prep.step01b_type_casting import calculate_type_mismatch_stats
 from app.services.data_prep.step04_imputation import calculate_missing_statistics
 from app.services.data_prep.step05_outliers import calculate_outlier_statistics
+from app.services.data_prep.step02_sampling import apply_sampling
+from app.services.data_prep.step03_data_split import apply_data_split
+from app.services.data_prep.step06_transformation import analyze_transformation_candidates
+from app.services.data_prep.step07_encoding import analyze_encoding_candidates
+from app.services.data_prep.step08_scaling import analyze_scaling_candidates
+from app.services.data_prep.step09_dimensionality import analyze_vif
+from app.services.data_prep.step10_imbalance import analyze_class_balance
 # Legacy pipeline preview — migrated inline below once preview_pipeline is moved
 from app.services.data_prep._dataframe_loader import load_dataframe
 
@@ -362,7 +374,6 @@ def validate_mapping(payload: ValidateMappingRequest) -> dict[str, Any]:
 def preview_cleaned_data(payload: DataCleaningPreviewRequest) -> dict[str, Any]:
     """Preview the effect of a cleaning pipeline without mutating source data."""
     import pandas as pd
-    from sklearn.model_selection import train_test_split
     from app.core.exceptions import PipelineError
 
     df = load_dataframe(payload.session_id)
@@ -380,16 +391,12 @@ def preview_cleaned_data(payload: DataCleaningPreviewRequest) -> dict[str, Any]:
                     if col in df.columns:
                         df[col] = pd.to_numeric(df[col], errors="coerce")
             elif action == "sample":
-                frac = step.get("fraction", 1.0)
-                if frac < 1.0:
-                    target = step.get("target")
-                    if step.get("method") == "stratified" and target and target in df.columns:
-                        try:
-                            df, _ = train_test_split(df, train_size=frac, stratify=df[target])
-                        except ValueError:
-                            df = df.sample(frac=frac)
-                    else:
-                        df = df.sample(frac=frac)
+                df = apply_sampling(df, step)
+            elif action == "split":
+                # For preview, we only show the training split, 
+                # as future pipeline steps should only learn from training data
+                splits = apply_data_split(df, step)
+                df = splits["train"]
         preview = df.head(10).replace({float("nan"): None}).to_dict(orient="records")
         return {"session_id": payload.session_id, "shape": list(df.shape), "preview": preview, "applied_steps": len(payload.pipeline)}
     except Exception as exc:
@@ -431,6 +438,61 @@ def outliers_stats(payload: OutliersStatsRequest) -> list[dict[str, Any]]:
         raise PipelineError(
             f"Outlier stats serialization failed: {exc}", status_code=500
         ) from exc
+
+
+# ── Step 06: Feature Transformation ──────────────────────────────────
+@router.post("/transformation-stats")
+def transformation_stats(payload: TransformationStatsRequest) -> dict[str, Any]:
+    try:
+        return _sanitize_for_json(analyze_transformation_candidates(payload.session_id, payload.excluded_columns))  # type: ignore[return-value]
+    except PipelineError:
+        raise
+    except Exception as exc:
+        raise PipelineError(f"Transformation stats failed: {exc}", status_code=500) from exc
+
+
+# ── Step 07: Categorical Encoding ─────────────────────────────────────
+@router.post("/encoding-stats")
+def encoding_stats(payload: EncodingStatsRequest) -> dict[str, Any]:
+    try:
+        return _sanitize_for_json(analyze_encoding_candidates(payload.session_id, payload.excluded_columns, payload.target_column))  # type: ignore[return-value]
+    except PipelineError:
+        raise
+    except Exception as exc:
+        raise PipelineError(f"Encoding stats failed: {exc}", status_code=500) from exc
+
+
+# ── Step 08: Scaling ──────────────────────────────────────────────────
+@router.post("/scaling-stats")
+def scaling_stats(payload: ScalingStatsRequest) -> dict[str, Any]:
+    try:
+        return _sanitize_for_json(analyze_scaling_candidates(payload.session_id, payload.excluded_columns))  # type: ignore[return-value]
+    except PipelineError:
+        raise
+    except Exception as exc:
+        raise PipelineError(f"Scaling stats failed: {exc}", status_code=500) from exc
+
+
+# ── Step 09: Feature Redundancy / VIF ────────────────────────────────
+@router.post("/dimensionality-stats")
+def dimensionality_stats(payload: DimensionalityStatsRequest) -> dict[str, Any]:
+    try:
+        return _sanitize_for_json(analyze_vif(payload.session_id, payload.excluded_columns))  # type: ignore[return-value]
+    except PipelineError:
+        raise
+    except Exception as exc:
+        raise PipelineError(f"VIF stats failed: {exc}", status_code=500) from exc
+
+
+# ── Step 10: Imbalance Handling ───────────────────────────────────────
+@router.post("/imbalance-stats")
+def imbalance_stats(payload: ImbalanceStatsRequest) -> dict[str, Any]:
+    try:
+        return _sanitize_for_json(analyze_class_balance(payload.session_id, payload.target_column, payload.excluded_columns))  # type: ignore[return-value]
+    except PipelineError:
+        raise
+    except Exception as exc:
+        raise PipelineError(f"Imbalance stats failed: {exc}", status_code=500) from exc
 
 
 @router.post("/prepare")

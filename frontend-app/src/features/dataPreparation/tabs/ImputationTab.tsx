@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
+import { PREP_TABS } from '../DataPrepTabsConfig';
 import { ShieldAlert, CheckCircle2, FlaskConical, AlertTriangle, ChevronRight, Settings2, Loader2 } from 'lucide-react';
 
 type ImputationStrategy = 'drop_rows' | 'drop_column' | 'mean' | 'median' | 'mode' | 'knn';
@@ -19,7 +20,8 @@ const ImputationTab: React.FC = () => {
     missingColumns,
     isMissingLoading,
     missingError,
-    fetchMissingStats 
+    fetchMissingStats,
+    clearSubsequentProgress
   } = useDataPrepStore();
   
   const rawFile = useEDAStore(s => s.rawFile);
@@ -54,6 +56,17 @@ const ImputationTab: React.FC = () => {
   };
 
   const handleConfirm = () => {
+    const currentIndex = PREP_TABS.findIndex(t => t.id === 'imputation');
+    const stepsToReset = PREP_TABS.slice(currentIndex + 1).map(t => t.id);
+    const hasCompletedAhead = stepsToReset.some(id => completedSteps.includes(id));
+      
+    if (hasCompletedAhead) {
+      if (!window.confirm("Applying these changes will reset your progress in all later steps. Are you sure?")) {
+        return; // User cancelled
+      }
+      clearSubsequentProgress(stepsToReset);
+    }
+
     // Log the unified action to the pipeline
     addPipelineAction({
       step: 'imputation',
@@ -61,12 +74,14 @@ const ImputationTab: React.FC = () => {
       strategies
     });
     toggleStepComplete('imputation', true);
-    setActiveTab('scaling'); // Moving to Step 5 next
+    setActiveTab('transformation'); // Step 6 is Feature Transformation
   };
 
   const handleSkip = () => {
+    // If skipping, it means no changes, so we don't necessarily need to reset downstream 
+    // unless the user wants to forcefully clear it, but typically skip = no-op.
     toggleStepComplete('imputation', true);
-    setActiveTab('scaling');
+    setActiveTab('transformation'); // Step 6 is Feature Transformation
   };
 
   if (isMissingLoading) {
@@ -152,12 +167,42 @@ const ImputationTab: React.FC = () => {
 
       {/* Columns List */}
       <div className="space-y-4">
-        <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-          <Settings2 size={16} className="text-indigo-500" />
-          Column Strategies ({missingColumns.length} affected)
-        </h3>
+        <div className="flex justify-between items-center">
+          <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+            <Settings2 size={16} className="text-indigo-500" />
+            Column Strategies ({missingColumns.length} affected)
+          </h3>
+          <button
+            onClick={() => {
+              const suggestions: Record<string, ImputationStrategy> = {};
+              missingColumns.forEach(col => {
+                const suggestion = col.missing_percentage < 5 ? 'drop_rows' : col.missing_percentage > 30 ? 'drop_column' : 'knn';
+                suggestions[col.column] = suggestion;
+              });
+              setStrategies(suggestions);
+              // Apply suggestions and advance
+              const currentIndex = PREP_TABS.findIndex(t => t.id === 'imputation');
+              const stepsToReset = PREP_TABS.slice(currentIndex + 1).map(t => t.id);
+              const hasCompletedAhead = stepsToReset.some(id => completedSteps.includes(id));
+              if (hasCompletedAhead) {
+                if (!window.confirm("Applying these changes will reset your progress in all later steps. Are you sure?")) return;
+                clearSubsequentProgress(stepsToReset);
+              }
+              addPipelineAction({ step: 'imputation', action: 'impute_missing', strategies: suggestions });
+              toggleStepComplete('imputation', true);
+              setActiveTab('transformation');
+            }}
+            className="flex flex-col items-end gap-0.5 cursor-pointer"
+          >
+            <span className="text-xs font-bold bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors flex items-center gap-1">
+              <Settings2 size={14} /> Use System Suggestions
+            </span>
+            <span className="text-[10px] text-slate-400 pr-1">Applies suggestions &amp; advances to Feature Transformation →</span>
+          </button>
+        </div>
 
         {missingColumns.map((col) => {
+          const systemSuggestion: string = col.missing_percentage < 5 ? 'drop_rows' : col.missing_percentage > 30 ? 'drop_column' : 'knn';
           const isMCAR = col.missing_percentage < 5;
           const isMAR = col.missing_percentage >= 5 && col.missing_percentage <= 30;
           const isMNAR = col.missing_percentage > 30;
@@ -181,11 +226,14 @@ const ImputationTab: React.FC = () => {
                     </span>
                   </div>
 
-                  {/* AI Recommendation Box */}
+                  {/* System Recommendation Box */}
                   <div className={`text-xs p-3 rounded-lg border leading-relaxed ${
                     isMCAR ? 'bg-emerald-50 border-emerald-100 text-emerald-800' :
                     isMAR ? 'bg-amber-50 border-amber-100 text-amber-800' : 'bg-red-50 border-red-100 text-red-800'
                   }`}>
+                    <span className="font-bold block mb-1 tracking-wide uppercase text-[10px] flex items-center gap-1">
+                      <Settings2 size={12} /> SYSTEM SUGGESTION
+                    </span>
                     <span className="font-bold block mb-1 tracking-wide uppercase text-[10px]">
                       {isMCAR ? 'MCAR (Missing Completely at Random)' : 
                        isMAR ? 'MAR (Missing at Random)' : 'MNAR (Missing Not at Random)'}
@@ -207,14 +255,26 @@ const ImputationTab: React.FC = () => {
                     className="w-full appearance-none border-2 border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-800 bg-white focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 cursor-pointer transition-all"
                   >
                     <optgroup label="Structural Deletion">
-                      <option value="drop_rows">Drop Affected Rows</option>
-                      <option value="drop_column">Drop Entire Column</option>
+                      <option value="drop_rows">
+                        Drop Affected Rows {systemSuggestion === 'drop_rows' ? '(System Suggestion)' : ''}
+                      </option>
+                      <option value="drop_column">
+                        Drop Entire Column {systemSuggestion === 'drop_column' ? '(System Suggestion)' : ''}
+                      </option>
                     </optgroup>
                     <optgroup label="Statistical Imputation">
-                      <option value="mean" disabled={col.type === 'Categorical'}>Mean Imputer</option>
-                      <option value="median" disabled={col.type === 'Categorical'}>Median Imputer</option>
-                      <option value="mode">Mode (Most Frequent)</option>
-                      <option value="knn">KNN Imputer (Advanced)</option>
+                      <option value="mean">
+                        Mean Imputer {systemSuggestion === 'mean' ? '(System Suggestion)' : ''}
+                      </option>
+                      <option value="median">
+                        Median Imputer {systemSuggestion === 'median' ? '(System Suggestion)' : ''}
+                      </option>
+                      <option value="mode">
+                        Mode (Most Frequent) {systemSuggestion === 'mode' ? '(System Suggestion)' : ''}
+                      </option>
+                      <option value="knn">
+                        KNN Imputer (Advanced) {systemSuggestion === 'knn' ? '(System Suggestion)' : ''}
+                      </option>
                     </optgroup>
                   </select>
                   <p className="text-[10px] text-slate-400 mt-2 text-right">

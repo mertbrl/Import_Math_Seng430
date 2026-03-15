@@ -11,29 +11,29 @@ export const PREP_TABS: DataPrepTabSpec[] = [
     subtitle: 'Drop duplicates, zero-variance, and metadata.',
   },
   {
-    id: 'sampling',
-    title: '2. Sampling & Volume',
-    subtitle: 'Reduce dataset size for faster training.',
-  },
-  {
     id: 'data_split',
-    title: '3. Data Split (Train/Val/Test)',
-    subtitle: 'The critical barrier step',
+    title: '2. Data Split (Train/Val/Test)',
+    subtitle: 'Critical barrier — prevents data leakage.',
   },
   {
-    id: 'imputation',
-    title: '4. Missing Value Handling',
-    subtitle: 'Imputation strategies (MCAR, MAR, MNAR)',
+    id: 'sampling',
+    title: '3. Sampling & Volume',
+    subtitle: 'Applied strictly to Train Set only.',
   },
   {
     id: 'outliers',
-    title: '5. Outliers',
-    subtitle: 'Z-Score, IQR, Isolation Forest',
+    title: '4. Outliers',
+    subtitle: 'Z-Score, IQR, Isolation Forest, LOF, DBSCAN.',
   },
   {
-    id: 'feature_engineering',
-    title: '6. Feature Engineering',
-    subtitle: 'Aggregations, Rolling Means',
+    id: 'imputation',
+    title: '5. Missing Value Handling',
+    subtitle: 'Imputation strategies (MCAR, MAR, MNAR)',
+  },
+  {
+    id: 'transformation',
+    title: '6. Feature Transformation',
+    subtitle: 'Log, Box-Cox, Yeo-Johnson — normalize distributions.',
   },
   {
     id: 'encoding',
@@ -47,12 +47,12 @@ export const PREP_TABS: DataPrepTabSpec[] = [
   },
   {
     id: 'dimensionality_reduction',
-    title: '9. Dimensionality Reduction',
+    title: '9. Feature Redundancy & Multicollinearity',
     subtitle: 'VIF, PCA',
   },
   {
     id: 'imbalance_handling',
     title: '10. Imbalance Handling',
-    subtitle: 'SMOTE (Strictly applied to Train set only)',
+    subtitle: 'SMOTE — Applied to Train Set only.',
   },
 ];

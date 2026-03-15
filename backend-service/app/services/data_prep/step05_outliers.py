@@ -7,6 +7,8 @@ import numpy as np
 import pandas as pd
 from scipy.stats import skew, kurtosis
 from sklearn.ensemble import IsolationForest
+from sklearn.neighbors import LocalOutlierFactor
+from sklearn.cluster import DBSCAN
 
 from app.core.exceptions import PipelineError
 from app.services.data_prep._dataframe_loader import load_dataframe
@@ -53,16 +55,38 @@ def detect_distribution_and_outliers(series: pd.Series) -> dict[str, Any]:
     
     if is_multimodal:
         distribution = "Multimodal"
-        recommendation = "Isolation Forest"
-        # Isolation Forest is random. We set a realistic contamination for EDA.
-        # IsolationForest expects 2D array:
+        if total_len > 100:
+            recommendation = "DBSCAN"
+            try:
+                # Naive eps heuristic based on standard deviation
+                eps = clean_series.std() / 2.0 if clean_series.std() > 0 else 0.5
+                dbscan = DBSCAN(eps=eps, min_samples=5)
+                preds = dbscan.fit_predict(clean_series.values.reshape(-1, 1))
+                # DBSCAN uses -1 for noise (outliers)
+                outlier_idx.iloc[:] = (preds == -1)
+            except Exception:
+                pass
+        else:
+            recommendation = "Isolation Forest"
+            try:
+                iso = IsolationForest(contamination=0.05, random_state=42)
+                preds = iso.fit_predict(clean_series.values.reshape(-1, 1))
+                # Predictions: 1 = inlier, -1 = outlier
+                outlier_idx.iloc[:] = (preds == -1)
+            except Exception:
+                pass
+
+    elif abs_skew > 2.0:
+        distribution = "Extremely Skewed"
+        recommendation = "LOF"
+        # Local Outlier Factor
         try:
-            iso = IsolationForest(contamination=0.05, random_state=42)
-            preds = iso.fit_predict(clean_series.values.reshape(-1, 1))
-            # Predictions: 1 = inlier, -1 = outlier
+            # Fallback to smaller n_neighbors if very little data
+            n_neighbors = min(20, total_len - 1)
+            lof = LocalOutlierFactor(n_neighbors=n_neighbors, contamination=0.05)
+            preds = lof.fit_predict(clean_series.values.reshape(-1, 1))
             outlier_idx.iloc[:] = (preds == -1)
         except Exception:
-            # Fallback for errors
             pass
 
     elif abs_skew > 1.0:

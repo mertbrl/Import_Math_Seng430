@@ -1,26 +1,63 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
+import { PREP_TABS } from '../DataPrepTabsConfig';
 import { ShieldAlert, SplitSquareHorizontal, CheckCircle2, Info, ChevronRight } from 'lucide-react';
 
 type SplitStrategy = '2-way' | '3-way';
 
 const DataSplitTab: React.FC = () => {
-  const { toggleStepComplete, addPipelineAction, completedSteps, setActiveTab } = useDataPrepStore();
+  const { toggleStepComplete, addPipelineAction, completedSteps, setActiveTab, clearSubsequentProgress, cleaningPipeline } = useDataPrepStore();
   const mlTask = useEDAStore((s) => s.mlTask);
 
   const isComplete = completedSteps.includes('data_split');
   const isClassification = mlTask !== 'regression';
 
-  // State
-  const [strategy, setStrategy] = useState<SplitStrategy>('2-way');
-  const [trainRatio, setTrainRatio] = useState(80);
-  const [valRatio, setValRatio] = useState(0);
-  const [testRatio, setTestRatio] = useState(20);
-  const [stratify, setStratify] = useState(isClassification); // Default to true if classification
+  // Load saved split action from pipeline store (so values persist on navigation)
+  const savedSplit = cleaningPipeline.find(a => a.action === 'split');
+
+  // State - initialized from saved pipeline action or defaults
+  const [strategy, setStrategy] = useState<SplitStrategy>(savedSplit?.strategy ?? '2-way');
+  const [trainRatio, setTrainRatio] = useState(savedSplit ? Math.round(savedSplit.train * 100) : 80);
+  const [valRatio, setValRatio] = useState(savedSplit ? Math.round((savedSplit.val ?? 0) * 100) : 0);
+  const [testRatio, setTestRatio] = useState(savedSplit ? Math.round(savedSplit.test * 100) : 20);
+  const [stratify, setStratify] = useState(savedSplit?.stratify ?? isClassification);
+
+  // Track whether user has been warned about downstream reset in this session of editing
+  const hasWarnedRef = useRef(false);
+
+  // Re-sync if the pipeline changes (e.g. clearSubsequentProgress removes the saved split)
+  useEffect(() => {
+    const current = cleaningPipeline.find(a => a.action === 'split');
+    if (!current) {
+      // No split in pipeline, reset to defaults
+      setStrategy('2-way');
+      setTrainRatio(80);
+      setValRatio(0);
+      setTestRatio(20);
+      setStratify(isClassification);
+      hasWarnedRef.current = false;
+    }
+  }, [cleaningPipeline, isClassification]);
+
+  // Helper: prompt user once if they try to change a completed step
+  const guardChange = (): boolean => {
+    if (!isComplete || hasWarnedRef.current) return true;
+    const currentIndex = PREP_TABS.findIndex(t => t.id === 'data_split');
+    const stepsToReset = PREP_TABS.slice(currentIndex + 1).map(t => t.id);
+    const hasCompletedAhead = stepsToReset.some(id => completedSteps.includes(id));
+    if (!hasCompletedAhead) return true;
+    if (!window.confirm("Changing the data split will reset your progress in all later steps. Are you sure?")) {
+      return false;
+    }
+    clearSubsequentProgress(stepsToReset);
+    hasWarnedRef.current = true;
+    return true;
+  };
 
   // Handle Strategy Change
   const handleStrategyChange = (newStrategy: SplitStrategy) => {
+    if (!guardChange()) return;
     setStrategy(newStrategy);
     if (newStrategy === '2-way') {
       setTrainRatio(80);
@@ -35,6 +72,7 @@ const DataSplitTab: React.FC = () => {
 
   // Drag logic for 3-way split
   const handleTrainChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!guardChange()) return;
     const newTrain = parseInt(e.target.value);
     if (strategy === '2-way') {
       setTrainRatio(newTrain);
@@ -53,6 +91,7 @@ const DataSplitTab: React.FC = () => {
   };
 
   const handleValChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!guardChange()) return;
     if (strategy === '2-way') return;
     const newVal = parseInt(e.target.value);
     const maxVal = 100 - trainRatio;
@@ -63,6 +102,17 @@ const DataSplitTab: React.FC = () => {
   };
 
   const handleConfirm = () => {
+    const currentIndex = PREP_TABS.findIndex(t => t.id === 'data_split');
+    const stepsToReset = PREP_TABS.slice(currentIndex + 1).map(t => t.id);
+    const hasCompletedAhead = stepsToReset.some(id => completedSteps.includes(id));
+      
+    if (hasCompletedAhead) {
+      if (!window.confirm("Applying these changes will reset your progress in all later steps. Are you sure?")) {
+        return; // User cancelled
+      }
+      clearSubsequentProgress(stepsToReset);
+    }
+
     addPipelineAction({
       step: 'data_split',
       action: 'split',
@@ -73,7 +123,7 @@ const DataSplitTab: React.FC = () => {
       stratify: isClassification ? stratify : false,
     });
     toggleStepComplete('data_split', true);
-    setActiveTab('imputation');
+    setActiveTab('sampling'); // Step 3 is now Sampling
   };
 
   return (

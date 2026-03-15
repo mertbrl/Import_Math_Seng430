@@ -6,6 +6,12 @@ import BasicCleaningTab from './tabs/BasicCleaningTab';
 import SamplingTab from './tabs/SamplingTab';
 import DataSplitTab from './tabs/DataSplitTab';
 import ImputationTab from './tabs/ImputationTab';
+import OutliersTab from './tabs/OutliersTab';
+import TransformationTab from './tabs/TransformationTab';
+import EncodingTab from './tabs/EncodingTab';
+import ScalingTab from './tabs/ScalingTab';
+import DimensionalityTab from './tabs/DimensionalityTab';
+import ImbalanceTab from './tabs/ImbalanceTab';
 
 export const Step3_DataPreparation: React.FC = () => {
   const { activeTabId, completedSteps, setActiveTab } = useDataPrepStore();
@@ -20,6 +26,18 @@ export const Step3_DataPreparation: React.FC = () => {
         return <DataSplitTab />;
       case 'imputation':
         return <ImputationTab />;
+      case 'outliers':
+        return <OutliersTab />;
+      case 'transformation':
+        return <TransformationTab />;
+      case 'encoding':
+        return <EncodingTab />;
+      case 'scaling':
+        return <ScalingTab />;
+      case 'dimensionality_reduction':
+        return <DimensionalityTab />;
+      case 'imbalance_handling':
+        return <ImbalanceTab />;
       default:
         return (
           <div className="h-64 flex flex-col items-center justify-center text-slate-400 bg-slate-50 border border-slate-200 border-dashed rounded-xl animate-in fade-in">

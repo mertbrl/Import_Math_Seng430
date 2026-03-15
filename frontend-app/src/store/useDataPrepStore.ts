@@ -49,11 +49,12 @@ interface DataPrepState {
   fetchTypeMismatchStats: (sessionId: string, excludedColumns: string[]) => Promise<void>;
   fetchMissingStats: (sessionId: string, excludedColumns: string[]) => Promise<void>;
   fetchOutlierStats: (sessionId: string, excludedColumns: string[]) => Promise<void>;
+  clearSubsequentProgress: (invalidStepIds: string[]) => void;
   resetPrep: () => void;
 }
 
 export const useDataPrepStore = create<DataPrepState>((set, get) => ({
-  activeTabId: 'basic_cleaning',
+  activeTabId: 'data_cleaning',
   completedSteps: [],
   cleaningPipeline: [],
   previewData: null,
@@ -99,6 +100,27 @@ export const useDataPrepStore = create<DataPrepState>((set, get) => ({
   addPipelineAction: (actionConfig) => set((state) => ({
     cleaningPipeline: [...state.cleaningPipeline, actionConfig],
   })),
+
+  clearSubsequentProgress: (invalidStepIds) => set((state) => {
+    const newCompleted = state.completedSteps.filter(id => !invalidStepIds.includes(id));
+    const newPipeline = state.cleaningPipeline.filter(action => !invalidStepIds.includes(action.step));
+    
+    // Also reset specific state fields if their step is invalidated
+    const resetState: Partial<DataPrepState> = {
+      completedSteps: newCompleted,
+      cleaningPipeline: newPipeline,
+    };
+
+    if (invalidStepIds.includes('imputation')) {
+      resetState.missingColumns = [];
+    }
+    if (invalidStepIds.includes('outliers')) {
+      resetState.outlierColumns = [];
+      resetState.outlierStrategies = {};
+    }
+
+    return resetState;
+  }),
 
   fetchPreviewData: async (sessionId) => {
     set({ isPreviewLoading: true, previewError: null });

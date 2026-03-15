@@ -135,3 +135,30 @@ class CertificateRequest(BaseModel):
     session_id: str = Field(default="demo-session")
     participant: str = Field(default="Demo User")
     organization: str = Field(default="Demo Hospital")
+
+
+class TransformationStatsRequest(BaseModel):
+    session_id: str = Field(default="demo-session")
+    excluded_columns: list[str] = Field(default_factory=list)
+
+
+class EncodingStatsRequest(BaseModel):
+    session_id: str = Field(default="demo-session")
+    excluded_columns: list[str] = Field(default_factory=list)
+    target_column: str | None = None
+
+
+class ScalingStatsRequest(BaseModel):
+    session_id: str = Field(default="demo-session")
+    excluded_columns: list[str] = Field(default_factory=list)
+
+
+class DimensionalityStatsRequest(BaseModel):
+    session_id: str = Field(default="demo-session")
+    excluded_columns: list[str] = Field(default_factory=list)
+
+
+class ImbalanceStatsRequest(BaseModel):
+    session_id: str = Field(default="demo-session")
+    target_column: str = Field(default="DEATH_EVENT")
+    excluded_columns: list[str] = Field(default_factory=list)

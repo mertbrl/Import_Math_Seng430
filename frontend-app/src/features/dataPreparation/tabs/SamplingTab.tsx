@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
+import { PREP_TABS } from '../DataPrepTabsConfig';
 import { Filter, AlertTriangle, CheckCircle2, ChevronDown, ListFilter, Scissors, Shuffle } from 'lucide-react';
 
 const SamplingTab: React.FC = () => {
-  const { toggleStepComplete, addPipelineAction, completedSteps, setActiveTab, previewShape } = useDataPrepStore();
+  const { toggleStepComplete, addPipelineAction, completedSteps, setActiveTab, previewShape, clearSubsequentProgress, cleaningPipeline } = useDataPrepStore();
 
   // ── Global context: read ML task, target column, and total rows already configured by the user ──
   const mlTask = useEDAStore((s) => s.mlTask);
@@ -19,14 +20,50 @@ const SamplingTab: React.FC = () => {
 
   const isClassification = mlTask !== 'regression'; // covers 'classification' and 'multiclass'
 
-  // Local state — only the sample fraction
-  const [sampleFraction, setSampleFraction] = useState<number>(isLargeDataset ? 15 : 100);
+  // Load saved sample fraction from pipeline store so it persists on navigation
+  const savedSample = cleaningPipeline.find(a => a.action === 'sample');
+  const [sampleFraction, setSampleFraction] = useState<number>(savedSample ? Math.round(savedSample.fraction * 100) : (isLargeDataset ? 15 : 100));
+
+  const hasWarnedRef = useRef(false);
+
+  // Re-sync when pipeline changes (e.g. clearSubsequentProgress removes the saved sample)
+  useEffect(() => {
+    const current = cleaningPipeline.find(a => a.action === 'sample');
+    if (!current) {
+      setSampleFraction(isLargeDataset ? 15 : 100);
+      hasWarnedRef.current = false;
+    }
+  }, [cleaningPipeline, isLargeDataset]);
+
+  // Helper: warn once if trying to edit a completed step that has downstream completed steps
+  const guardChange = (): boolean => {
+    if (!isComplete || hasWarnedRef.current) return true;
+    const currentIndex = PREP_TABS.findIndex(t => t.id === 'sampling');
+    const stepsToReset = PREP_TABS.slice(currentIndex + 1).map(t => t.id);
+    const hasCompletedAhead = stepsToReset.some(id => completedSteps.includes(id));
+    if (!hasCompletedAhead) return true;
+    if (!window.confirm("Changing the sampling settings will reset your progress in all later steps. Are you sure?")) {
+      return false;
+    }
+    clearSubsequentProgress(stepsToReset);
+    hasWarnedRef.current = true;
+    return true;
+  };
 
   const handleApply = () => {
     if (isClassification && !globalTargetColumn) {
       alert('Missing target column! Please ensure a target column was selected in the EDA step.');
       return;
     }
+    // Guard runs the warning only if downstream steps are complete
+    const currentIndex = PREP_TABS.findIndex(t => t.id === 'sampling');
+    const stepsToReset = PREP_TABS.slice(currentIndex + 1).map(t => t.id);
+    const hasCompletedAhead = stepsToReset.some(id => completedSteps.includes(id));
+    if (hasCompletedAhead && !hasWarnedRef.current) {
+      if (!window.confirm("Applying these changes will reset your progress in all later steps. Are you sure?")) return;
+      clearSubsequentProgress(stepsToReset);
+    }
+
     addPipelineAction({
       step: 'sampling',
       action: 'sample',
@@ -35,12 +72,12 @@ const SamplingTab: React.FC = () => {
       target: isClassification ? globalTargetColumn : undefined,
     });
     toggleStepComplete('sampling', true);
-    setActiveTab('data_split');
+    setActiveTab('outliers'); // Step 4 is now Outliers
   };
 
   const handleSkip = () => {
     toggleStepComplete('sampling', true);
-    setActiveTab('data_split');
+    setActiveTab('outliers'); // Step 4 is now Outliers
   };
 
   // Human-readable label for the active task
@@ -141,7 +178,7 @@ const SamplingTab: React.FC = () => {
             min="1"
             max="100"
             value={sampleFraction}
-            onChange={(e) => setSampleFraction(parseInt(e.target.value))}
+            onChange={(e) => { if (!guardChange()) return; setSampleFraction(parseInt(e.target.value)); }}
             className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
           />
           <div className="flex justify-between text-[10px] font-medium text-slate-400 mt-2 px-1">
