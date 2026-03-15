@@ -85,8 +85,8 @@ const DataLoader: React.FC<DataLoaderProps> = ({ onFileLoaded, isLoading = false
     setLoadedFile('');
     try {
       const fileName = `${selectedDomainId}.csv`;
-      const res = await fetch(`/datasets/${fileName}`);
-      if (!res.ok) throw new Error(`Failed to fetch /datasets/${fileName} (${res.status})`);
+      const res = await fetch(`http://localhost:8000/api/v1/datasets/${fileName}`);
+      if (!res.ok) throw new Error(`Failed to fetch dataset from backend (${res.status})`);
       const blob = await res.blob();
       const file = new File([blob], fileName, { type: 'text/csv' });
       deliverFile(file);
@@ -219,8 +219,8 @@ const DataLoader: React.FC<DataLoaderProps> = ({ onFileLoaded, isLoading = false
         >
           <Database size={22} />
           <span className="text-sm">Load Default Dataset</span>
-          <span className="text-[10px] opacity-75 font-mono">
-            /datasets/{selectedDomainId}.csv
+          <span className="text-[10px] opacity-75 font-medium tracking-wide">
+            Pre-configured for this domain
           </span>
         </button>
 

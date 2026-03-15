@@ -3,8 +3,11 @@ import io
 import json
 from typing import Any
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, File, Form, UploadFile, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+import os
+import pathlib
 
 from app.core.exceptions import PipelineError
 from app.schemas.exploration import EDAProfileResponse
@@ -21,6 +24,10 @@ from app.services import (
 
 MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB
 
+# Resolve the absolute path of the backend-service/core_datasets directory
+BASE_DIR = pathlib.Path(__file__).resolve().parent.parent.parent.parent.parent
+CORE_DATASETS_DIR = BASE_DIR / "core_datasets"
+
 router = APIRouter()
 
 # ── EDA Explore Endpoint ─────────────────────────────────────────────
@@ -32,10 +39,7 @@ async def process_upload_for_eda(file: UploadFile, ignored_columns: list[str] | 
     if len(content) > MAX_UPLOAD_SIZE_BYTES:
         raise PipelineError("CSV file exceeds 50 MB limit.", status_code=413)
 
-    # Reset the file cursor so the service can re-read
-    await file.seek(0)
-
-    return await data_exploration_service.explore(file, ignored_columns=ignored_columns)
+    return await data_exploration_service.explore(content, ignored_columns=ignored_columns)
 
 
 @router.post("/explore", response_model=EDAProfileResponse, summary="Automated Data Exploration (EDA)")
@@ -93,7 +97,7 @@ DEFAULT_DATASETS = [
     {"code": "dermatology_skin", "domain": "Dermatology", "target_column": "dx_type"},
     {"code": "ophthalmology_retinopathy", "domain": "Ophthalmology", "target_column": "severity_grade"},
     {"code": "orthopaedics_spine", "domain": "Orthopaedics", "target_column": "class"},
-    {"code": "icu_sepsis", "domain": "ICU / Sepsis", "target_column": "SepsisLabel"},
+
     {"code": "obstetrics_fetal", "domain": "Obstetrics", "target_column": "fetal_health"},
     {"code": "cardiology_arrhythmia", "domain": "Cardiology Arrhythmia", "target_column": "arrhythmia"},
     {"code": "oncology_cervical", "domain": "Oncology Cervical", "target_column": "Biopsy"},
@@ -169,6 +173,28 @@ def _profile_csv(content: bytes, target_column: str) -> dict[str, Any]:
 @router.get("/datasets")
 def datasets() -> dict[str, list[dict[str, Any]]]:
     return {"datasets": DEFAULT_DATASETS}
+
+@router.get("/datasets/{filename}")
+def get_default_dataset(filename: str) -> FileResponse:
+    """Streams a requested predefined default dataset CSV from the backend disk."""
+    if not filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only .csv files can be requested.")
+    
+    # Secure the path using safe_join essentially or strictly checking bounds
+    file_path = (CORE_DATASETS_DIR / filename).resolve()
+    
+    # Path Traversal Prevention: ensure the resolved file_path is strictly inside CORE_DATASETS_DIR
+    if not str(file_path).startswith(str(CORE_DATASETS_DIR)):
+        raise HTTPException(status_code=403, detail="Access denied.")
+        
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Dataset not found or unavailable.")
+        
+    return FileResponse(
+        path=file_path, 
+        media_type="text/csv", 
+        filename=filename
+    )
 
 
 @router.post("/upload")

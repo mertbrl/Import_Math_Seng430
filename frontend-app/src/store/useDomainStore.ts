@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { domains } from '../config/domainConfig';
+import { useEDAStore } from './useEDAStore';
 
 interface DomainState {
   selectedDomainId: string;
@@ -22,13 +23,16 @@ export const useDomainStore = create<DomainState>((set, get) => ({
     if (id === get().selectedDomainId) return;
     if (get().currentStep > 1) {
       if (!window.confirm('Changing the domain will reset your entire progress. Are you sure?')) return;
+      useEDAStore.getState().clearConfig();
       set({ selectedDomainId: id, currentStep: 1, schemaValid: false });
     } else {
+      useEDAStore.getState().clearConfig();
       set({ selectedDomainId: id });
     }
   },
   resetApp: () => {
     if (window.confirm("Are you sure you want to reset all progress? This will return you to Step 1.")) {
+      useEDAStore.getState().clearConfig();
       set({ selectedDomainId: domains[0].id, isHelpOpen: false, currentStep: 1, schemaValid: false });
     }
   },

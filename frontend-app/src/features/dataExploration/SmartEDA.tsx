@@ -35,10 +35,10 @@ const SmartEDA: React.FC<SmartEDAProps> = ({ data }) => {
   const TABS: Tab[] = [
     { id: 'preview',     label: 'Data Preview',        icon: <Table size={15} /> },
     { id: 'health',      label: 'Data Health & Alerts', icon: <Activity size={15} /> },
-    { id: 'explorer',   label: 'Feature Explorer',     icon: <Search size={15} /> },
+    { id: 'explorer',    label: 'Feature Explorer',     icon: <Search size={15} /> },
     { id: 'correlation', label: 'Correlations',         icon: <GitBranch size={15} /> },
-    { id: 'target',      label: 'Target Mapping',       icon: <Target size={15} /> },
     { id: 'missing',     label: 'Missing Data',         icon: <ShieldAlert size={15} />, badge: missingCount },
+    { id: 'target',      label: 'Target Mapping',       icon: <Target size={15} /> },
   ];
 
   const allColumnNames = data.columns.map((c) => c.name);
@@ -71,7 +71,7 @@ const SmartEDA: React.FC<SmartEDAProps> = ({ data }) => {
   return (
     <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
       {/* Tab Bar */}
-      <div className="border-b border-slate-200 bg-slate-50 px-2 pt-2 flex gap-1 overflow-x-auto scrollbar-hide">
+      <div className="border-b border-slate-200 bg-slate-50 px-2 pt-2 flex gap-1 flex-wrap">
         {TABS.map((tab) => {
           const active = tab.id === activeTab;
           return (

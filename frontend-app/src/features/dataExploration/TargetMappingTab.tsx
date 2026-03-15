@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import type { ColumnStats } from './mockEDAData';
 import { useDomainStore } from '../../store/useDomainStore';
-import { Target, User, Save, CheckCircle2, ChevronDown } from 'lucide-react';
+import { Target, Save, CheckCircle2, ChevronDown, ActivitySquare } from 'lucide-react';
 
 interface TargetMappingTabProps {
   columns: ColumnStats[];
@@ -14,11 +14,11 @@ const TargetMappingTab: React.FC<TargetMappingTabProps> = ({ columns }) => {
   const schemaValid = useDomainStore((s) => s.schemaValid);
 
   const [targetColumn, setTargetColumn] = useState('');
-  const [patientIdColumn, setPatientIdColumn] = useState('');
+  const [problemType, setProblemType] = useState('binary_classification');
   const [showSuccess, setShowSuccess] = useState(false);
 
   const handleSave = () => {
-    if (!targetColumn) return;
+    if (!targetColumn || !problemType) return;
     setSchemaValid(true);
     setCurrentStep(3);
     setShowSuccess(true);
@@ -38,8 +38,8 @@ const TargetMappingTab: React.FC<TargetMappingTabProps> = ({ columns }) => {
           Map Your Target &amp; Identifier Columns
         </h3>
         <p className="text-sm text-slate-500 mt-1 max-w-lg mx-auto leading-relaxed">
-          Select the column your model should predict and an optional patient identifier. This mapping
-          is required before proceeding to Data Preparation in Step 3.
+          Select the problem type and the column your model should predict. These configurations guide
+          how the model optimizes and evaluates success during training.
         </p>
       </div>
 
@@ -71,24 +71,24 @@ const TargetMappingTab: React.FC<TargetMappingTabProps> = ({ columns }) => {
           </div>
         </div>
 
-        {/* Patient ID Column */}
+        {/* Problem Type */}
         <div>
           <label className="flex items-center gap-2 text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
-            <User size={14} className="text-emerald-500" />
-            Select Patient ID (Optional Identifier)
+            <ActivitySquare size={14} className="text-emerald-500" />
+            Machine Learning Problem Type
           </label>
           <div className="relative">
             <select
-              value={patientIdColumn}
-              onChange={(e) => setPatientIdColumn(e.target.value)}
+              value={problemType}
+              onChange={(e) => {
+                setProblemType(e.target.value);
+                setShowSuccess(false);
+              }}
               className="w-full appearance-none border border-slate-300 rounded-lg px-4 py-3 pr-10 text-sm font-medium text-slate-800 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition cursor-pointer"
             >
-              <option value="">— None (no patient ID) —</option>
-              {columns.map((c) => (
-                <option key={c.name} value={c.name}>
-                  {c.name} ({c.type})
-                </option>
-              ))}
+              <option value="binary_classification">Binary Classification (e.g., Target is 0/1, Yes/No, Benign/Malignant)</option>
+              <option value="multi_class_classification">Multi-class Classification (e.g., Target is Category A/B/C)</option>
+              <option value="regression">Regression (e.g., Target is a continuous number like Blood Pressure)</option>
             </select>
             <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           </div>
@@ -131,9 +131,10 @@ const TargetMappingTab: React.FC<TargetMappingTabProps> = ({ columns }) => {
             <p className="text-sm font-bold text-emerald-900">Target Mapping Saved Successfully</p>
             <p className="text-xs text-emerald-700 mt-0.5">
               Target: <strong>{targetColumn}</strong>
-              {patientIdColumn && (
-                <> · Patient ID: <strong>{patientIdColumn}</strong></>
-              )}
+              {' '}· Type: <strong>
+                {problemType === 'binary_classification' ? 'Binary Classification' : 
+                 problemType === 'multi_class_classification' ? 'Multi-class Classification' : 'Regression'}
+              </strong>
               {' '}— Step 3: Data Preparation is now available.
             </p>
           </div>

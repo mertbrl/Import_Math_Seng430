@@ -19,13 +19,13 @@ from app.ml_core.data_engine.eda import run_full_eda
 class DataExplorationService:
     """Stateless service that bridges HTTP uploads and the EDA engine."""
 
-    async def explore(self, file: UploadFile, ignored_columns: list[str] | None = None) -> dict[str, Any]:
+    async def explore(self, content: bytes, ignored_columns: list[str] | None = None) -> dict[str, Any]:
         """Run the full EDA pipeline on an uploaded CSV file.
 
         Parameters
         ----------
-        file : UploadFile
-            A FastAPI upload handle whose content is raw CSV bytes.
+        content : bytes
+            Raw CSV bytes.
         ignored_columns : list[str], optional
             A list of column names to ignore during EDA, by default None.
 
@@ -40,11 +40,6 @@ class DataExplorationService:
             If the file is not a CSV or cannot be parsed by Pandas.
         """
         # ── validation ───────────────────────────────────────────────
-        filename = (file.filename or "").lower()
-        if not filename.endswith(".csv"):
-            raise PipelineError("Only .csv files are accepted.", status_code=400)
-
-        content = await file.read()
         if not content:
             raise PipelineError("Uploaded file is empty.", status_code=400)
 
@@ -64,7 +59,7 @@ class DataExplorationService:
             )
 
         # ── analyse ──────────────────────────────────────────────────
-        # Pass DataFrame and explicitly ignored columns to the EDA engine
+        # Pass DataFrame to the EDA engine natively
         eda_profile = run_full_eda(df, ignored_columns=ignored_columns)
         return eda_profile
 

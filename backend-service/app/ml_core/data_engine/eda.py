@@ -587,29 +587,40 @@ def run_full_eda(df: pd.DataFrame, ignored_columns: list[str] | None = None) -> 
     if df.empty:
         raise ValueError("Cannot perform EDA on an empty DataFrame.")
 
-    # Directive 1: isolate ID columns
-    # Note: id_columns are a subset of ignored_columns, but we detect them specifically
-    # for the ID column alert and to ensure they are always excluded from correlations.
-    id_columns = detect_id_columns(df)
-    all_ignored = list(set(id_columns + (ignored_columns or [])))
-
-    # Directive 2: variable types (single source of truth)
-    summary = compute_summary(df)
-
-    # Directive 4: column stats with distribution shape + skewness direction
-    columns = compute_column_stats(df)
-
-    # Directive 1: exclude ID columns from correlations
-    corr_entries, numeric_names = compute_correlation_matrix(df, ignored_columns=all_ignored)
-
-    # Directive 3: actionable 3-part consultancy alerts
-    alerts = generate_alerts(df, summary, columns, corr_entries, id_columns)
-
-    # Directive 6: Excel-style preview
+    # 1. Directive 6: Excel-style preview (SHOWS ALL COLUMNS INCLUDING IGNORED)
     preview = compute_preview(df)
 
+    # 2. Isolate ID columns
+    id_columns = detect_id_columns(df)
+    
+    # 3. Create analysis subset dataframe containing only non-ignored columns
+    all_ignored = list(set(id_columns + (ignored_columns or [])))
+    ignored_lower = {c.strip().lower() for c in all_ignored}
+    cols_to_drop = [col for col in df.columns if str(col).strip().lower() in ignored_lower]
+    
+    if cols_to_drop:
+        analysis_df = df.drop(columns=cols_to_drop)
+    else:
+        analysis_df = df
+
+    if analysis_df.empty:
+        raise ValueError("Cannot perform EDA: no valid columns remain after filtering ignored variables.")
+
+    # Directive 2: variable types (single source of truth)
+    summary = compute_summary(analysis_df)
+
+    # Directive 4: column stats with distribution shape + skewness direction
+    columns = compute_column_stats(analysis_df)
+
+    # Directive 1: exclude ID columns from correlations
+    # We pass the original ignored columns just in case, though analysis_df already has them dropped.
+    corr_entries, numeric_names = compute_correlation_matrix(analysis_df)
+
+    # Directive 3: actionable 3-part consultancy alerts
+    alerts = generate_alerts(analysis_df, summary, columns, corr_entries, id_columns)
+
     # Directive 5: missing-value mechanism analysis
-    missing_analysis = compute_missing_analysis(df, id_columns)
+    missing_analysis = compute_missing_analysis(analysis_df, id_columns)
 
     return {
         "summary": summary,

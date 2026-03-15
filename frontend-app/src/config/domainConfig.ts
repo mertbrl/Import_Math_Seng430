@@ -120,14 +120,7 @@ export const domains: DomainConfig[] = [
     targetVariable: "class (Normal / Abnormal)",
     whyThisMatters: "Persistent back pain often lacks clear structural answers. Categorizing precise pelvic incidence metrics can definitively flag cases requiring spinal fusion versus simple physical therapy."
   },
-  {
-    id: "icu-sepsis",
-    domainName: "ICU / Sepsis",
-    clinicalQuestion: "Sepsis onset from vital signs and lab results",
-    dataSource: "PhysioNet / Kaggle Sepsis Dataset",
-    targetVariable: "SepsisLabel (0/1)",
-    whyThisMatters: "Sepsis mortality increases by 8% for every hour antibiotics are delayed. Continuous ML vital-sign monitoring predicts impending septic shock up to 6 hours before physicians traditionally recognize the physiological crash."
-  },
+
   {
     id: "obstetrics-fetal-health",
     domainName: "Obstetrics — Fetal Health",
