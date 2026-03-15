@@ -72,12 +72,7 @@ class PipelineService:
         state = session_service.get(session_id)
         session_service.invalidate_from_dataset(state)
         state.dataset_version += 1
-        profile_request = DataExplorationRequest(
-            session_id=session_id,
-            source=payload.source,
-            target_column=payload.target_column,
-        )
-        profile = self.data_exploration_service.profile(profile_request)
+        profile = {}
         profile["rows"] = payload.row_count
         profile["columns"] = payload.column_count
         state.dataset = {

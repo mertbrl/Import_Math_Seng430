@@ -2,8 +2,11 @@ import React from 'react';
 import { TopNavbar } from './TopNavbar';
 import { HelpChatbotDrawer } from './HelpChatbotDrawer';
 import { useDomainStore } from '../store/useDomainStore';
+import { useEDAStore } from '../store/useEDAStore';
+import { useDataPrepStore } from '../store/useDataPrepStore';
 import { domains } from '../config/domainConfig';
 import { Check } from 'lucide-react';
+import WarningModal from './common/WarningModal';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -21,6 +24,21 @@ const STEPS = [
 
 export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const { selectedDomainId, setDomain, currentStep, setCurrentStep, schemaValid } = useDomainStore();
+  const clearEDAConfig = useEDAStore((s) => s.clearConfig);
+  const resetPrep = useDataPrepStore((s) => s.resetPrep);
+
+  // Modal State
+  const [modalConfig, setModalConfig] = React.useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
 
   // Dynamic step state driven by currentStep from Zustand
   const getStepState = (id: number): 'completed' | 'active' | 'locked' => {
@@ -31,12 +49,38 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     return 'locked';
   };
 
-  const handleStepClick = (stepId: number) => {
-    const state = getStepState(stepId);
-    if (state === 'completed' || state === 'active') {
-      setCurrentStep(stepId);
+  const handleStepClick = (targetStepId: number) => {
+    const state = getStepState(targetStepId);
+    if (state === 'locked' || targetStepId === currentStep) return;
+
+    // Backward Navigation Guard
+    if (targetStepId < currentStep) {
+      const stepName = STEPS.find(s => s.id === targetStepId)?.name || `Step ${targetStepId}`;
+      setModalConfig({
+        isOpen: true,
+        title: 'Loss of Downstream Progress',
+        message: `Warning: Going back to "${stepName}" will erase all progress made in the subsequent steps (e.g., Data Preparation configurations). Do you want to proceed?`,
+        onConfirm: () => {
+          // Cascading State Invalidation
+          if (targetStepId === 1) {
+            clearEDAConfig();
+            resetPrep();
+          } else if (targetStepId === 2) {
+            resetPrep();
+          }
+          
+          setCurrentStep(targetStepId);
+          closeModal();
+        }
+      });
+      return;
     }
+
+    // Forward Navigation
+    setCurrentStep(targetStepId);
   };
+
+  const closeModal = () => setModalConfig(prev => ({ ...prev, isOpen: false }));
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
@@ -124,6 +168,16 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         </section>
 
       </main>
+
+      <WarningModal
+        isOpen={modalConfig.isOpen}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        onConfirm={modalConfig.onConfirm}
+        onCancel={closeModal}
+        confirmText="Yes, Erase Progress"
+        cancelText="Cancel"
+      />
     </div>
   );
 };

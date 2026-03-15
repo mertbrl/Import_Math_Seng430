@@ -1,5 +1,6 @@
 import { Step1_ClinicalContext } from "./components/Step1_ClinicalContext.tsx";
 import { Step2_DataExploration } from "./features/dataExploration/Step2_DataExploration.tsx";
+import { Step3_DataPreparation } from "./features/dataPreparation/Step3_DataPreparation.tsx";
 import { AppLayout } from "./components/AppLayout.tsx";
 import { useDomainStore } from "./store/useDomainStore.ts";
 
@@ -10,6 +11,7 @@ function App() {
     <AppLayout>
       {currentStep === 1 && <Step1_ClinicalContext />}
       {currentStep === 2 && <Step2_DataExploration />}
+      {currentStep === 3 && <Step3_DataPreparation />}
     </AppLayout>
   );
 }

@@ -9,10 +9,16 @@ interface EDAState {
   ignoredColumns: string[]; // Combines IDs and Metadata
   previewAccepted: boolean;
   
+  // ML Task Config (set in Target Mapping and read globally)
+  mlTask: 'classification' | 'regression' | 'multiclass';
+  targetColumn: string;
+  totalRows: number;
+  
   // App State
   setRawFileAndHeadersAndPreview: (file: File, headers: string[], previewRows: Record<string, string | number | null>[]) => void;
   setPreviewAccepted: (accepted: boolean) => void;
   toggleIgnoreColumn: (col: string) => void;
+  setMlConfig: (mlTask: EDAState['mlTask'], targetColumn: string, totalRows: number) => void;
   clearConfig: () => void;
 }
 
@@ -22,6 +28,9 @@ export const useEDAStore = create<EDAState>((set) => ({
   rawPreviewRows: [],
   ignoredColumns: [],
   previewAccepted: false,
+  mlTask: 'classification',
+  targetColumn: '',
+  totalRows: 0,
   
   setRawFileAndHeadersAndPreview: (file, headers, previewRows) => set({ 
     rawFile: file, 
@@ -38,6 +47,8 @@ export const useEDAStore = create<EDAState>((set) => ({
       ? state.ignoredColumns.filter(c => c !== col)
       : [...state.ignoredColumns, col]
   })),
+
+  setMlConfig: (mlTask, targetColumn, totalRows) => set({ mlTask, targetColumn, totalRows }),
   
   clearConfig: () => set({ 
     rawFile: null, 
@@ -45,6 +56,9 @@ export const useEDAStore = create<EDAState>((set) => ({
     rawPreviewRows: [],
     ignoredColumns: [],
     previewAccepted: false,
+    mlTask: 'classification',
+    targetColumn: '',
+    totalRows: 0,
   })
 }));
 

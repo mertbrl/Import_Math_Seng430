@@ -69,12 +69,44 @@ class DataExplorationRequest(BaseModel):
     target_column: str = Field(default="DEATH_EVENT")
 
 
+class ValidateMappingRequest(BaseModel):
+    session_id: str = Field(default="demo-session")
+    target_column: str = Field(default="DEATH_EVENT")
+    problem_type: str = Field(default="binary_classification")
+    roles: dict[str, str] = Field(default_factory=dict)
+
+
 class PreprocessRequest(BaseModel):
     session_id: str = Field(default="demo-session")
     train_split: int = Field(default=80, ge=60, le=90)
     missing_strategy: str = Field(default="median")
     normalization: str = Field(default="zscore")
     imbalance_strategy: str = Field(default="smote")
+
+
+class DataCleaningPreviewRequest(BaseModel):
+    session_id: str = Field(default="demo-session")
+    pipeline: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class BasicCleaningStatsRequest(BaseModel):
+    session_id: str = Field(default="demo-session")
+    excluded_columns: list[str] = Field(default_factory=list)
+
+
+class TypeMismatchStatsRequest(BaseModel):
+    session_id: str = Field(default="demo-session")
+    excluded_columns: list[str] = Field(default_factory=list)
+
+
+class MissingStatsRequest(BaseModel):
+    session_id: str = Field(default="demo-session")
+    excluded_columns: list[str] = Field(default_factory=list)
+
+
+class OutliersStatsRequest(BaseModel):
+    session_id: str = Field(default="demo-session")
+    excluded_columns: list[str] = Field(default_factory=list)
 
 
 class TrainRequest(BaseModel):

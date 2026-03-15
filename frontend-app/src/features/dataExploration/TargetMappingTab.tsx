@@ -1,17 +1,20 @@
 import React, { useState } from 'react';
 import type { ColumnStats } from './mockEDAData';
 import { useDomainStore } from '../../store/useDomainStore';
+import { useEDAStore } from '../../store/useEDAStore';
 import { Target, Save, CheckCircle2, ChevronDown, ActivitySquare } from 'lucide-react';
 
 interface TargetMappingTabProps {
   columns: ColumnStats[];
+  totalRows: number;
 }
 
-const TargetMappingTab: React.FC<TargetMappingTabProps> = ({ columns }) => {
+const TargetMappingTab: React.FC<TargetMappingTabProps> = ({ columns, totalRows }) => {
 
   const setSchemaValid = useDomainStore((s) => s.setSchemaValid);
   const setCurrentStep = useDomainStore((s) => s.setCurrentStep);
   const schemaValid = useDomainStore((s) => s.schemaValid);
+  const setMlConfig = useEDAStore((s) => s.setMlConfig);
 
   const [targetColumn, setTargetColumn] = useState('');
   const [problemType, setProblemType] = useState('binary_classification');
@@ -19,6 +22,11 @@ const TargetMappingTab: React.FC<TargetMappingTabProps> = ({ columns }) => {
 
   const handleSave = () => {
     if (!targetColumn || !problemType) return;
+    // Derive a simplified mlTask key and persist globally
+    const mlTask = problemType === 'regression' ? 'regression'
+      : problemType === 'multi_class_classification' ? 'multiclass'
+      : 'classification';
+    setMlConfig(mlTask, targetColumn, totalRows);
     setSchemaValid(true);
     setCurrentStep(3);
     setShowSuccess(true);

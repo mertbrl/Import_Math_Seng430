@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+import math
 from typing import Any
 
 from fastapi import APIRouter, File, Form, UploadFile, HTTPException
@@ -12,21 +13,75 @@ import pathlib
 from app.core.exceptions import PipelineError
 from app.schemas.exploration import EDAProfileResponse
 from app.schemas.request import (
+    BasicCleaningStatsRequest,
+    CertificateCreateRequest,
+    ContextRequest,
+    DataCleaningPreviewRequest,
+    DataExplorationRequest,
+    DatasetPatchRequest,
     DatasetUpsertRequest,
+    EvaluationRequest,
+    ExplainabilityLocalRequest,
+    ExplainabilityRequest,
+    FairnessRequest,
     MappingUpsertRequest,
+    MissingStatsRequest,
+    OutliersStatsRequest,
     PreprocessRequest,
+    SessionCreateRequest,
+    SessionPatchRequest,
+    TrainRequest,
+    TypeMismatchStatsRequest,
+    ValidateMappingRequest,
 )
 from app.services import (
     data_exploration_service,
     pipeline_service,
     session_service
 )
+# Modular data_prep package (replaces old monolithic data_preparation_service)
+from app.services.data_prep.step01_basic_cleaning import calculate_basic_cleaning_stats
+from app.services.data_prep.step01b_type_casting import calculate_type_mismatch_stats
+from app.services.data_prep.step04_imputation import calculate_missing_statistics
+from app.services.data_prep.step05_outliers import calculate_outlier_statistics
+# Legacy pipeline preview — migrated inline below once preview_pipeline is moved
+from app.services.data_prep._dataframe_loader import load_dataframe
 
 MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB
 
 # Resolve the absolute path of the backend-service/core_datasets directory
 BASE_DIR = pathlib.Path(__file__).resolve().parent.parent.parent.parent.parent
 CORE_DATASETS_DIR = BASE_DIR / "core_datasets"
+SESSION_DATA_DIR = BASE_DIR / "temp_sessions"
+
+
+def _sanitize_for_json(obj: Any) -> Any:
+    """Recursively convert NumPy / Pandas scalars to native Python types
+    and replace NaN / Inf with None so json.dumps never crashes."""
+    if isinstance(obj, list):
+        return [_sanitize_for_json(item) for item in obj]
+    if isinstance(obj, dict):
+        return {str(k): _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    # Catch numpy int / float variants that slipped through
+    try:
+        import numpy as np  # type: ignore[import-untyped]
+        if isinstance(obj, (np.integer,)):
+            return int(obj)
+        if isinstance(obj, (np.floating,)):
+            v = float(obj)
+            return None if math.isnan(v) or math.isinf(v) else v
+        if isinstance(obj, (np.bool_,)):
+            return bool(obj)
+        if isinstance(obj, (np.ndarray,)):
+            return _sanitize_for_json(obj.tolist())
+    except ImportError:
+        pass
+    return obj
+
 
 router = APIRouter()
 
@@ -49,6 +104,7 @@ async def explore_data(
         default=None,
         description="JSON string array of column names to ignore in correlations",
     ),
+    session_id: str = Form(default="demo-session"),
 ) -> dict[str, Any]:
     """
     Accepts a dataset (CSV) and returns a comprehensive EDA profile matching the React frontend's required JSON structure.
@@ -79,6 +135,31 @@ async def explore_data(
             )
         ignored = [item.strip() for item in decoded if item.strip()]
 
+    # To support the frontend which only calls /explore but requires the session to be hydrated
+    content: bytes = await file.read()
+    if len(content) > MAX_UPLOAD_SIZE_BYTES:
+        raise PipelineError("CSV file exceeds 50 MB limit.", status_code=413)
+
+    session_dir = SESSION_DATA_DIR / session_id
+    session_dir.mkdir(parents=True, exist_ok=True)
+    raw_path = session_dir / "raw.csv"
+    raw_path.write_bytes(content)
+
+    profile = _profile_csv(content, "target_unknown")
+    session_service.get_or_create(session_id)
+    pipeline_service.create_dataset(
+        session_id,
+        DatasetUpsertRequest(
+            source="upload",
+            target_column="target_unknown",
+            file_name=file.filename or "uploaded.csv",
+            row_count=profile["rows"],
+            column_count=profile["columns"],
+        ),
+    )
+    
+    # We must reset the file cursor since it was already read by await file.read()
+    await file.seek(0)
     return await process_upload_for_eda(file, ignored)
 
 
@@ -207,6 +288,12 @@ async def upload_data(
     if len(content) > MAX_UPLOAD_SIZE_BYTES:
         raise PipelineError("CSV file exceeds 50 MB limit.", status_code=413)
 
+    # Persist the immutable source dataset for future pipeline execution
+    session_dir = SESSION_DATA_DIR / session_id
+    session_dir.mkdir(parents=True, exist_ok=True)
+    raw_path = session_dir / "raw.csv"
+    raw_path.write_bytes(content)
+
     profile = _profile_csv(content, target_column)
     session_service.get_or_create(session_id)
     result = pipeline_service.create_dataset(
@@ -269,6 +356,81 @@ def validate_mapping(payload: ValidateMappingRequest) -> dict[str, Any]:
         "errors": [],
         "warnings": warnings,
     }
+
+
+@router.post("/preview-cleaned-data")
+def preview_cleaned_data(payload: DataCleaningPreviewRequest) -> dict[str, Any]:
+    """Preview the effect of a cleaning pipeline without mutating source data."""
+    import pandas as pd
+    from sklearn.model_selection import train_test_split
+    from app.core.exceptions import PipelineError
+
+    df = load_dataframe(payload.session_id)
+    try:
+        for step in payload.pipeline:
+            action = step.get("action")
+            if action == "drop_duplicates":
+                df = df.drop_duplicates()
+            elif action == "drop_zero_variance":
+                cols = [c for c in step.get("columns", []) if c in df.columns]
+                if cols:
+                    df = df.drop(columns=cols)
+            elif action == "cast_to_numeric":
+                for col in step.get("columns", []):
+                    if col in df.columns:
+                        df[col] = pd.to_numeric(df[col], errors="coerce")
+            elif action == "sample":
+                frac = step.get("fraction", 1.0)
+                if frac < 1.0:
+                    target = step.get("target")
+                    if step.get("method") == "stratified" and target and target in df.columns:
+                        try:
+                            df, _ = train_test_split(df, train_size=frac, stratify=df[target])
+                        except ValueError:
+                            df = df.sample(frac=frac)
+                    else:
+                        df = df.sample(frac=frac)
+        preview = df.head(10).replace({float("nan"): None}).to_dict(orient="records")
+        return {"session_id": payload.session_id, "shape": list(df.shape), "preview": preview, "applied_steps": len(payload.pipeline)}
+    except Exception as exc:
+        raise PipelineError(f"Pipeline execution failed: {exc}", status_code=400) from exc
+
+
+@router.post("/basic-cleaning-stats")
+def basic_cleaning_stats(payload: BasicCleaningStatsRequest) -> dict[str, Any]:
+    return calculate_basic_cleaning_stats(payload.session_id, payload.excluded_columns)
+
+
+@router.post("/type-mismatch-stats")
+def type_mismatch_stats(payload: TypeMismatchStatsRequest) -> dict[str, Any]:
+    return calculate_type_mismatch_stats(payload.session_id, payload.excluded_columns)
+
+
+@router.post("/missing-stats")
+def missing_stats(payload: MissingStatsRequest) -> list[dict[str, Any]]:
+    try:
+        result = calculate_missing_statistics(payload.session_id, payload.excluded_columns)
+        # Final safety net: ensure every value is JSON-serializable
+        return _sanitize_for_json(result)  # type: ignore[return-value]
+    except PipelineError:
+        raise
+    except Exception as exc:
+        raise PipelineError(
+            f"Missing stats serialization failed: {exc}", status_code=500
+        ) from exc
+
+
+@router.post("/outliers-stats")
+def outliers_stats(payload: OutliersStatsRequest) -> list[dict[str, Any]]:
+    try:
+        result = calculate_outlier_statistics(payload.session_id, payload.excluded_columns)
+        return _sanitize_for_json(result)  # type: ignore[return-value]
+    except PipelineError:
+        raise
+    except Exception as exc:
+        raise PipelineError(
+            f"Outlier stats serialization failed: {exc}", status_code=500
+        ) from exc
 
 
 @router.post("/prepare")

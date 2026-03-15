@@ -54,7 +54,7 @@ const SmartEDA: React.FC<SmartEDAProps> = ({ data }) => {
       case 'correlation':
         return <CorrelationTab numericColumnNames={data.numericColumnNames} correlationMatrix={data.correlationMatrix} />;
       case 'target':
-        return <TargetMappingTab columns={data.columns} />;
+        return <TargetMappingTab columns={data.columns} totalRows={data.summary.numObservations} />;
       case 'missing':
         return (
           <MissingDataTab
