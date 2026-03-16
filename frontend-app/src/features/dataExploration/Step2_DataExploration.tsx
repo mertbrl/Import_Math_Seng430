@@ -108,7 +108,7 @@ export const Step2_DataExploration: React.FC = () => {
               <p className="text-xs text-red-500 mt-2">
                 Ensure the FastAPI backend is running at{' '}
                 <code className="bg-red-100 px-1.5 py-0.5 rounded text-red-800 font-mono">
-                  http://localhost:8000
+                  http://localhost:5001
                 </code>
               </p>
             </div>

@@ -11,7 +11,7 @@ interface EncodingColumn {
   recommendation: string;
 }
 
-const API_BASE = 'http://localhost:8000/api/v1';
+const API_BASE = 'http://localhost:5001/api/v1';
 
 const ENCODING_LABELS: Record<string, string> = {
   onehot: 'One-Hot Encoding (drop first)',

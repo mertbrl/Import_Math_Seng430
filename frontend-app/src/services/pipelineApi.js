@@ -1,7 +1,7 @@
 import axios from 'axios';
 import api from './api';
 
-const BACKEND_URL = 'http://localhost:8000/api/v1';
+const BACKEND_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api/v1';
 
 export async function setContext(payload) {
   const response = await api.post("/context", payload);

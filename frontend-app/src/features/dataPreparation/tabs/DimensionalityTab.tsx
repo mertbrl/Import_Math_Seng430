@@ -13,7 +13,7 @@ interface VIFColumn {
 
 type DimAction = 'keep' | 'drop' | 'pca';
 
-const API_BASE = 'http://localhost:8000/api/v1';
+const API_BASE = 'http://localhost:5001/api/v1';
 
 const DimensionalityTab: React.FC = () => {
   const { toggleStepComplete, addPipelineAction, completedSteps, setActiveTab, clearSubsequentProgress } = useDataPrepStore();

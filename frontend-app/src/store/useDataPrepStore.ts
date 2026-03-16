@@ -126,7 +126,7 @@ export const useDataPrepStore = create<DataPrepState>((set, get) => ({
     set({ isPreviewLoading: true, previewError: null });
     try {
       const { cleaningPipeline } = get();
-      const res = await fetch('http://localhost:8000/api/v1/preview-cleaned-data', {
+      const res = await fetch('http://localhost:5001/api/v1/preview-cleaned-data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: sessionId, pipeline: cleaningPipeline }),

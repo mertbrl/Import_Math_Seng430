@@ -7,3 +7,6 @@ numpy>=1.26,<3
 pytest==8.4.1
 httpx==0.28.1
 python-multipart==0.0.20
+statsmodels>=0.14.0
+scikit-learn>=1.4.0
+scipy>=1.11.0
