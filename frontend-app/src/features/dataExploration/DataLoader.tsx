@@ -85,7 +85,7 @@ const DataLoader: React.FC<DataLoaderProps> = ({ onFileLoaded, isLoading = false
     setLoadedFile('');
     try {
       const fileName = `${selectedDomainId}.csv`;
-      const res = await fetch(`http://localhost:5001/api/v1/datasets/${fileName}`);
+      const res = await fetch(`http://localhost:8000/api/v1/datasets/${fileName}`);
       if (!res.ok) throw new Error(`Failed to fetch dataset from backend (${res.status})`);
       const blob = await res.blob();
       const file = new File([blob], fileName, { type: 'text/csv' });

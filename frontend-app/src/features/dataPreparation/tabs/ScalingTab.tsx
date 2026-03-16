@@ -14,7 +14,7 @@ interface ScalingColumn {
   recommendation: string;
 }
 
-const API_BASE = 'http://localhost:5001/api/v1';
+const API_BASE = 'http://localhost:8000/api/v1';
 
 const ScalingTab: React.FC = () => {
   const { toggleStepComplete, addPipelineAction, completedSteps, setActiveTab, clearSubsequentProgress } = useDataPrepStore();

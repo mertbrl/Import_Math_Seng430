@@ -18,7 +18,7 @@ interface ImbalanceData {
   error?: string;
 }
 
-const API_BASE = 'http://localhost:5001/api/v1';
+const API_BASE = 'http://localhost:8000/api/v1';
 
 const SEVERITY_COLORS: Record<string, string> = {
   balanced: 'bg-emerald-50 border-emerald-200 text-emerald-800',
