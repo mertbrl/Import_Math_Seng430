@@ -4,7 +4,7 @@
  * Components and Zustand stores import from here; never hit fetch() directly.
  */
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1';
+const BASE_URL = (import.meta as any).env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -42,6 +42,11 @@ export interface OutlierColumnStat {
   outlier_count: number;
   outlier_percentage: number;
   recommendation: string;
+}
+
+export interface FeatureImportanceStat {
+  feature: string;
+  score: number;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -113,3 +118,46 @@ export async function fetchOutlierStats(
   if (!res.ok) await throwDetailedError(res, 'outliers-stats');
   return res.json();
 }
+
+export async function fetchFeatureImportances(
+  sessionId: string,
+  excludedColumns: string[],
+  targetColumn: string
+): Promise<FeatureImportanceStat[]> {
+  const res = await fetch(`${BASE_URL}/feature-importance-stats`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, excluded_columns: excludedColumns, target_column: targetColumn }),
+  });
+  if (!res.ok) await throwDetailedError(res, 'feature-importance-stats');
+  return res.json();
+}
+
+export async function downloadPreprocessedCSV(
+  sessionId: string,
+  pipeline: any[],
+  targetColumn: string,
+  excludedColumns: string[]
+): Promise<void> {
+  const res = await fetch(`${BASE_URL}/download-preprocessed`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      session_id: sessionId,
+      pipeline,
+      target_column: targetColumn,
+      excluded_columns: excludedColumns,
+    }),
+  });
+  if (!res.ok) await throwDetailedError(res, 'download-preprocessed');
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'preprocessed_data.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+

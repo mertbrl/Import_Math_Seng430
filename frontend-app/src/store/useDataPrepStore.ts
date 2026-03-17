@@ -4,10 +4,12 @@ import {
   fetchTypeMismatchStats as apiFetchTypeMismatchStats,
   fetchMissingStats as apiFetchMissingStats,
   fetchOutlierStats as apiFetchOutlierStats,
+  fetchFeatureImportances as apiFetchFeatureImportances,
   type BasicCleaningStats,
   type TypeMismatchColumn,
   type MissingColumnStat,
   type OutlierColumnStat,
+  type FeatureImportanceStat,
 } from '../api/dataPrepAPI';
 
 interface DataPrepState {
@@ -41,6 +43,13 @@ interface DataPrepState {
   outlierStrategies: Record<string, string>; // Maps column name to chosen strategy
   setOutlierStrategy: (column: string, strategy: string) => void;
 
+  // Step 09 - Feature Selection (Before SMOTE)
+  featureImportances: FeatureImportanceStat[];
+  isFeatureImportancesLoading: boolean;
+  featureImportancesError: string | null;
+  featureSelection: { method: string; top_k?: number; selected_features?: string[] } | null;
+  setFeatureSelection: (selection: { method: string; top_k?: number; selected_features?: string[] }) => void;
+
   setActiveTab: (id: string) => void;
   toggleStepComplete: (id: string, isComplete?: boolean) => void;
   addPipelineAction: (actionConfig: any) => void;
@@ -49,6 +58,7 @@ interface DataPrepState {
   fetchTypeMismatchStats: (sessionId: string, excludedColumns: string[]) => Promise<void>;
   fetchMissingStats: (sessionId: string, excludedColumns: string[]) => Promise<void>;
   fetchOutlierStats: (sessionId: string, excludedColumns: string[]) => Promise<void>;
+  fetchFeatureImportances: (sessionId: string, excludedColumns: string[], targetColumn: string) => Promise<void>;
   clearSubsequentProgress: (invalidStepIds: string[]) => void;
   resetPrep: () => void;
 }
@@ -82,6 +92,12 @@ export const useDataPrepStore = create<DataPrepState>((set, get) => ({
   setOutlierStrategy: (column: string, strategy: string) => set((state) => ({
     outlierStrategies: { ...state.outlierStrategies, [column]: strategy },
   })),
+
+  featureImportances: [],
+  isFeatureImportancesLoading: false,
+  featureImportancesError: null,
+  featureSelection: null,
+  setFeatureSelection: (selection) => set({ featureSelection: selection }),
 
   setActiveTab: (id) => set({ activeTabId: id }),
 
@@ -180,6 +196,16 @@ export const useDataPrepStore = create<DataPrepState>((set, get) => ({
     }
   },
 
+  fetchFeatureImportances: async (sessionId, excludedColumns, targetColumn) => {
+    set({ isFeatureImportancesLoading: true, featureImportancesError: null });
+    try {
+      const data = await apiFetchFeatureImportances(sessionId, excludedColumns, targetColumn);
+      set({ featureImportances: data, isFeatureImportancesLoading: false });
+    } catch (err: any) {
+      set({ featureImportancesError: err.message, isFeatureImportancesLoading: false });
+    }
+  },
+
   resetPrep: () => set({
     activeTabId: 'data_cleaning',
     completedSteps: [],
@@ -200,5 +226,9 @@ export const useDataPrepStore = create<DataPrepState>((set, get) => ({
     isOutlierLoading: false,
     outlierError: null,
     outlierStrategies: {},
+    featureImportances: [],
+    isFeatureImportancesLoading: false,
+    featureImportancesError: null,
+    featureSelection: null,
   }),
 }));

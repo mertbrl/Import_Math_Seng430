@@ -1,4 +1,4 @@
-"""Step 10 – Imbalance Handling (SMOTE / ADASYN)"""
+"""Step 10 – Imbalance Handling (SMOTE only)"""
 
 from typing import Any
 
@@ -13,8 +13,7 @@ def analyze_class_balance(session_id: str, target_column: str, ignored_columns: 
     Analyzes the class distribution of the target column to detect imbalance.
 
     Imbalance Rules:
-    - Majority/Minority ratio > 3: Moderate imbalance → Suggest SMOTE
-    - Majority/Minority ratio > 10: Severe imbalance → Suggest ADASYN
+    - Majority/Minority ratio > 1.5: Moderate/Severe imbalance → Suggest SMOTE
     - Balanced: No action required
 
     NOTE: SMOTE/ADASYN must ONLY be applied to the Train Set.
@@ -52,10 +51,10 @@ def analyze_class_balance(session_id: str, target_column: str, ignored_columns: 
     minority = int(value_counts.iloc[-1])
     ratio = round(majority / minority, 2)
 
-    if ratio > 10:
+    if ratio > 3:
         severity = "severe"
-        recommendation = "adasyn"
-    elif ratio > 3:
+        recommendation = "smote"
+    elif ratio > 1.5:
         severity = "moderate"
         recommendation = "smote"
     else:

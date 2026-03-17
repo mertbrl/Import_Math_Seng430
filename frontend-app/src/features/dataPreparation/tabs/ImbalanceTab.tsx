@@ -3,6 +3,7 @@ import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
 import { PREP_TABS } from '../DataPrepTabsConfig';
 import { Shuffle, CheckCircle2, ChevronRight, Settings2, Loader2, AlertCircle, ShieldAlert, Info } from 'lucide-react';
+import WarningModal from '../../../components/common/WarningModal';
 
 interface ClassEntry {
   class: string;
@@ -29,12 +30,18 @@ const SEVERITY_COLORS: Record<string, string> = {
 const ImbalanceTab: React.FC = () => {
   const { toggleStepComplete, addPipelineAction, completedSteps, setActiveTab, clearSubsequentProgress } = useDataPrepStore();
   const ignoredColumns = useEDAStore(s => s.ignoredColumns);
+  const targetColumn = useEDAStore(s => s.targetColumn);
   const isComplete = completedSteps.includes('imbalance_handling');
 
   const [data, setData] = useState<ImbalanceData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [strategy, setStrategy] = useState<string>('none');
+  // Default to smote so visuals show by default
+  const [strategy, setStrategy] = useState<string>('smote');
+  const [showWarning, setShowWarning] = useState<boolean>(false);
+  const [pendingStrategy, setPendingStrategy] = useState<string | null>(null);
+
+  const effectiveTarget = targetColumn || 'DEATH_EVENT';
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -43,21 +50,27 @@ const ImbalanceTab: React.FC = () => {
       const res = await fetch(`${API_BASE}/imbalance-stats`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: 'demo-session', target_column: 'DEATH_EVENT', excluded_columns: ignoredColumns ?? [] }),
+        body: JSON.stringify({
+          session_id: 'demo-session',
+          target_column: effectiveTarget,
+          excluded_columns: ignoredColumns ?? [],
+        }),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json: ImbalanceData = await res.json();
       setData(json);
-      setStrategy(json.recommendation ?? 'none');
+      // If backend recommends smote (or nothing), keep our default of smote
+      if (json.recommendation) setStrategy(json.recommendation);
     } catch (e) {
       setError(`Failed to fetch imbalance data: ${e}`);
     } finally {
       setIsLoading(false);
     }
-  }, [ignoredColumns]);
+  }, [ignoredColumns, effectiveTarget]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleConfirm = () => {
+  const applyStrategyAndProceed = (selectedStrategy: string) => {
     const currentIndex = PREP_TABS.findIndex(t => t.id === 'imbalance_handling');
     const stepsToReset = PREP_TABS.slice(currentIndex + 1).map(t => t.id);
     const hasCompletedAhead = stepsToReset.some(id => completedSteps.includes(id));
@@ -65,11 +78,23 @@ const ImbalanceTab: React.FC = () => {
       if (!window.confirm('This will reset later steps. Continue?')) return;
       clearSubsequentProgress(stepsToReset);
     }
-    addPipelineAction({ step: 'imbalance_handling', action: 'handle_imbalance', strategy });
+    addPipelineAction({ step: 'imbalance_handling', action: 'handle_imbalance', strategy: selectedStrategy });
     toggleStepComplete('imbalance_handling', true);
   };
 
+  const attemptApplyStrategy = (selectedStrategy: string) => {
+    if (selectedStrategy !== 'none' && !completedSteps.includes('feature_selection')) {
+      setPendingStrategy(selectedStrategy);
+      setShowWarning(true);
+      return;
+    }
+    applyStrategyAndProceed(selectedStrategy);
+  };
+
+  const handleConfirm = () => attemptApplyStrategy(strategy);
+
   const handleSkip = () => {
+    addPipelineAction({ step: 'imbalance_handling', action: 'handle_imbalance', strategy: 'none' });
     toggleStepComplete('imbalance_handling', true);
   };
 
@@ -93,20 +118,19 @@ const ImbalanceTab: React.FC = () => {
         <div className="flex items-start gap-3">
           <div className="p-2.5 rounded-xl bg-rose-100 text-rose-600 shrink-0"><Shuffle size={20} /></div>
           <div>
-            <h3 className="font-bold text-slate-900 text-base mb-1">Imbalance Handling</h3>
+            <h3 className="font-bold text-slate-900 text-base mb-1">Step 10: Imbalance Handling (SMOTE)</h3>
             <p className="text-sm text-slate-600 leading-relaxed">
               Class imbalance causes models to learn biased decision boundaries.
-              <strong className="text-rose-700"> SMOTE</strong> generates synthetic minority samples.
-              <strong className="text-rose-700"> ADASYN</strong> focuses generation on hard-to-classify boundary regions.
+              <strong className="text-rose-700"> SMOTE</strong> generates synthetic minority samples by interpolating between real examples using K-Nearest Neighbors.
             </p>
           </div>
         </div>
       </div>
 
-      {/* Train-Only Critical */}
+      {/* Train-Only Warning */}
       <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-300 rounded-xl text-sm text-amber-900">
         <ShieldAlert size={18} className="shrink-0 mt-0.5 text-amber-600" />
-        <p><strong>CRITICAL:</strong> Oversampling (SMOTE/ADASYN) is applied ONLY to the Train Set. Applying to the Test Set would pollute evaluation with synthetic data and inflate performance metrics.</p>
+        <p><strong>CRITICAL:</strong> SMOTE is applied ONLY to the <strong>Train Set</strong>. Applying synthetic oversampling to the Test Set would pollute evaluation metrics with non-real data.</p>
       </div>
 
       {/* Severity Banner */}
@@ -119,31 +143,79 @@ const ImbalanceTab: React.FC = () => {
           </div>
           <p>
             {data.severity === 'balanced' && 'No oversampling needed. The class ratio is within acceptable bounds.'}
-            {data.severity === 'moderate' && `Majority-to-minority ratio is ${data.imbalance_ratio}:1. System suggests SMOTE for moderate synthetic oversampling.`}
-            {data.severity === 'severe' && `Majority-to-minority ratio is ${data.imbalance_ratio}:1. Severe imbalance. System suggests ADASYN which adapts to complex boundaries.`}
+            {data.severity === 'moderate' && `Majority-to-minority ratio is ${data.imbalance_ratio}:1. SMOTE is recommended.`}
+            {data.severity === 'severe' && `Majority-to-minority ratio is ${data.imbalance_ratio}:1. Severe imbalance — SMOTE will correct this.`}
           </p>
         </div>
       )}
 
-      {/* Class Distribution */}
+      {/* Before & After Class Distribution */}
       {data?.class_distribution && (
         <div className="bg-white border border-slate-200 rounded-xl p-5">
-          <h4 className="font-bold text-sm text-slate-700 mb-4">Class Distribution</h4>
-          <div className="space-y-3">
-            {data.class_distribution.map(entry => (
-              <div key={entry.class}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-bold text-slate-700">Class {entry.class}</span>
-                  <span className="text-xs text-slate-500">{entry.count} samples ({entry.percentage}%)</span>
-                </div>
-                <div className="w-full bg-slate-100 rounded-full h-3">
-                  <div
-                    className="h-3 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-500"
-                    style={{ width: `${entry.percentage}%` }}
-                  />
-                </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+
+            {/* BEFORE */}
+            <div>
+              <h4 className="font-bold text-sm text-slate-700 mb-4 flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0"></span>
+                Before SMOTE
+              </h4>
+              <div className="space-y-3">
+                {data.class_distribution.map(entry => (
+                  <div key={`before-${entry.class}`}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-sm font-bold text-slate-700">Class {entry.class}</span>
+                      <span className="text-xs font-medium text-slate-500 bg-slate-50 px-2 py-0.5 rounded">{entry.count.toLocaleString()} samples · {entry.percentage}%</span>
+                    </div>
+                    <div className="w-full bg-slate-100 rounded-full h-3">
+                      <div
+                        className="h-3 rounded-full bg-rose-400 transition-all duration-700"
+                        style={{ width: `${entry.percentage}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
+
+            {/* Vertical Divider */}
+            <div className="relative">
+              <div className="hidden md:block absolute left-[-16px] top-4 bottom-4 w-px bg-slate-100"></div>
+
+              {/* AFTER */}
+              <h4 className="font-bold text-sm text-slate-700 mb-4 flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
+                After SMOTE {strategy === 'none' ? <span className="text-slate-400 font-normal text-xs">(select SMOTE to preview)</span> : ''}
+              </h4>
+              <div className="space-y-3">
+                {data.class_distribution.map((entry, _, arr) => {
+                  let afterCount = entry.count;
+                  let afterPercentage = entry.percentage;
+
+                  if (strategy === 'smote') {
+                    const maxCount = Math.max(...arr.map(c => c.count));
+                    afterCount = maxCount;
+                    afterPercentage = parseFloat((100 / arr.length).toFixed(1));
+                  }
+
+                  return (
+                    <div key={`after-${entry.class}`}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-sm font-bold text-slate-700">Class {entry.class}</span>
+                        <span className="text-xs font-medium text-slate-500 bg-slate-50 px-2 py-0.5 rounded">{afterCount.toLocaleString()} samples · {afterPercentage}%</span>
+                      </div>
+                      <div className="w-full bg-slate-100 rounded-full h-3">
+                        <div
+                          className={`h-3 rounded-full transition-all duration-700 ${strategy === 'smote' ? 'bg-emerald-400' : 'bg-slate-300'}`}
+                          style={{ width: `${afterPercentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
           </div>
         </div>
       )}
@@ -155,25 +227,15 @@ const ImbalanceTab: React.FC = () => {
           {data?.recommendation && (
             <button
               onClick={() => {
-                const recommended = data.recommendation!;
-                setStrategy(recommended);
-
-                const currentIndex = PREP_TABS.findIndex(t => t.id === 'imbalance_handling');
-                const stepsToReset = PREP_TABS.slice(currentIndex + 1).map(t => t.id);
-                const hasCompletedAhead = stepsToReset.some(id => completedSteps.includes(id));
-                if (hasCompletedAhead) {
-                  if (!window.confirm('This will reset later steps. Continue?')) return;
-                  clearSubsequentProgress(stepsToReset);
-                }
-                addPipelineAction({ step: 'imbalance_handling', action: 'handle_imbalance', strategy: recommended });
-                toggleStepComplete('imbalance_handling', true);
+                setStrategy('smote');
+                attemptApplyStrategy('smote');
               }}
               className="flex flex-col items-end gap-0.5 cursor-pointer"
             >
               <span className="text-xs font-bold bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors flex items-center gap-1">
                 <Settings2 size={14} /> Use System Suggestion
               </span>
-              <span className="text-[10px] text-slate-400 pr-1">Applies suggestion &amp; finalizes pipeline</span>
+              <span className="text-[10px] text-slate-400 pr-1">Applies SMOTE & finalizes pipeline</span>
             </button>
           )}
         </div>
@@ -184,15 +246,14 @@ const ImbalanceTab: React.FC = () => {
         >
           <option value="none">No Oversampling</option>
           <option value="smote">SMOTE – Synthetic Minority Oversampling {data?.recommendation === 'smote' ? '(System Suggestion)' : ''}</option>
-          <option value="adasyn">ADASYN – Adaptive Synthetic Sampling {data?.recommendation === 'adasyn' ? '(System Suggestion)' : ''}</option>
         </select>
         <div className="mt-3 text-xs text-slate-500">
           {strategy === 'none' && <span className="flex items-center gap-1"><Info size={12} /> No synthetic data will be generated. Original class distribution is preserved.</span>}
-          {strategy === 'smote' && <span className="flex items-center gap-1"><Info size={12} /> SMOTE generates minority samples by interpolating between existing examples using K-Nearest Neighbors.</span>}
-          {strategy === 'adasyn' && <span className="flex items-center gap-1"><Info size={12} /> ADASYN generates more synthetic samples near the decision boundary where misclassification is most likely.</span>}
+          {strategy === 'smote' && <span className="flex items-center gap-1"><Info size={12} /> SMOTE generates synthetic minority samples by interpolating between real neighbors using K-Nearest Neighbors (k=5).</span>}
         </div>
       </div>
 
+      {/* Footer Actions */}
       <div className="pt-6 mt-4 border-t border-slate-200 flex items-center justify-between">
         {isComplete ? (
           <div className="flex items-center gap-2 text-sm font-bold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100">
@@ -210,6 +271,25 @@ const ImbalanceTab: React.FC = () => {
           Confirm & Finalize Pipeline <ChevronRight size={18} />
         </button>
       </div>
+
+      <WarningModal
+        isOpen={showWarning}
+        title="Feature Selection Skipped"
+        message="You are about to apply SMOTE on high-dimensional data without Feature Selection. This can introduce noise and degrade model performance. Are you sure?"
+        confirmText="Go Back to Feature Selection"
+        cancelText="Proceed Anyway"
+        onConfirm={() => {
+          setShowWarning(false);
+          setActiveTab('feature_selection');
+        }}
+        onCancel={() => {
+          setShowWarning(false);
+          if (pendingStrategy) {
+            applyStrategyAndProceed(pendingStrategy);
+            setPendingStrategy(null);
+          }
+        }}
+      />
     </div>
   );
 };

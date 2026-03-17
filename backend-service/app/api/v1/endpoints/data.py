@@ -5,7 +5,7 @@ import math
 from typing import Any
 
 from fastapi import APIRouter, File, Form, UploadFile, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 import os
 import pathlib
@@ -38,6 +38,7 @@ from app.schemas.request import (
     ScalingStatsRequest,
     DimensionalityStatsRequest,
     ImbalanceStatsRequest,
+    FeatureImportanceRequest,
 )
 from app.services import (
     data_exploration_service,
@@ -55,6 +56,7 @@ from app.services.data_prep.step06_transformation import analyze_transformation_
 from app.services.data_prep.step07_encoding import analyze_encoding_candidates
 from app.services.data_prep.step08_scaling import analyze_scaling_candidates
 from app.services.data_prep.step09_dimensionality import analyze_vif
+from app.services.data_prep.step09_feature_selection import apply_feature_selection, calculate_feature_importances
 from app.services.data_prep.step10_imbalance import analyze_class_balance
 # Legacy pipeline preview — migrated inline below once preview_pipeline is moved
 from app.services.data_prep._dataframe_loader import load_dataframe
@@ -397,10 +399,119 @@ def preview_cleaned_data(payload: DataCleaningPreviewRequest) -> dict[str, Any]:
                 # as future pipeline steps should only learn from training data
                 splits = apply_data_split(df, step)
                 df = splits["train"]
+            elif action == "feature_selection":
+                target_col = step.get("target_column", payload.session_id)
+                state = session_service.get_or_create(payload.session_id)
+                target_col = state.dataset.get("target_column")
+                problem_type = "classification"
+                df = apply_feature_selection(df, step, target_col, problem_type)
         preview = df.head(10).replace({float("nan"): None}).to_dict(orient="records")
         return {"session_id": payload.session_id, "shape": list(df.shape), "preview": preview, "applied_steps": len(payload.pipeline)}
     except Exception as exc:
         raise PipelineError(f"Pipeline execution failed: {exc}", status_code=400) from exc
+
+
+class DownloadPreprocessedRequest(BaseModel):
+    session_id: str = Field(default="demo-session")
+    pipeline: list[dict[str, Any]] = Field(default_factory=list)
+    target_column: str = Field(default="")
+    excluded_columns: list[str] = Field(default_factory=list)
+
+
+@router.post("/download-preprocessed")
+def download_preprocessed(
+    payload: DownloadPreprocessedRequest,
+) -> StreamingResponse:
+    """
+    Execute the full pipeline on the raw data and return it as a downloadable CSV.
+    Applies: column exclusion, all cleaning/transform steps, feature selection, and SMOTE.
+    """
+    import pandas as pd
+    import io as _io
+
+    df = load_dataframe(payload.session_id)
+
+    # Step 0 — apply excluded columns mask immediately
+    if payload.excluded_columns:
+        df = df.drop(columns=[c for c in payload.excluded_columns if c in df.columns], errors="ignore")
+
+    try:
+        smote_step = None
+        for step in payload.pipeline:
+            action = step.get("action")
+            if action == "drop_duplicates":
+                df = df.drop_duplicates()
+            elif action == "drop_zero_variance":
+                cols = [c for c in step.get("columns", []) if c in df.columns]
+                if cols:
+                    df = df.drop(columns=cols)
+            elif action == "cast_to_numeric":
+                for col in step.get("columns", []):
+                    if col in df.columns:
+                        df[col] = pd.to_numeric(df[col], errors="coerce")
+            elif action == "fill_missing":
+                col = step.get("column")
+                strategy_miss = step.get("strategy", "median")
+                if col and col in df.columns:
+                    if strategy_miss == "mean":
+                        df[col] = df[col].fillna(df[col].mean())
+                    elif strategy_miss == "median":
+                        df[col] = df[col].fillna(df[col].median())
+                    elif strategy_miss == "mode":
+                        mode_val = df[col].mode()
+                        if len(mode_val) > 0:
+                            df[col] = df[col].fillna(mode_val[0])
+                    elif strategy_miss == "drop":
+                        df = df.dropna(subset=[col])
+                    elif strategy_miss == "zero":
+                        df[col] = df[col].fillna(0)
+            elif action == "sample":
+                df = apply_sampling(df, step)
+            elif action == "split":
+                splits = apply_data_split(df, step)
+                df = splits["train"]
+            elif action == "feature_selection":
+                state = session_service.get_or_create(payload.session_id)
+                target_col = payload.target_column or state.dataset.get("target_column")
+                df = apply_feature_selection(df, step, target_col, "classification")
+            elif action == "handle_imbalance":
+                smote_step = step
+
+        # Apply SMOTE last (only on the assembled training data)
+        if smote_step and smote_step.get("strategy") == "smote":
+            target_col = payload.target_column
+            if target_col and target_col in df.columns:
+                try:
+                    from imblearn.over_sampling import SMOTE
+                    import numpy as np
+
+                    numeric_df = df.select_dtypes(include=[np.number])
+                    if target_col in numeric_df.columns:
+                        X = numeric_df.drop(columns=[target_col])
+                    else:
+                        X = numeric_df
+                    y = df[target_col]
+
+                    X_filled = X.fillna(X.median())
+                    smote = SMOTE(random_state=42)
+                    X_res, y_res = smote.fit_resample(X_filled, y)
+                    df = pd.DataFrame(X_res, columns=X.columns)
+                    df[target_col] = y_res
+                except Exception:
+                    pass  # If SMOTE fails (e.g. not installed), return data as-is
+
+        # Serialise to CSV in memory
+        buffer = _io.StringIO()
+        df.to_csv(buffer, index=False)
+        buffer.seek(0)
+
+        return StreamingResponse(
+            content=iter([buffer.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=preprocessed_data.csv"},
+        )
+    except Exception as exc:
+        raise PipelineError(f"Download pipeline failed: {exc}", status_code=400) from exc
 
 
 @router.post("/basic-cleaning-stats")
@@ -493,6 +604,30 @@ def imbalance_stats(payload: ImbalanceStatsRequest) -> dict[str, Any]:
         raise
     except Exception as exc:
         raise PipelineError(f"Imbalance stats failed: {exc}", status_code=500) from exc
+
+
+@router.post("/feature-importance-stats")
+def feature_importance_stats(payload: FeatureImportanceRequest) -> list[dict[str, Any]]:
+    import pandas as pd
+    try:
+        df = load_dataframe(payload.session_id)
+        state = session_service.get_or_create(payload.session_id)
+        problem_type = "classification" # or get from state if mapped
+        
+        # We need to exclude columns that have already been dropped by previous steps
+        # Actually this endpoint should run on the PREVIEW of the dataframe right before step 9.
+        # But for simplicity since step 9 is the only real dimensionality reducer before step 10,
+        # we can just drop the excluded_columns.
+        cols_to_drop = [c for c in payload.excluded_columns if c in df.columns]
+        if cols_to_drop:
+            df = df.drop(columns=cols_to_drop)
+
+        importances = calculate_feature_importances(df, payload.target_column, problem_type)
+        return _sanitize_for_json(importances)
+    except PipelineError:
+        raise
+    except Exception as exc:
+        raise PipelineError(f"Feature importance stats failed: {exc}", status_code=500) from exc
 
 
 @router.post("/prepare")

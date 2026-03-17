@@ -16,39 +16,39 @@ export const PREP_TABS: DataPrepTabSpec[] = [
     subtitle: 'Critical barrier — prevents data leakage.',
   },
   {
-    id: 'sampling',
-    title: '3. Sampling & Volume',
-    subtitle: 'Applied strictly to Train Set only.',
-  },
-  {
     id: 'outliers',
-    title: '4. Outliers',
+    title: '3. Outliers',
     subtitle: 'Z-Score, IQR, Isolation Forest, LOF, DBSCAN.',
   },
   {
     id: 'imputation',
-    title: '5. Missing Value Handling',
+    title: '4. Missing Value Handling',
     subtitle: 'Imputation strategies (MCAR, MAR, MNAR)',
   },
   {
     id: 'transformation',
-    title: '6. Feature Transformation',
+    title: '5. Feature Transformation',
     subtitle: 'Log, Box-Cox, Yeo-Johnson — normalize distributions.',
   },
   {
     id: 'encoding',
-    title: '7. Categorical Encoding',
+    title: '6. Categorical Encoding',
     subtitle: 'One-Hot, Label Encoding',
   },
   {
     id: 'scaling',
-    title: '8. Scaling',
+    title: '7. Scaling',
     subtitle: 'StandardScaler, MinMaxScaler',
   },
   {
     id: 'dimensionality_reduction',
-    title: '9. Feature Redundancy & Multicollinearity',
+    title: '8. Feature Redundancy & Multicollinearity',
     subtitle: 'VIF, PCA',
+  },
+  {
+    id: 'feature_selection',
+    title: '9. Feature Selection',
+    subtitle: 'Reduce dimensionality before creating synthetic data.',
   },
   {
     id: 'imbalance_handling',

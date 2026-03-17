@@ -162,3 +162,8 @@ class ImbalanceStatsRequest(BaseModel):
     session_id: str = Field(default="demo-session")
     target_column: str = Field(default="DEATH_EVENT")
     excluded_columns: list[str] = Field(default_factory=list)
+
+class FeatureImportanceRequest(BaseModel):
+    session_id: str = Field(default="demo-session")
+    target_column: str = Field(default="DEATH_EVENT")
+    excluded_columns: list[str] = Field(default_factory=list)
