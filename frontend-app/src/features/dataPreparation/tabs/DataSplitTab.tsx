@@ -123,7 +123,7 @@ const DataSplitTab: React.FC = () => {
       stratify: isClassification ? stratify : false,
     });
     toggleStepComplete('data_split', true);
-    setActiveTab('sampling'); // Step 3 is now Sampling
+    setActiveTab('outliers'); // Next step is now Outliers
   };
 
   return (

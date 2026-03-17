@@ -63,12 +63,12 @@ const DimensionalityTab: React.FC = () => {
     }
     addPipelineAction({ step: 'dimensionality_reduction', action: 'reduce_features', actions, use_pca: usePCA, pca_variance: pcaVariance });
     toggleStepComplete('dimensionality_reduction', true);
-    setActiveTab('imbalance_handling');
+    setActiveTab('feature_selection');
   };
 
   const handleSkip = () => {
     toggleStepComplete('dimensionality_reduction', true);
-    setActiveTab('imbalance_handling');
+    setActiveTab('feature_selection');
   };
 
   if (isLoading) return (

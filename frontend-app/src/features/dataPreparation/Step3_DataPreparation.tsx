@@ -1,9 +1,10 @@
-import React from 'react';
-import { AlertOctagon, CheckCircle2, ChevronRight } from 'lucide-react';
+import React, { useState } from 'react';
+import { CheckCircle2, ChevronRight, Download, Loader2 } from 'lucide-react';
 import { useDataPrepStore } from '../../store/useDataPrepStore';
+import { useEDAStore } from '../../store/useEDAStore';
+import { downloadPreprocessedCSV } from '../../api/dataPrepAPI';
 import { PREP_TABS } from './DataPrepTabsConfig';
 import BasicCleaningTab from './tabs/BasicCleaningTab';
-import SamplingTab from './tabs/SamplingTab';
 import DataSplitTab from './tabs/DataSplitTab';
 import ImputationTab from './tabs/ImputationTab';
 import OutliersTab from './tabs/OutliersTab';
@@ -11,17 +12,37 @@ import TransformationTab from './tabs/TransformationTab';
 import EncodingTab from './tabs/EncodingTab';
 import ScalingTab from './tabs/ScalingTab';
 import DimensionalityTab from './tabs/DimensionalityTab';
+import FeatureSelectionTab from './tabs/FeatureSelectionTab';
 import ImbalanceTab from './tabs/ImbalanceTab';
 
 export const Step3_DataPreparation: React.FC = () => {
-  const { activeTabId, completedSteps, setActiveTab } = useDataPrepStore();
+  const { activeTabId, completedSteps, setActiveTab, cleaningPipeline } = useDataPrepStore();
+  const { ignoredColumns, targetColumn } = useEDAStore();
+
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  const handleDownload = async () => {
+    setIsDownloading(true);
+    setDownloadError(null);
+    try {
+      await downloadPreprocessedCSV(
+        'demo-session',
+        cleaningPipeline,
+        targetColumn || 'DEATH_EVENT',
+        ignoredColumns ?? []
+      );
+    } catch (e: any) {
+      setDownloadError(e.message ?? 'Download failed');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   const renderActiveComponent = () => {
     switch (activeTabId) {
       case 'data_cleaning':
         return <BasicCleaningTab />;
-      case 'sampling':
-        return <SamplingTab />;
       case 'data_split':
         return <DataSplitTab />;
       case 'imputation':
@@ -36,6 +57,8 @@ export const Step3_DataPreparation: React.FC = () => {
         return <ScalingTab />;
       case 'dimensionality_reduction':
         return <DimensionalityTab />;
+      case 'feature_selection':
+        return <FeatureSelectionTab />;
       case 'imbalance_handling':
         return <ImbalanceTab />;
       default:
@@ -121,12 +144,43 @@ export const Step3_DataPreparation: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Content Area (3/4 Width) */}
         <div className="flex-1 bg-white border border-slate-200 rounded-2xl shadow-sm min-h-[70vh] p-6 lg:p-8">
           {renderActiveComponent()}
         </div>
 
       </div>
+
+      {/* Success Banner with Download Button */}
+      {completedSteps.includes('imbalance_handling') && (
+        <div className="bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl p-6 shadow-lg text-white flex items-center justify-between animate-in slide-in-from-bottom-4 duration-500">
+          <div className="flex items-center gap-4">
+            <div className="bg-white/20 p-3 rounded-xl backdrop-blur-sm">
+              <CheckCircle2 size={32} className="text-white" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold">Data Preparation Complete!</h3>
+              <p className="text-emerald-50 mt-1">
+                Data is clean, scaled, selected, and balanced. Download your preprocessed dataset.
+              </p>
+              {downloadError && (
+                <p className="text-red-200 text-xs mt-1">⚠ {downloadError}</p>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={handleDownload}
+            disabled={isDownloading}
+            className="flex items-center gap-2 bg-white text-emerald-700 px-6 py-3 rounded-xl font-bold hover:bg-emerald-50 hover:shadow-md transition-all active:scale-[0.98] cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
+          >
+            {isDownloading ? (
+              <><Loader2 size={18} className="animate-spin" /> Preparing CSV...</>
+            ) : (
+              <><Download size={18} /> Download Preprocessed CSV</>
+            )}
+          </button>
+        </div>
+      )}
+
     </div>
   );
 };
