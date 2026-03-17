@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { CheckCircle2, ChevronRight, Download, Loader2 } from 'lucide-react';
 import { useDataPrepStore } from '../../store/useDataPrepStore';
-import { useEDAStore } from '../../store/useEDAStore';
+import { buildPipelineConfig } from '../../store/pipelineConfig';
 import { downloadPreprocessedCSV } from '../../api/dataPrepAPI';
 import { PREP_TABS } from './DataPrepTabsConfig';
+import PrepTimingHint from './PrepTimingHint';
 import BasicCleaningTab from './tabs/BasicCleaningTab';
 import DataSplitTab from './tabs/DataSplitTab';
 import ImputationTab from './tabs/ImputationTab';
@@ -16,8 +17,7 @@ import FeatureSelectionTab from './tabs/FeatureSelectionTab';
 import ImbalanceTab from './tabs/ImbalanceTab';
 
 export const Step3_DataPreparation: React.FC = () => {
-  const { activeTabId, completedSteps, setActiveTab, cleaningPipeline } = useDataPrepStore();
-  const { ignoredColumns, targetColumn } = useEDAStore();
+  const { activeTabId, completedSteps, setActiveTab } = useDataPrepStore();
 
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
@@ -26,12 +26,8 @@ export const Step3_DataPreparation: React.FC = () => {
     setIsDownloading(true);
     setDownloadError(null);
     try {
-      await downloadPreprocessedCSV(
-        'demo-session',
-        cleaningPipeline,
-        targetColumn || 'DEATH_EVENT',
-        ignoredColumns ?? []
-      );
+      const pipelineConfig = buildPipelineConfig('demo-session');
+      await downloadPreprocessedCSV(pipelineConfig);
     } catch (e: any) {
       setDownloadError(e.message ?? 'Download failed');
     } finally {
@@ -72,13 +68,13 @@ export const Step3_DataPreparation: React.FC = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+    <div className="w-full space-y-6">
       
       {/* Two-Column Workspace */}
-      <div className="flex gap-6 items-start">
+      <div className="grid grid-cols-1 gap-6 items-start xl:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[340px_minmax(0,1fr)]">
         
         {/* Left Sidebar (1/4 Width) */}
-        <div className="w-1/4 shrink-0 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col h-[70vh]">
+        <div className="w-full shrink-0 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col h-[68vh] xl:h-[75vh]">
           <div className="p-4 border-b border-slate-100 bg-slate-50">
             <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
               Data Prep Pipeline
@@ -131,6 +127,7 @@ export const Step3_DataPreparation: React.FC = () => {
                       <p className="text-[10px] text-slate-500 truncate mt-0.5">
                         {tab.subtitle}
                       </p>
+                      <PrepTimingHint tabId={tab.id} compact />
                     </div>
 
                     {/* Active Indicator Arrow */}
@@ -144,7 +141,8 @@ export const Step3_DataPreparation: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex-1 bg-white border border-slate-200 rounded-2xl shadow-sm min-h-[70vh] p-6 lg:p-8">
+        <div className="min-w-0 bg-white border border-slate-200 rounded-2xl shadow-sm min-h-[70vh] p-5 lg:p-6 xl:p-8 2xl:p-10">
+          <PrepTimingHint tabId={activeTabId} />
           {renderActiveComponent()}
         </div>
 
@@ -152,7 +150,7 @@ export const Step3_DataPreparation: React.FC = () => {
 
       {/* Success Banner with Download Button */}
       {completedSteps.includes('imbalance_handling') && (
-        <div className="bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl p-6 shadow-lg text-white flex items-center justify-between animate-in slide-in-from-bottom-4 duration-500">
+        <div className="bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl p-6 shadow-lg text-white flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between animate-in slide-in-from-bottom-4 duration-500">
           <div className="flex items-center gap-4">
             <div className="bg-white/20 p-3 rounded-xl backdrop-blur-sm">
               <CheckCircle2 size={32} className="text-white" />
@@ -170,7 +168,7 @@ export const Step3_DataPreparation: React.FC = () => {
           <button
             onClick={handleDownload}
             disabled={isDownloading}
-            className="flex items-center gap-2 bg-white text-emerald-700 px-6 py-3 rounded-xl font-bold hover:bg-emerald-50 hover:shadow-md transition-all active:scale-[0.98] cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
+            className="w-full justify-center lg:w-auto flex items-center gap-2 bg-white text-emerald-700 px-6 py-3 rounded-xl font-bold hover:bg-emerald-50 hover:shadow-md transition-all active:scale-[0.98] cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {isDownloading ? (
               <><Loader2 size={18} className="animate-spin" /> Preparing CSV...</>

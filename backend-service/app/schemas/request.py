@@ -89,6 +89,33 @@ class DataCleaningPreviewRequest(BaseModel):
     pipeline: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class PipelineConfigRequest(BaseModel):
+    session_id: str = Field(default="demo-session")
+    target_column: str | None = None
+    problem_type: str | None = None
+    excluded_columns: list[str] = Field(default_factory=list)
+    basic_cleaning: dict[str, Any] = Field(default_factory=dict)
+    sampling: dict[str, Any] = Field(default_factory=dict)
+    data_split: dict[str, Any] = Field(default_factory=dict)
+    imputation: dict[str, Any] = Field(default_factory=dict)
+    outliers: dict[str, Any] = Field(default_factory=dict)
+    transformation: dict[str, Any] = Field(default_factory=dict)
+    encoding: dict[str, Any] = Field(default_factory=dict)
+    scaling: dict[str, Any] = Field(default_factory=dict)
+    dimensionality_reduction: dict[str, Any] = Field(default_factory=dict)
+    feature_selection: dict[str, Any] = Field(default_factory=dict)
+    imbalance: dict[str, Any] = Field(default_factory=dict)
+
+
+class PipelineExecutionRequest(BaseModel):
+    pipeline_config: PipelineConfigRequest | None = None
+    session_id: str = Field(default="demo-session")
+    target_column: str = Field(default="")
+    problem_type: str | None = None
+    excluded_columns: list[str] = Field(default_factory=list)
+    pipeline: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class BasicCleaningStatsRequest(BaseModel):
     session_id: str = Field(default="demo-session")
     excluded_columns: list[str] = Field(default_factory=list)
@@ -162,8 +189,10 @@ class ImbalanceStatsRequest(BaseModel):
     session_id: str = Field(default="demo-session")
     target_column: str = Field(default="DEATH_EVENT")
     excluded_columns: list[str] = Field(default_factory=list)
+    pipeline_config: PipelineConfigRequest | None = None
 
 class FeatureImportanceRequest(BaseModel):
     session_id: str = Field(default="demo-session")
     target_column: str = Field(default="DEATH_EVENT")
     excluded_columns: list[str] = Field(default_factory=list)
+    pipeline_config: PipelineConfigRequest | None = None

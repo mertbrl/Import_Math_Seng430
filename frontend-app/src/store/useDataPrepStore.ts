@@ -5,12 +5,15 @@ import {
   fetchMissingStats as apiFetchMissingStats,
   fetchOutlierStats as apiFetchOutlierStats,
   fetchFeatureImportances as apiFetchFeatureImportances,
+  previewPreprocessedData as apiPreviewPreprocessedData,
   type BasicCleaningStats,
   type TypeMismatchColumn,
   type MissingColumnStat,
   type OutlierColumnStat,
   type FeatureImportanceStat,
 } from '../api/dataPrepAPI';
+import type { PipelineConfig } from './pipelineConfig';
+import { PREP_TABS } from '../features/dataPreparation/DataPrepTabsConfig';
 
 interface DataPrepState {
   activeTabId: string;
@@ -53,13 +56,14 @@ interface DataPrepState {
   setActiveTab: (id: string) => void;
   toggleStepComplete: (id: string, isComplete?: boolean) => void;
   addPipelineAction: (actionConfig: any) => void;
-  fetchPreviewData: (sessionId: string) => Promise<void>;
+  fetchPreviewData: (sessionId: string, pipelineConfig: PipelineConfig) => Promise<void>;
   fetchBasicCleaningStats: (sessionId: string, excludedColumns: string[]) => Promise<void>;
   fetchTypeMismatchStats: (sessionId: string, excludedColumns: string[]) => Promise<void>;
   fetchMissingStats: (sessionId: string, excludedColumns: string[]) => Promise<void>;
   fetchOutlierStats: (sessionId: string, excludedColumns: string[]) => Promise<void>;
-  fetchFeatureImportances: (sessionId: string, excludedColumns: string[], targetColumn: string) => Promise<void>;
+  fetchFeatureImportances: (pipelineConfig: PipelineConfig) => Promise<void>;
   clearSubsequentProgress: (invalidStepIds: string[]) => void;
+  confirmAndInvalidateLaterSteps: (stepId: string, warningMessage?: string) => boolean;
   resetPrep: () => void;
 }
 
@@ -114,7 +118,10 @@ export const useDataPrepStore = create<DataPrepState>((set, get) => ({
   }),
 
   addPipelineAction: (actionConfig) => set((state) => ({
-    cleaningPipeline: [...state.cleaningPipeline, actionConfig],
+    cleaningPipeline: [
+      ...state.cleaningPipeline.filter((action) => action.action !== actionConfig.action),
+      actionConfig,
+    ],
   })),
 
   clearSubsequentProgress: (invalidStepIds) => set((state) => {
@@ -125,6 +132,9 @@ export const useDataPrepStore = create<DataPrepState>((set, get) => ({
     const resetState: Partial<DataPrepState> = {
       completedSteps: newCompleted,
       cleaningPipeline: newPipeline,
+      previewData: null,
+      previewShape: null,
+      previewError: null,
     };
 
     if (invalidStepIds.includes('imputation')) {
@@ -134,21 +144,38 @@ export const useDataPrepStore = create<DataPrepState>((set, get) => ({
       resetState.outlierColumns = [];
       resetState.outlierStrategies = {};
     }
+    if (invalidStepIds.includes('feature_selection')) {
+      resetState.featureSelection = null;
+      resetState.featureImportances = [];
+    }
 
     return resetState;
   }),
 
-  fetchPreviewData: async (sessionId) => {
+  confirmAndInvalidateLaterSteps: (stepId, warningMessage) => {
+    const currentIndex = PREP_TABS.findIndex((tab) => tab.id === stepId);
+    if (currentIndex === -1) return true;
+
+    const stepsToReset = PREP_TABS.slice(currentIndex + 1).map((tab) => tab.id);
+    if (stepsToReset.length === 0) return true;
+
+    const { completedSteps, clearSubsequentProgress } = get();
+    const hasCompletedAhead = stepsToReset.some((id) => completedSteps.includes(id));
+    if (!hasCompletedAhead) return true;
+
+    const confirmed = window.confirm(
+      warningMessage ?? 'Applying this change will remove all completed work in the later steps. Do you want to continue?'
+    );
+    if (!confirmed) return false;
+
+    clearSubsequentProgress(stepsToReset);
+    return true;
+  },
+
+  fetchPreviewData: async (_sessionId, pipelineConfig) => {
     set({ isPreviewLoading: true, previewError: null });
     try {
-      const { cleaningPipeline } = get();
-      const res = await fetch('http://localhost:8000/api/v1/preview-cleaned-data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId, pipeline: cleaningPipeline }),
-      });
-      if (!res.ok) throw new Error('Failed to fetch preview data');
-      const data = await res.json();
+      const data = await apiPreviewPreprocessedData(pipelineConfig);
       set({ previewData: data.preview, previewShape: data.shape, isPreviewLoading: false });
     } catch (err: any) {
       set({ previewError: err.message, isPreviewLoading: false });
@@ -196,10 +223,10 @@ export const useDataPrepStore = create<DataPrepState>((set, get) => ({
     }
   },
 
-  fetchFeatureImportances: async (sessionId, excludedColumns, targetColumn) => {
+  fetchFeatureImportances: async (pipelineConfig) => {
     set({ isFeatureImportancesLoading: true, featureImportancesError: null });
     try {
-      const data = await apiFetchFeatureImportances(sessionId, excludedColumns, targetColumn);
+      const data = await apiFetchFeatureImportances(pipelineConfig);
       set({ featureImportances: data, isFeatureImportancesLoading: false });
     } catch (err: any) {
       set({ featureImportancesError: err.message, isFeatureImportancesLoading: false });

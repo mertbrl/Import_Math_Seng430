@@ -88,7 +88,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       <HelpChatbotDrawer />
 
       {/* Main Content Area */}
-      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 flex flex-col gap-6">
+      <main className="flex-1 w-full max-w-none px-3 sm:px-4 lg:px-6 xl:px-8 2xl:px-10 py-6 sm:py-8 flex flex-col gap-6">
         
         {/* Sticky Header Section for Domain + Stepper */}
         <div className="sticky top-[60px] z-40 bg-slate-50/95 backdrop-blur-sm pt-2 pb-4 border-b border-transparent space-y-5 shadow-[0_10px_20px_-15px_rgba(0,0,0,0.05)]">
@@ -127,7 +127,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                  <div 
                    key={step.id} 
                    onClick={() => handleStepClick(step.id)}
-                   className={`flex-none w-[160px] flex items-start gap-2.5 p-2 rounded-lg transition-all ${
+                   className={`min-w-[160px] flex-none xl:flex-1 xl:w-auto flex items-start gap-2.5 p-2 rounded-lg transition-all ${
                      isActive 
                        ? 'bg-indigo-50/50 border border-indigo-100' 
                        : isCompleted

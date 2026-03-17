@@ -2,28 +2,12 @@
 
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
 from app.services.data_prep._dataframe_loader import load_dataframe
 
 
-def analyze_class_balance(session_id: str, target_column: str, ignored_columns: list[str] | None = None) -> dict[str, Any]:
-    """
-    Analyzes the class distribution of the target column to detect imbalance.
-
-    Imbalance Rules:
-    - Majority/Minority ratio > 1.5: Moderate/Severe imbalance → Suggest SMOTE
-    - Balanced: No action required
-
-    NOTE: SMOTE/ADASYN must ONLY be applied to the Train Set.
-    This endpoint returns analysis for the full dataset (for display purposes).
-    The pipeline executor enforces train-only oversampling.
-    """
-    df = load_dataframe(session_id)
-    if ignored_columns:
-        df = df.drop(columns=[c for c in ignored_columns if c in df.columns], errors='ignore')
-
+def summarize_class_balance(df: pd.DataFrame, target_column: str) -> dict[str, Any]:
     if target_column not in df.columns:
         return {"error": f"Target column '{target_column}' not found in dataset."}
 
@@ -34,7 +18,7 @@ def analyze_class_balance(session_id: str, target_column: str, ignored_columns: 
         {
             "class": str(label),
             "count": int(count),
-            "percentage": round(count / total * 100, 2)
+            "percentage": round(count / total * 100, 2) if total > 0 else 0.0,
         }
         for label, count in value_counts.items()
     ]
@@ -67,3 +51,22 @@ def analyze_class_balance(session_id: str, target_column: str, ignored_columns: 
         "severity": severity,
         "recommendation": recommendation,
     }
+
+
+def analyze_class_balance(session_id: str, target_column: str, ignored_columns: list[str] | None = None) -> dict[str, Any]:
+    """
+    Analyzes the class distribution of the target column to detect imbalance.
+
+    Imbalance Rules:
+    - Majority/Minority ratio > 1.5: Moderate/Severe imbalance → Suggest SMOTE
+    - Balanced: No action required
+
+    NOTE: SMOTE/ADASYN must ONLY be applied to the Train Set.
+    This endpoint returns analysis for the full dataset (for display purposes).
+    The pipeline executor enforces train-only oversampling.
+    """
+    df = load_dataframe(session_id)
+    if ignored_columns:
+        df = df.drop(columns=[c for c in ignored_columns if c in df.columns], errors='ignore')
+
+    return summarize_class_balance(df, target_column)

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
-import { PREP_TABS } from '../DataPrepTabsConfig';
 import { Trash2, CopyX, Equal, Type, CheckCircle2, ChevronRight, AlertCircle, Loader2 } from 'lucide-react';
 
 const BasicCleaningTab: React.FC = () => {
@@ -9,7 +8,7 @@ const BasicCleaningTab: React.FC = () => {
     toggleStepComplete, 
     addPipelineAction, 
     cleaningPipeline,
-    completedSteps, 
+    completedSteps,
     setActiveTab,
     fetchBasicCleaningStats,
     basicCleaningStats,
@@ -17,7 +16,7 @@ const BasicCleaningTab: React.FC = () => {
     fetchTypeMismatchStats,
     typeMismatchColumns,
     isTypeMismatchLoading,
-    clearSubsequentProgress
+    confirmAndInvalidateLaterSteps
   } = useDataPrepStore();
   
   const { ignoredColumns } = useEDAStore();
@@ -44,17 +43,10 @@ const BasicCleaningTab: React.FC = () => {
   const hasNoTypeMismatches = typeMismatchColumns.length === 0;
 
   const checkAndClearSubsequent = () => {
-    const currentIndex = PREP_TABS.findIndex(t => t.id === 'data_cleaning');
-    const stepsToReset = PREP_TABS.slice(currentIndex + 1).map(t => t.id);
-    const hasCompletedAhead = stepsToReset.some(id => completedSteps.includes(id));
-      
-    if (hasCompletedAhead) {
-      if (!window.confirm("Applying this cleaning action will reset your progress in all later steps. Are you sure?")) {
-        return false; // User cancelled
-      }
-      clearSubsequentProgress(stepsToReset);
-    }
-    return true;
+    return confirmAndInvalidateLaterSteps(
+      'data_cleaning',
+      'Applying this cleaning change will remove all accepted work in the later steps. Do you want to continue?'
+    );
   };
 
   const handleDropDuplicates = () => {

@@ -1,14 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
-import { PREP_TABS } from '../DataPrepTabsConfig';
-import { ScanSearch, Activity, AlertTriangle, CheckCircle2, ChevronRight, Settings2, Loader2, Sparkles } from 'lucide-react';
+import { ScanSearch, Activity, AlertTriangle, CheckCircle2, ChevronRight, Settings2, Loader2 } from 'lucide-react';
 
 const OutliersTab: React.FC = () => {
   const { 
     toggleStepComplete, 
     addPipelineAction, 
-    completedSteps, 
+    completedSteps,
     setActiveTab,
     outlierColumns,
     isOutlierLoading,
@@ -16,9 +15,9 @@ const OutliersTab: React.FC = () => {
     fetchOutlierStats,
     outlierStrategies,
     setOutlierStrategy,
-    clearSubsequentProgress
+    confirmAndInvalidateLaterSteps
   } = useDataPrepStore();
-  
+
   const ignoredColumns = useEDAStore(s => s.ignoredColumns);
 
   const isComplete = completedSteps.includes('outliers');
@@ -44,17 +43,9 @@ const OutliersTab: React.FC = () => {
     }
   }, [outlierColumns, outlierStrategies, setOutlierStrategy]);
 
-
   const handleConfirm = () => {
-    const currentIndex = PREP_TABS.findIndex(t => t.id === 'outliers');
-    const stepsToReset = PREP_TABS.slice(currentIndex + 1).map(t => t.id);
-    const hasCompletedAhead = stepsToReset.some(id => completedSteps.includes(id));
-      
-    if (hasCompletedAhead) {
-      if (!window.confirm("Applying these changes will reset your progress in all later steps. Are you sure?")) {
-        return; // User cancelled
-      }
-      clearSubsequentProgress(stepsToReset);
+    if (!confirmAndInvalidateLaterSteps('outliers', 'Changing outlier handling will remove all accepted work in the later steps. Do you want to continue?')) {
+      return;
     }
 
     // Log the unified action to the pipeline
@@ -64,10 +55,13 @@ const OutliersTab: React.FC = () => {
       strategies: outlierStrategies
     });
     toggleStepComplete('outliers', true);
-    setActiveTab('imputation'); // Step 5 is now Imputation
+    setActiveTab('imputation');
   };
 
   const handleSkip = () => {
+    if (!confirmAndInvalidateLaterSteps('outliers', 'Skipping this step now will remove all accepted work in the later steps. Do you want to continue?')) {
+      return;
+    }
     toggleStepComplete('outliers', true);
     setActiveTab('imputation'); // Step 5 is now Imputation
   };
@@ -163,25 +157,19 @@ const OutliersTab: React.FC = () => {
           </h3>
           <button
             onClick={() => {
-              // Apply all system suggestions
               outlierColumns.forEach(col => {
-                const safeDefault = col.recommendation === 'Isolation Forest' ? 'isolation_forest' : 
+                const safeDefault = col.recommendation === 'Isolation Forest' ? 'isolation_forest' :
                                     col.recommendation === 'IQR' ? 'iqr' : 'zscore';
                 setOutlierStrategy(col.column, safeDefault);
               });
-              // Build strategies and advance to next step
+
               const strategies: Record<string, string> = {};
               outlierColumns.forEach(col => {
-                strategies[col.column] = col.recommendation === 'Isolation Forest' ? 'isolation_forest' : 
+                strategies[col.column] = col.recommendation === 'Isolation Forest' ? 'isolation_forest' :
                                          col.recommendation === 'IQR' ? 'iqr' : 'zscore';
               });
-              const currentIndex = PREP_TABS.findIndex(t => t.id === 'outliers');
-              const stepsToReset = PREP_TABS.slice(currentIndex + 1).map(t => t.id);
-              const hasCompletedAhead = stepsToReset.some(id => completedSteps.includes(id));
-              if (hasCompletedAhead) {
-                if (!window.confirm("Applying these changes will reset your progress in all later steps. Are you sure?")) return;
-                clearSubsequentProgress(stepsToReset);
-              }
+
+              if (!confirmAndInvalidateLaterSteps('outliers', 'Applying these system suggestions will remove all accepted work in the later steps. Do you want to continue?')) return;
               addPipelineAction({ step: 'outliers', action: 'handle_outliers', strategies });
               toggleStepComplete('outliers', true);
               setActiveTab('imputation');
@@ -196,7 +184,6 @@ const OutliersTab: React.FC = () => {
         </div>
 
         {outlierColumns.map((col) => {
-          
           const isNormal = col.distribution === 'Normal';
           const isSkewed = col.distribution === 'Highly Skewed';
           const isMultimodal = col.distribution === 'Multimodal';
@@ -209,12 +196,9 @@ const OutliersTab: React.FC = () => {
           return (
             <div key={col.column} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:border-indigo-200 transition-colors">
               <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                
-                {/* Info Block */}
                 <div className="flex-1 space-y-3">
                   <div className="flex items-center gap-3">
                     <span className="font-bold text-slate-900 text-base">{col.column}</span>
-                    
                     <span className={`text-[10px] items-center gap-1 font-bold px-2 py-1 rounded flex ${
                       isNormal ? 'bg-sky-100 text-sky-700' : 
                       isSkewed ? 'bg-indigo-100 text-indigo-700' : 'bg-purple-100 text-purple-700'
@@ -222,15 +206,13 @@ const OutliersTab: React.FC = () => {
                       <Activity size={12} />
                       Distribution: {col.distribution}
                     </span>
-                    
                     <span className="text-[10px] font-bold bg-rose-100 text-rose-700 px-2 py-1 rounded flex items-center gap-1">
                       <AlertTriangle size={12} />
                       {col.outlier_count} Outliers ({col.outlier_percentage}%)
                     </span>
                   </div>
 
-                  {/* System Suggestion Box */}
-                  <div className={`text-xs p-3 rounded-lg border leading-relaxed bg-slate-50 border-slate-200 text-slate-700`}>
+                  <div className="text-xs p-3 rounded-lg border leading-relaxed bg-slate-50 border-slate-200 text-slate-700">
                     <span className="font-bold block mb-1 tracking-wide uppercase text-[10px] text-indigo-600 flex items-center gap-1">
                       <Settings2 size={12} /> SYSTEM SUGGESTION
                     </span>
@@ -252,7 +234,6 @@ const OutliersTab: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Strategy Selector */}
                 <div className="md:w-64 shrink-0 mt-3 md:mt-0">
                   <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
                     Handling Strategy
@@ -287,14 +268,12 @@ const OutliersTab: React.FC = () => {
                     {currentStrategy.startsWith('cap') && 'Clips extremes to a fixed maximum ceiling.'}
                   </p>
                 </div>
-
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Action Footer */}
       <div className="pt-6 mt-4 border-t border-slate-200 flex items-center justify-between">
         {isComplete ? (
           <div className="flex items-center gap-2 text-sm font-bold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100">
@@ -313,7 +292,6 @@ const OutliersTab: React.FC = () => {
           <ChevronRight size={18} />
         </button>
       </div>
-
     </div>
   );
 };

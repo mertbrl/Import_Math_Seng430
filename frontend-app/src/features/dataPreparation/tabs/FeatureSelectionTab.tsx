@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
-import { useEDAStore } from '../../../store/useEDAStore';
+import { buildPipelineConfig } from '../../../store/pipelineConfig';
 import { ShieldCheck, Filter, ChevronRight, CheckCircle2, Loader2, AlertCircle, TrendingUp } from 'lucide-react';
 
 const FeatureSelectionTab: React.FC = () => {
   const { 
     toggleStepComplete, 
     addPipelineAction, 
+    cleaningPipeline,
     completedSteps, 
     setActiveTab, 
     featureSelection, 
@@ -14,16 +15,15 @@ const FeatureSelectionTab: React.FC = () => {
     fetchFeatureImportances,
     featureImportances,
     isFeatureImportancesLoading,
-    featureImportancesError
+    featureImportancesError,
+    confirmAndInvalidateLaterSteps
   } = useDataPrepStore();
-  const { ignoredColumns, targetColumn } = useEDAStore();
-  
   const isComplete = completedSteps.includes('feature_selection');
 
   // Load feature importances when the tab opens
   useEffect(() => {
-    fetchFeatureImportances('demo-session', ignoredColumns || [], targetColumn);
-  }, [fetchFeatureImportances, ignoredColumns, targetColumn]);
+    fetchFeatureImportances(buildPipelineConfig('demo-session'));
+  }, [fetchFeatureImportances, cleaningPipeline]);
 
   const totalFeatures = Math.max(1, featureImportances.length);
 
@@ -65,6 +65,9 @@ const FeatureSelectionTab: React.FC = () => {
   }, [topK, selectedFeatures, setFeatureSelection]);
 
   const handleConfirm = () => {
+    if (!confirmAndInvalidateLaterSteps('feature_selection', 'Changing feature selection will remove all accepted work in the later steps. Do you want to continue?')) {
+      return;
+    }
     addPipelineAction({
       step: 'feature_selection',
       action: 'feature_selection',
@@ -244,4 +247,3 @@ const FeatureSelectionTab: React.FC = () => {
 };
 
 export default FeatureSelectionTab;
-

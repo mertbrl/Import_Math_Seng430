@@ -4,6 +4,8 @@
  * Components and Zustand stores import from here; never hit fetch() directly.
  */
 
+import type { PipelineConfig } from '../store/pipelineConfig';
+
 const BASE_URL = (import.meta as any).env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1';
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -47,6 +49,12 @@ export interface OutlierColumnStat {
 export interface FeatureImportanceStat {
   feature: string;
   score: number;
+}
+
+export interface PreviewPipelineResponse {
+  session_id: string;
+  shape: number[];
+  preview: Record<string, string | number | null>[];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -120,34 +128,41 @@ export async function fetchOutlierStats(
 }
 
 export async function fetchFeatureImportances(
-  sessionId: string,
-  excludedColumns: string[],
-  targetColumn: string
+  pipelineConfig: PipelineConfig
 ): Promise<FeatureImportanceStat[]> {
   const res = await fetch(`${BASE_URL}/feature-importance-stats`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ session_id: sessionId, excluded_columns: excludedColumns, target_column: targetColumn }),
+    body: JSON.stringify({
+      session_id: pipelineConfig.session_id,
+      target_column: pipelineConfig.target_column,
+      excluded_columns: pipelineConfig.excluded_columns,
+      pipeline_config: pipelineConfig,
+    }),
   });
   if (!res.ok) await throwDetailedError(res, 'feature-importance-stats');
   return res.json();
 }
 
+export async function previewPreprocessedData(
+  pipelineConfig: PipelineConfig
+): Promise<PreviewPipelineResponse> {
+  const res = await fetch(`${BASE_URL}/preview-cleaned-data`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pipeline_config: pipelineConfig }),
+  });
+  if (!res.ok) await throwDetailedError(res, 'preview-cleaned-data');
+  return res.json();
+}
+
 export async function downloadPreprocessedCSV(
-  sessionId: string,
-  pipeline: any[],
-  targetColumn: string,
-  excludedColumns: string[]
+  pipelineConfig: PipelineConfig
 ): Promise<void> {
   const res = await fetch(`${BASE_URL}/download-preprocessed`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      session_id: sessionId,
-      pipeline,
-      target_column: targetColumn,
-      excluded_columns: excludedColumns,
-    }),
+    body: JSON.stringify({ pipeline_config: pipelineConfig }),
   });
   if (!res.ok) await throwDetailedError(res, 'download-preprocessed');
   const blob = await res.blob();
@@ -160,4 +175,3 @@ export async function downloadPreprocessedCSV(
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
-

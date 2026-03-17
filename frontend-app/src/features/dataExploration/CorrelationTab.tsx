@@ -103,13 +103,13 @@ const CorrelationTab: React.FC<CorrelationTabProps> = ({ numericColumnNames, cor
         </div>
       </div>
 
-      {/* AI Insight Callout */}
+      {/* Suggestion Callout */}
       <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 rounded-xl p-5 shadow-sm flex items-start gap-4">
         <div className="p-2.5 bg-white rounded-lg border border-indigo-100 shadow-sm shrink-0">
           <Lightbulb size={20} className="text-indigo-600" />
         </div>
         <div>
-          <p className="text-sm font-bold text-indigo-900 mb-1">💡 AI Insight: Multicollinearity Check</p>
+          <p className="text-sm font-bold text-indigo-900 mb-1">Suggestion: Multicollinearity Check</p>
           <p className="text-[13px] text-indigo-800 leading-relaxed">
             Variables with <strong>&gt;85% correlation</strong> (dark red/blue cells) can cause{' '}
             <strong>Multicollinearity</strong>, confusing non-tree-based models like Logistic Regression.
@@ -128,8 +128,8 @@ const CorrelationTab: React.FC<CorrelationTabProps> = ({ numericColumnNames, cor
               }
               return (
                 <span>
-                  {' '}Great news: The highest correlation is <strong>{highestCorr.row} ↔ {highestCorr.col} ({highestCorr.value.toFixed(2)})</strong>,
-                  meaning no severe multicollinearity was detected!
+                  {' '}The highest observed correlation is <strong>{highestCorr.row} ↔ {highestCorr.col} ({highestCorr.value.toFixed(2)})</strong>,
+                  so no severe multicollinearity is currently flagged.
                 </span>
               );
             })()}

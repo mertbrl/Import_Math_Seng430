@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
-import { PREP_TABS } from '../DataPrepTabsConfig';
 import { Network, CheckCircle2, ChevronRight, Loader2, AlertCircle, AlertTriangle, Info } from 'lucide-react';
 
 interface VIFColumn {
@@ -16,7 +15,7 @@ type DimAction = 'keep' | 'drop' | 'pca';
 const API_BASE = 'http://localhost:8000/api/v1';
 
 const DimensionalityTab: React.FC = () => {
-  const { toggleStepComplete, addPipelineAction, completedSteps, setActiveTab, clearSubsequentProgress } = useDataPrepStore();
+  const { toggleStepComplete, addPipelineAction, completedSteps, setActiveTab, confirmAndInvalidateLaterSteps } = useDataPrepStore();
   const ignoredColumns = useEDAStore(s => s.ignoredColumns);
   const isComplete = completedSteps.includes('dimensionality_reduction');
 
@@ -54,19 +53,14 @@ const DimensionalityTab: React.FC = () => {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const handleConfirm = () => {
-    const currentIndex = PREP_TABS.findIndex(t => t.id === 'dimensionality_reduction');
-    const stepsToReset = PREP_TABS.slice(currentIndex + 1).map(t => t.id);
-    const hasCompletedAhead = stepsToReset.some(id => completedSteps.includes(id));
-    if (hasCompletedAhead) {
-      if (!window.confirm('Applying these changes will reset later steps. Are you sure?')) return;
-      clearSubsequentProgress(stepsToReset);
-    }
+    if (!confirmAndInvalidateLaterSteps('dimensionality_reduction', 'Changing dimensionality reduction will remove all accepted work in the later steps. Do you want to continue?')) return;
     addPipelineAction({ step: 'dimensionality_reduction', action: 'reduce_features', actions, use_pca: usePCA, pca_variance: pcaVariance });
     toggleStepComplete('dimensionality_reduction', true);
     setActiveTab('feature_selection');
   };
 
   const handleSkip = () => {
+    if (!confirmAndInvalidateLaterSteps('dimensionality_reduction', 'Skipping this step now will remove all accepted work in the later steps. Do you want to continue?')) return;
     toggleStepComplete('dimensionality_reduction', true);
     setActiveTab('feature_selection');
   };
@@ -122,7 +116,6 @@ const DimensionalityTab: React.FC = () => {
         </div>
       )}
 
-      {/* PCA Option */}
       <div className="bg-white border border-purple-200 rounded-xl p-5">
         <div className="flex items-center justify-between mb-3">
           <div>
@@ -152,7 +145,6 @@ const DimensionalityTab: React.FC = () => {
         )}
       </div>
 
-      {/* VIF Table */}
       {!usePCA && (
         <div className="space-y-2">
           {columns.map(col => {

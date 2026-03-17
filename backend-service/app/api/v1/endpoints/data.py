@@ -7,7 +7,6 @@ from typing import Any
 from fastapi import APIRouter, File, Form, UploadFile, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
-import os
 import pathlib
 
 from app.core.exceptions import PipelineError
@@ -16,7 +15,6 @@ from app.schemas.request import (
     BasicCleaningStatsRequest,
     CertificateCreateRequest,
     ContextRequest,
-    DataCleaningPreviewRequest,
     DataExplorationRequest,
     DatasetPatchRequest,
     DatasetUpsertRequest,
@@ -24,8 +22,10 @@ from app.schemas.request import (
     ExplainabilityLocalRequest,
     ExplainabilityRequest,
     FairnessRequest,
+    FeatureImportanceRequest,
     MappingUpsertRequest,
     MissingStatsRequest,
+    PipelineExecutionRequest,
     OutliersStatsRequest,
     PreprocessRequest,
     SessionCreateRequest,
@@ -38,7 +38,6 @@ from app.schemas.request import (
     ScalingStatsRequest,
     DimensionalityStatsRequest,
     ImbalanceStatsRequest,
-    FeatureImportanceRequest,
 )
 from app.services import (
     data_exploration_service,
@@ -50,14 +49,13 @@ from app.services.data_prep.step01_basic_cleaning import calculate_basic_cleanin
 from app.services.data_prep.step01b_type_casting import calculate_type_mismatch_stats
 from app.services.data_prep.step04_imputation import calculate_missing_statistics
 from app.services.data_prep.step05_outliers import calculate_outlier_statistics
-from app.services.data_prep.step02_sampling import apply_sampling
-from app.services.data_prep.step03_data_split import apply_data_split
 from app.services.data_prep.step06_transformation import analyze_transformation_candidates
 from app.services.data_prep.step07_encoding import analyze_encoding_candidates
 from app.services.data_prep.step08_scaling import analyze_scaling_candidates
 from app.services.data_prep.step09_dimensionality import analyze_vif
-from app.services.data_prep.step09_feature_selection import apply_feature_selection, calculate_feature_importances
-from app.services.data_prep.step10_imbalance import analyze_class_balance
+from app.services.data_prep.step09_feature_selection import calculate_feature_importances
+from app.services.data_prep.step10_imbalance import analyze_class_balance, summarize_class_balance
+from app.services.data_prep.pipeline_execution import apply_full_pipeline, normalize_pipeline_config
 # Legacy pipeline preview — migrated inline below once preview_pipeline is moved
 from app.services.data_prep._dataframe_loader import load_dataframe
 
@@ -373,136 +371,38 @@ def validate_mapping(payload: ValidateMappingRequest) -> dict[str, Any]:
 
 
 @router.post("/preview-cleaned-data")
-def preview_cleaned_data(payload: DataCleaningPreviewRequest) -> dict[str, Any]:
-    """Preview the effect of a cleaning pipeline without mutating source data."""
-    import pandas as pd
-    from app.core.exceptions import PipelineError
-
-    df = load_dataframe(payload.session_id)
+def preview_cleaned_data(payload: PipelineExecutionRequest) -> dict[str, Any]:
+    """Preview the fully processed working dataframe without mutating the raw source CSV."""
+    pipeline_config = normalize_pipeline_config(payload.model_dump())
+    df = load_dataframe(pipeline_config["session_id"])
     try:
-        for step in payload.pipeline:
-            action = step.get("action")
-            if action == "drop_duplicates":
-                df = df.drop_duplicates()
-            elif action == "drop_zero_variance":
-                cols = [c for c in step.get("columns", []) if c in df.columns]
-                if cols:
-                    df = df.drop(columns=cols)
-            elif action == "cast_to_numeric":
-                for col in step.get("columns", []):
-                    if col in df.columns:
-                        df[col] = pd.to_numeric(df[col], errors="coerce")
-            elif action == "sample":
-                df = apply_sampling(df, step)
-            elif action == "split":
-                # For preview, we only show the training split, 
-                # as future pipeline steps should only learn from training data
-                splits = apply_data_split(df, step)
-                df = splits["train"]
-            elif action == "feature_selection":
-                target_col = step.get("target_column", payload.session_id)
-                state = session_service.get_or_create(payload.session_id)
-                target_col = state.dataset.get("target_column")
-                problem_type = "classification"
-                df = apply_feature_selection(df, step, target_col, problem_type)
-        preview = df.head(10).replace({float("nan"): None}).to_dict(orient="records")
-        return {"session_id": payload.session_id, "shape": list(df.shape), "preview": preview, "applied_steps": len(payload.pipeline)}
+        df_processed = apply_full_pipeline(df, pipeline_config)
+        preview = _sanitize_for_json(df_processed.head(10).to_dict(orient="records"))
+        return {
+            "session_id": pipeline_config["session_id"],
+            "shape": list(df_processed.shape),
+            "preview": preview,
+        }
     except Exception as exc:
         raise PipelineError(f"Pipeline execution failed: {exc}", status_code=400) from exc
 
 
-class DownloadPreprocessedRequest(BaseModel):
-    session_id: str = Field(default="demo-session")
-    pipeline: list[dict[str, Any]] = Field(default_factory=list)
-    target_column: str = Field(default="")
-    excluded_columns: list[str] = Field(default_factory=list)
-
-
 @router.post("/download-preprocessed")
 def download_preprocessed(
-    payload: DownloadPreprocessedRequest,
+    payload: PipelineExecutionRequest,
 ) -> StreamingResponse:
     """
-    Execute the full pipeline on the raw data and return it as a downloadable CSV.
-    Applies: column exclusion, all cleaning/transform steps, feature selection, and SMOTE.
+    Execute the centralized pipeline engine on the immutable source CSV
+    and return the resulting working dataframe as a downloadable CSV.
     """
-    import pandas as pd
     import io as _io
 
-    df = load_dataframe(payload.session_id)
-
-    # Step 0 — apply excluded columns mask immediately
-    if payload.excluded_columns:
-        df = df.drop(columns=[c for c in payload.excluded_columns if c in df.columns], errors="ignore")
-
+    pipeline_config = normalize_pipeline_config(payload.model_dump())
+    df = load_dataframe(pipeline_config["session_id"])
     try:
-        smote_step = None
-        for step in payload.pipeline:
-            action = step.get("action")
-            if action == "drop_duplicates":
-                df = df.drop_duplicates()
-            elif action == "drop_zero_variance":
-                cols = [c for c in step.get("columns", []) if c in df.columns]
-                if cols:
-                    df = df.drop(columns=cols)
-            elif action == "cast_to_numeric":
-                for col in step.get("columns", []):
-                    if col in df.columns:
-                        df[col] = pd.to_numeric(df[col], errors="coerce")
-            elif action == "fill_missing":
-                col = step.get("column")
-                strategy_miss = step.get("strategy", "median")
-                if col and col in df.columns:
-                    if strategy_miss == "mean":
-                        df[col] = df[col].fillna(df[col].mean())
-                    elif strategy_miss == "median":
-                        df[col] = df[col].fillna(df[col].median())
-                    elif strategy_miss == "mode":
-                        mode_val = df[col].mode()
-                        if len(mode_val) > 0:
-                            df[col] = df[col].fillna(mode_val[0])
-                    elif strategy_miss == "drop":
-                        df = df.dropna(subset=[col])
-                    elif strategy_miss == "zero":
-                        df[col] = df[col].fillna(0)
-            elif action == "sample":
-                df = apply_sampling(df, step)
-            elif action == "split":
-                splits = apply_data_split(df, step)
-                df = splits["train"]
-            elif action == "feature_selection":
-                state = session_service.get_or_create(payload.session_id)
-                target_col = payload.target_column or state.dataset.get("target_column")
-                df = apply_feature_selection(df, step, target_col, "classification")
-            elif action == "handle_imbalance":
-                smote_step = step
-
-        # Apply SMOTE last (only on the assembled training data)
-        if smote_step and smote_step.get("strategy") == "smote":
-            target_col = payload.target_column
-            if target_col and target_col in df.columns:
-                try:
-                    from imblearn.over_sampling import SMOTE
-                    import numpy as np
-
-                    numeric_df = df.select_dtypes(include=[np.number])
-                    if target_col in numeric_df.columns:
-                        X = numeric_df.drop(columns=[target_col])
-                    else:
-                        X = numeric_df
-                    y = df[target_col]
-
-                    X_filled = X.fillna(X.median())
-                    smote = SMOTE(random_state=42)
-                    X_res, y_res = smote.fit_resample(X_filled, y)
-                    df = pd.DataFrame(X_res, columns=X.columns)
-                    df[target_col] = y_res
-                except Exception:
-                    pass  # If SMOTE fails (e.g. not installed), return data as-is
-
-        # Serialise to CSV in memory
+        df_processed = apply_full_pipeline(df, pipeline_config)
         buffer = _io.StringIO()
-        df.to_csv(buffer, index=False)
+        df_processed.to_csv(buffer, index=False)
         buffer.seek(0)
 
         return StreamingResponse(
@@ -599,6 +499,28 @@ def dimensionality_stats(payload: DimensionalityStatsRequest) -> dict[str, Any]:
 @router.post("/imbalance-stats")
 def imbalance_stats(payload: ImbalanceStatsRequest) -> dict[str, Any]:
     try:
+        if payload.pipeline_config is not None:
+            pipeline_config = normalize_pipeline_config(payload.model_dump())
+            df = load_dataframe(pipeline_config["session_id"])
+
+            before_df = apply_full_pipeline(df, pipeline_config, stop_before="imbalance")
+            before_summary = summarize_class_balance(before_df, payload.target_column)
+
+            after_config = dict(pipeline_config)
+            after_config["imbalance"] = {"enabled": True, "strategy": "smote"}
+            after_df = apply_full_pipeline(df, after_config)
+            after_summary = summarize_class_balance(after_df, payload.target_column)
+
+            response = {
+                **before_summary,
+                "class_distribution": before_summary.get("class_distribution", []),
+                "before_class_distribution": before_summary.get("class_distribution", []),
+                "after_smote_distribution": after_summary.get("class_distribution", []),
+                "working_set": "train",
+                "target_column": payload.target_column,
+            }
+            return _sanitize_for_json(response)  # type: ignore[return-value]
+
         return _sanitize_for_json(analyze_class_balance(payload.session_id, payload.target_column, payload.excluded_columns))  # type: ignore[return-value]
     except PipelineError:
         raise
@@ -608,21 +530,24 @@ def imbalance_stats(payload: ImbalanceStatsRequest) -> dict[str, Any]:
 
 @router.post("/feature-importance-stats")
 def feature_importance_stats(payload: FeatureImportanceRequest) -> list[dict[str, Any]]:
-    import pandas as pd
     try:
-        df = load_dataframe(payload.session_id)
-        state = session_service.get_or_create(payload.session_id)
-        problem_type = "classification" # or get from state if mapped
-        
-        # We need to exclude columns that have already been dropped by previous steps
-        # Actually this endpoint should run on the PREVIEW of the dataframe right before step 9.
-        # But for simplicity since step 9 is the only real dimensionality reducer before step 10,
-        # we can just drop the excluded_columns.
-        cols_to_drop = [c for c in payload.excluded_columns if c in df.columns]
-        if cols_to_drop:
-            df = df.drop(columns=cols_to_drop)
+        pipeline_config = normalize_pipeline_config(payload.model_dump())
+        df = load_dataframe(pipeline_config["session_id"])
+        state = session_service.get_or_create(pipeline_config["session_id"])
+        problem_type = pipeline_config.get("problem_type") or state.mapping.get("problem_type") or "classification"
+        if problem_type == "binary_classification":
+            problem_type = "classification"
+        elif problem_type == "multi_class_classification":
+            problem_type = "multiclass"
 
-        importances = calculate_feature_importances(df, payload.target_column, problem_type)
+        df_for_ranking = apply_full_pipeline(df, pipeline_config, stop_before="feature_selection")
+        target_column = (
+            pipeline_config.get("target_column")
+            or payload.target_column
+            or state.mapping.get("target_column")
+            or state.dataset.get("target_column")
+        )
+        importances = calculate_feature_importances(df_for_ranking, target_column, problem_type)
         return _sanitize_for_json(importances)
     except PipelineError:
         raise

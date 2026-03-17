@@ -141,27 +141,34 @@ const FeatureExplorerTab: React.FC<FeatureExplorerTabProps> = ({ columns }) => {
               <button
                 key={col.name}
                 onClick={() => setSelectedCol(col)}
-                className={`w-full flex items-center gap-2 px-3 py-2.5 text-left text-xs font-medium transition-colors border-b border-slate-50 ${
+                className={`w-full px-3 py-2.5 text-left text-xs font-medium transition-colors border-b border-slate-50 ${
                   active
                     ? 'bg-indigo-50 text-indigo-700 border-l-2 border-l-indigo-500'
                     : 'text-slate-700 hover:bg-slate-50 border-l-2 border-l-transparent'
                 }`}
               >
-                {typeIcon(col.type)}
-                <span className="truncate flex-1 min-w-0">{col.name}</span>
-                <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
-                  {badges.map((b, i) => (
-                    <span
-                      key={i}
-                      className={`inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded border ${b.color}`}
-                    >
-                      {b.icon} {b.label}
-                    </span>
-                  ))}
-                  {col.missingPct > 0 && col.missingPct < 10 && (
-                    <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded font-semibold">
-                      {col.missingPct}%
-                    </span>
+                <div className="flex w-full flex-col gap-2">
+                  <div className="flex items-start gap-2 min-w-0">
+                    <span className="mt-0.5 shrink-0">{typeIcon(col.type)}</span>
+                    <span className="min-w-0 flex-1 truncate leading-5">{col.name}</span>
+                  </div>
+
+                  {(badges.length > 0 || (col.missingPct > 0 && col.missingPct < 10)) && (
+                    <div className="flex w-full flex-wrap gap-1">
+                      {badges.map((b, i) => (
+                        <span
+                          key={i}
+                          className={`inline-flex max-w-full items-center gap-0.5 rounded border px-1.5 py-0.5 text-[9px] font-bold ${b.color}`}
+                        >
+                          {b.icon} {b.label}
+                        </span>
+                      ))}
+                      {col.missingPct > 0 && col.missingPct < 10 && (
+                        <span className="inline-flex items-center rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600">
+                          {col.missingPct}% missing
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
               </button>

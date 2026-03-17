@@ -20,6 +20,7 @@ interface EDAState {
 
   // Actions
   setRawFileAndHeadersAndPreview: (file: File, headers: string[], previewRows: Record<string, string | number | null>[]) => void;
+  prepareForAnalysis: (ignoredColumns: string[]) => void;
   setPreviewAccepted: (accepted: boolean) => void;
   toggleIgnoreColumn: (col: string) => void;
   setMlConfig: (mlTask: EDAState['mlTask'], targetColumn: string, totalRows: number) => void;
@@ -40,7 +41,30 @@ export const useEDAStore = create<EDAState>((set) => ({
   setEdaData: (data) => set({ edaData: data }),
 
   setRawFileAndHeadersAndPreview: (file, headers, previewRows) =>
-    set({ rawFile: file, rawHeaders: headers, rawPreviewRows: previewRows, ignoredColumns: [], previewAccepted: false }),
+    set({
+      rawFile: file,
+      rawHeaders: headers,
+      rawPreviewRows: previewRows,
+      ignoredColumns: [],
+      previewAccepted: false,
+      edaData: null,
+      mlTask: 'classification',
+      targetColumn: '',
+      totalRows: 0,
+    }),
+
+  prepareForAnalysis: (ignoredColumns) =>
+    set({
+      rawFile: null,
+      rawHeaders: [],
+      rawPreviewRows: [],
+      ignoredColumns,
+      previewAccepted: false,
+      edaData: null,
+      mlTask: 'classification',
+      targetColumn: '',
+      totalRows: 0,
+    }),
 
   setPreviewAccepted: (accepted) => set({ previewAccepted: accepted }),
 
@@ -51,7 +75,14 @@ export const useEDAStore = create<EDAState>((set) => ({
         : [...state.ignoredColumns, col],
     })),
 
-  setMlConfig: (mlTask, targetColumn, totalRows) => set({ mlTask, targetColumn, totalRows }),
+  setMlConfig: (mlTask, targetColumn, totalRows) =>
+    set((state) => ({
+      mlTask,
+      targetColumn,
+      totalRows,
+      // The mapped target must always remain available for Step 3+ execution.
+      ignoredColumns: state.ignoredColumns.filter((column) => column !== targetColumn),
+    })),
 
   clearConfig: () =>
     set({
