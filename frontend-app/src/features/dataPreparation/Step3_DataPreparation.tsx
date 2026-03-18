@@ -15,6 +15,7 @@ import ScalingTab from './tabs/ScalingTab';
 import DimensionalityTab from './tabs/DimensionalityTab';
 import FeatureSelectionTab from './tabs/FeatureSelectionTab';
 import ImbalanceTab from './tabs/ImbalanceTab';
+import PreprocessingReviewTab from './tabs/PreprocessingReviewTab';
 
 export const Step3_DataPreparation: React.FC = () => {
   const { activeTabId, completedSteps, setActiveTab } = useDataPrepStore();
@@ -57,6 +58,8 @@ export const Step3_DataPreparation: React.FC = () => {
         return <FeatureSelectionTab />;
       case 'imbalance_handling':
         return <ImbalanceTab />;
+      case 'preprocessing_review':
+        return <PreprocessingReviewTab />;
       default:
         return (
           <div className="h-64 flex flex-col items-center justify-center text-slate-400 bg-slate-50 border border-slate-200 border-dashed rounded-xl animate-in fade-in">
@@ -75,7 +78,7 @@ export const Step3_DataPreparation: React.FC = () => {
         
         {/* Left Sidebar (1/4 Width) */}
         <div className="w-full shrink-0 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col h-[68vh] xl:h-[75vh]">
-          <div className="p-4 border-b border-slate-100 bg-slate-50">
+          <div className="min-h-[92px] p-4 border-b border-slate-100 bg-slate-50 flex flex-col justify-center">
             <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
               Data Prep Pipeline
             </h3>
@@ -142,14 +145,13 @@ export const Step3_DataPreparation: React.FC = () => {
         </div>
 
         <div className="min-w-0 bg-white border border-slate-200 rounded-2xl shadow-sm min-h-[70vh] p-5 lg:p-6 xl:p-8 2xl:p-10">
-          <PrepTimingHint tabId={activeTabId} />
           {renderActiveComponent()}
         </div>
 
       </div>
 
       {/* Success Banner with Download Button */}
-      {completedSteps.includes('imbalance_handling') && (
+      {completedSteps.includes('preprocessing_review') && (
         <div className="bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl p-6 shadow-lg text-white flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between animate-in slide-in-from-bottom-4 duration-500">
           <div className="flex items-center gap-4">
             <div className="bg-white/20 p-3 rounded-xl backdrop-blur-sm">

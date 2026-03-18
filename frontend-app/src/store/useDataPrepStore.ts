@@ -15,6 +15,11 @@ import {
 import type { PipelineConfig } from './pipelineConfig';
 import { PREP_TABS } from '../features/dataPreparation/DataPrepTabsConfig';
 
+export interface OutlierStrategyPlan {
+  detector: string;
+  treatment: string;
+}
+
 interface DataPrepState {
   activeTabId: string;
   completedSteps: string[];
@@ -43,8 +48,8 @@ interface DataPrepState {
   outlierColumns: OutlierColumnStat[];
   isOutlierLoading: boolean;
   outlierError: string | null;
-  outlierStrategies: Record<string, string>; // Maps column name to chosen strategy
-  setOutlierStrategy: (column: string, strategy: string) => void;
+  outlierStrategies: Record<string, OutlierStrategyPlan>;
+  setOutlierStrategy: (column: string, strategy: Partial<OutlierStrategyPlan>) => void;
 
   // Step 09 - Feature Selection (Before SMOTE)
   featureImportances: FeatureImportanceStat[];
@@ -93,8 +98,15 @@ export const useDataPrepStore = create<DataPrepState>((set, get) => ({
   outlierError: null,
   outlierStrategies: {},
 
-  setOutlierStrategy: (column: string, strategy: string) => set((state) => ({
-    outlierStrategies: { ...state.outlierStrategies, [column]: strategy },
+  setOutlierStrategy: (column: string, strategy: Partial<OutlierStrategyPlan>) => set((state) => ({
+    outlierStrategies: {
+      ...state.outlierStrategies,
+      [column]: {
+        detector: state.outlierStrategies[column]?.detector ?? 'iqr',
+        treatment: state.outlierStrategies[column]?.treatment ?? 'ignore',
+        ...strategy,
+      },
+    },
   })),
 
   featureImportances: [],

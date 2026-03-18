@@ -182,8 +182,9 @@ const ImputationTab: React.FC = () => {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
-          {missingColumns.map((col) => {
+        <div className="max-h-[560px] overflow-y-auto pr-1">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
+            {missingColumns.map((col) => {
             const systemSuggestion: string = col.missing_percentage < 5 ? 'drop_rows' : col.missing_percentage > 30 ? 'drop_column' : 'knn';
             const isMCAR = col.missing_percentage < 5;
             const isMAR = col.missing_percentage >= 5 && col.missing_percentage <= 30;
@@ -269,7 +270,8 @@ const ImputationTab: React.FC = () => {
                 </div>
               </div>
             );
-          })}
+            })}
+          </div>
         </div>
       </div>
 

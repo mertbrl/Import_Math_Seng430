@@ -122,8 +122,9 @@ const ScalingTab: React.FC = () => {
         </button>
       </div>
 
-      <div className="space-y-3">
-        {columns.map(col => {
+      <div className="max-h-[560px] overflow-y-auto pr-1">
+        <div className="space-y-3">
+          {columns.map(col => {
           const currentScaler = strategies[col.column] ?? col.recommendation;
           return (
             <div key={col.column} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:border-teal-200 transition-colors">
@@ -166,7 +167,8 @@ const ScalingTab: React.FC = () => {
               </div>
             </div>
           );
-        })}
+          })}
+        </div>
       </div>
 
       <div className="pt-6 mt-4 border-t border-slate-200 flex items-center justify-between">

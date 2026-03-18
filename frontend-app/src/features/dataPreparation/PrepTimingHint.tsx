@@ -17,17 +17,22 @@ const PrepTimingHint: React.FC<PrepTimingHintProps> = ({ tabId, compact = false 
 
   if (compact) {
     return (
-      <div className="mt-2 flex flex-wrap gap-1.5">
+      <div className="mt-2 flex min-h-[48px] flex-col gap-1.5">
         <span className={`${pillBase} border-slate-200 bg-slate-50 text-[10px] text-slate-600`}>
           <Clock3 size={11} />
           Est. {tab.estimatedTime}
         </span>
-        {tab.suggestedTime && (
-          <span className={`${pillBase} border-emerald-200 bg-emerald-50 text-[10px] text-emerald-700`}>
-            <Sparkles size={11} />
-            Quick path {tab.suggestedTime}
-          </span>
-        )}
+        <span
+          className={`${pillBase} text-[10px] ${
+            tab.suggestedTime
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+              : 'border-transparent bg-transparent text-transparent'
+          }`}
+          aria-hidden={!tab.suggestedTime}
+        >
+          <Sparkles size={11} />
+          {tab.suggestedTime ? `Quick path ${tab.suggestedTime}` : 'Quick path placeholder'}
+        </span>
       </div>
     );
   }

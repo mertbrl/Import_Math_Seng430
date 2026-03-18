@@ -5,6 +5,7 @@
  */
 
 import type { PipelineConfig } from '../store/pipelineConfig';
+import type { MockEDADataset } from '../features/dataExploration/mockEDAData';
 
 const BASE_URL = (import.meta as any).env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1';
 
@@ -44,6 +45,9 @@ export interface OutlierColumnStat {
   outlier_count: number;
   outlier_percentage: number;
   recommendation: string;
+  recommended_detector?: string;
+  recommended_treatment?: string;
+  suggestion_reason?: string;
 }
 
 export interface FeatureImportanceStat {
@@ -55,6 +59,15 @@ export interface PreviewPipelineResponse {
   session_id: string;
   shape: number[];
   preview: Record<string, string | number | null>[];
+}
+
+export interface PreprocessingReviewResponse {
+  before: MockEDADataset;
+  after: MockEDADataset;
+  beforeShape: number[];
+  afterShape: number[];
+  removedColumns: string[];
+  addedColumns: string[];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -153,6 +166,18 @@ export async function previewPreprocessedData(
     body: JSON.stringify({ pipeline_config: pipelineConfig }),
   });
   if (!res.ok) await throwDetailedError(res, 'preview-cleaned-data');
+  return res.json();
+}
+
+export async function fetchPreprocessingReview(
+  pipelineConfig: PipelineConfig
+): Promise<PreprocessingReviewResponse> {
+  const res = await fetch(`${BASE_URL}/preprocessing-review`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pipeline_config: pipelineConfig }),
+  });
+  if (!res.ok) await throwDetailedError(res, 'preprocessing-review');
   return res.json();
 }
 

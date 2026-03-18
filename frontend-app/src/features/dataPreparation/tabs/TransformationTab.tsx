@@ -138,8 +138,9 @@ const TransformationTab: React.FC = () => {
         </button>
       </div>
 
-      <div className="space-y-3">
-        {columns.map(col => {
+      <div className="max-h-[560px] overflow-y-auto pr-1">
+        <div className="space-y-3">
+          {columns.map(col => {
           const currentMethod = strategies[col.column] ?? 'none';
           const isFlagged = col.needs_transform;
           return (
@@ -195,7 +196,8 @@ const TransformationTab: React.FC = () => {
               </div>
             </div>
           );
-        })}
+          })}
+        </div>
       </div>
 
       <div className="pt-6 mt-4 border-t border-slate-200 flex items-center justify-between">

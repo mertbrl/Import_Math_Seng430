@@ -33,7 +33,7 @@ export interface PipelineConfig {
   };
   outliers: {
     enabled: boolean;
-    strategies: Record<string, string>;
+    strategies: Record<string, string | { detector: string; treatment: string }>;
   };
   transformation: {
     enabled: boolean;

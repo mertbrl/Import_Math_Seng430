@@ -73,6 +73,13 @@ export const PREP_TABS: DataPrepTabSpec[] = [
     estimatedTime: '1-2 min',
     suggestedTime: '10-20 sec',
   },
+  {
+    id: 'preprocessing_review',
+    title: '11. Before / After Review',
+    subtitle: 'Preview the dataset before and after preprocessing.',
+    estimatedTime: '1-2 min',
+    suggestedTime: '20-40 sec',
+  },
 ];
 
 export function getPrepTabSpec(tabId: string): DataPrepTabSpec | undefined {

@@ -122,3 +122,16 @@ class EDAProfileResponse(BaseModel):
     numeric_column_names: list[str] = Field(alias="numericColumnNames")
     preview: PreviewSchema
     missing_analysis: list[MissingColumnSchema] = Field(alias="missingAnalysis")
+
+
+class PreprocessingReviewResponse(BaseModel):
+    """Before/after EDA payload for post-preprocessing review."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    before: EDAProfileResponse
+    after: EDAProfileResponse
+    before_shape: list[int] = Field(alias="beforeShape")
+    after_shape: list[int] = Field(alias="afterShape")
+    removed_columns: list[str] = Field(alias="removedColumns")
+    added_columns: list[str] = Field(alias="addedColumns")

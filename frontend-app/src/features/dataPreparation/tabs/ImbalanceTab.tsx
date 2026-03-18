@@ -19,6 +19,12 @@ interface ImbalanceData {
   imbalance_ratio: number;
   severity: 'balanced' | 'moderate' | 'severe';
   recommendation: string | null;
+  recommended_algorithm?: string;
+  is_recommended?: boolean;
+  ui_message?: string;
+  minority_class_ratio?: number;
+  minority_sample_count?: number;
+  categorical_feature_ratio?: number;
   working_set?: string;
   target_column?: string;
   error?: string;
@@ -70,6 +76,7 @@ const ImbalanceTab: React.FC = () => {
 
   const effectiveTarget = targetColumn || 'DEATH_EVENT';
   const smoteSelected = strategy === 'smote';
+  const recommendationTag = data?.recommended_algorithm ?? data?.recommendation ?? 'none';
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -117,6 +124,7 @@ const ImbalanceTab: React.FC = () => {
     addPipelineAction({ step: 'imbalance_handling', action: 'handle_imbalance', strategy: selectedStrategy });
     setStrategy(selectedStrategy);
     toggleStepComplete('imbalance_handling', true);
+    setActiveTab('preprocessing_review');
   };
 
   const attemptApplyStrategy = (selectedStrategy: string) => {
@@ -132,6 +140,7 @@ const ImbalanceTab: React.FC = () => {
     addPipelineAction({ step: 'imbalance_handling', action: 'handle_imbalance', strategy: 'none' });
     setStrategy('none');
     toggleStepComplete('imbalance_handling', true);
+    setActiveTab('preprocessing_review');
   };
 
   const beforeDistribution = data?.before_class_distribution ?? data?.class_distribution ?? [];
@@ -211,24 +220,24 @@ const ImbalanceTab: React.FC = () => {
                 {data.working_set === 'train' ? 'Training Set Status' : 'Dataset Status'}
               </p>
               <h4 className="text-lg font-bold">
-                {data.severity === 'balanced' && 'The target is already balanced'}
-                {data.severity === 'moderate' && 'Imbalance detected: SMOTE is recommended'}
-                {data.severity === 'severe' && 'Severe imbalance detected: SMOTE is strongly recommended'}
+                {recommendationTag === 'smote' && data.severity === 'severe' && 'Severe imbalance detected: SMOTE is recommended'}
+                {recommendationTag === 'smote' && data.severity !== 'severe' && 'SMOTE is recommended for this training set'}
+                {recommendationTag === 'smotenc' && 'Imbalance detected: prefer SMOTENC over standard SMOTE'}
+                {recommendationTag === 'class_weights' && 'Mild imbalance detected: prefer class weights'}
+                {recommendationTag === 'none' && 'The target is already balanced'}
               </h4>
               <p className="text-sm leading-relaxed opacity-90">
-                {data.severity === 'balanced' && 'No oversampling is needed. The current class mix is within an acceptable range.'}
-                {data.severity === 'moderate' && `The majority-to-minority ratio is ${data.imbalance_ratio}:1. Applying SMOTE will create additional minority samples and reduce bias.`}
-                {data.severity === 'severe' && `The majority-to-minority ratio is ${data.imbalance_ratio}:1. Your model is likely to ignore minority cases unless the training set is rebalanced.`}
+                {data.ui_message ?? 'No oversampling is needed. The current class mix is within an acceptable range.'}
               </p>
             </div>
 
-            {data.recommendation === 'smote' && !isComplete && (
+            {!isComplete && (
               <button
                 onClick={() => attemptApplyStrategy('smote')}
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-5 py-3 text-sm font-bold text-white transition-all hover:bg-rose-700 hover:shadow-md active:scale-[0.98] cursor-pointer"
               >
                 <Sparkles size={16} />
-                Apply SMOTE
+                {recommendationTag === 'smote' ? 'Apply SMOTE' : 'Apply SMOTE Anyway'}
               </button>
             )}
           </div>
@@ -249,8 +258,61 @@ const ImbalanceTab: React.FC = () => {
           </div>
         </div>
 
-        <div className="w-full overflow-x-auto">
-          <div className="grid grid-cols-1 gap-6 xl:min-w-[980px] xl:grid-cols-2 2xl:min-w-0 2xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[320px_minmax(0,1fr)] 2xl:grid-cols-[360px_minmax(0,1fr)]">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h5 className="font-bold text-slate-800">Balance Snapshot</h5>
+                <p className="text-sm text-slate-500 mt-1">
+                  Keep the decision context visible while comparing the charts.
+                </p>
+              </div>
+              <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.14em] ${
+                data?.severity === 'balanced'
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : data?.severity === 'severe'
+                  ? 'bg-rose-100 text-rose-700'
+                  : 'bg-amber-100 text-amber-700'
+              }`}>
+                {data?.severity ?? 'moderate'}
+              </span>
+            </div>
+
+            <div className="mt-6 grid grid-cols-1 gap-4">
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Imbalance Ratio</p>
+                <p className="mt-2 text-3xl font-black text-slate-900">{data?.imbalance_ratio}:1</p>
+                <p className="mt-1 text-xs text-slate-500">Majority to minority class ratio on the active working set.</p>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Recommended Action</p>
+                <p className="mt-2 text-base font-bold text-slate-900">
+                  {recommendationTag === 'smote' && 'Apply SMOTE'}
+                  {recommendationTag === 'smotenc' && 'Use SMOTENC'}
+                  {recommendationTag === 'class_weights' && 'Use Class Weights'}
+                  {recommendationTag === 'none' && 'Keep current distribution'}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {smoteSelected
+                    ? 'Preview and decision are aligned with the current pipeline.'
+                    : data?.ui_message ?? 'Apply oversampling only if the minority class is being under-learned.'}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Working Set</p>
+                <p className="mt-2 text-base font-bold text-slate-900">
+                  {data?.working_set === 'train' ? 'Training split only' : 'Current dataset flow'}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Validation and test samples stay untouched so model evaluation remains honest.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-6 min-w-0">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <div className="flex items-center justify-between mb-4">
                 <h5 className="font-bold text-slate-800">Before SMOTE</h5>
@@ -333,56 +395,6 @@ const ImbalanceTab: React.FC = () => {
                 </div>
               )}
             </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h5 className="font-bold text-slate-800">Balance Snapshot</h5>
-                  <p className="text-sm text-slate-500 mt-1">
-                    Keep the decision context visible while comparing the charts.
-                  </p>
-                </div>
-                <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.14em] ${
-                  data?.severity === 'balanced'
-                    ? 'bg-emerald-100 text-emerald-700'
-                    : data?.severity === 'severe'
-                    ? 'bg-rose-100 text-rose-700'
-                    : 'bg-amber-100 text-amber-700'
-                }`}>
-                  {data?.severity ?? 'moderate'}
-                </span>
-              </div>
-
-              <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-1">
-                <div className="rounded-xl border border-slate-200 bg-white p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Imbalance Ratio</p>
-                  <p className="mt-2 text-3xl font-black text-slate-900">{data?.imbalance_ratio}:1</p>
-                  <p className="mt-1 text-xs text-slate-500">Majority to minority class ratio on the active working set.</p>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 bg-white p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Recommended Action</p>
-                  <p className="mt-2 text-base font-bold text-slate-900">
-                    {data?.recommendation === 'smote' ? 'Apply SMOTE' : 'Keep current distribution'}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {smoteSelected
-                      ? 'Preview and decision are aligned with the current pipeline.'
-                      : 'Apply oversampling only if the minority class is being under-learned.'}
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 bg-white p-4 sm:col-span-2 2xl:col-span-1">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Working Set</p>
-                  <p className="mt-2 text-base font-bold text-slate-900">
-                    {data?.working_set === 'train' ? 'Training split only' : 'Current dataset flow'}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Validation and test samples stay untouched so model evaluation remains honest.
-                  </p>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -392,7 +404,11 @@ const ImbalanceTab: React.FC = () => {
           <div>
             <p className="text-sm font-bold text-slate-800">Oversampling</p>
             <p className="mt-1 text-sm text-slate-600 leading-relaxed">
-              SMOTE is the active balancing method in this step. You can either keep the current distribution or apply SMOTE to the training set.
+              {recommendationTag === 'smotenc'
+                ? 'Standard SMOTE is not the best fit for this dataset because categorical features dominate. Consider adding SMOTENC support in the backend instead of forcing plain SMOTE.'
+                : recommendationTag === 'class_weights'
+                ? 'This imbalance is mild. In many cases, class weights are safer than synthetic oversampling because they reduce bias without inventing new rows.'
+                : 'SMOTE is the active balancing method in this step. You can either keep the current distribution or apply SMOTE to the training set.'}
             </p>
             {!completedSteps.includes('feature_selection') && (
               <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-800">
@@ -401,7 +417,7 @@ const ImbalanceTab: React.FC = () => {
               </p>
             )}
           </div>
-          {data?.recommendation === 'smote' && !isComplete && (
+          {recommendationTag === 'smote' && !isComplete && (
             <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700">
               <AlertTriangle size={12} />
               Recommended action
@@ -430,7 +446,7 @@ const ImbalanceTab: React.FC = () => {
             onClick={() => attemptApplyStrategy('smote')}
             className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold bg-rose-600 text-white hover:bg-rose-700 hover:shadow-md transition-all active:scale-[0.98] cursor-pointer"
           >
-            Apply SMOTE
+            {recommendationTag === 'smote' ? 'Apply SMOTE' : 'Apply SMOTE Anyway'}
             <ChevronRight size={18} />
           </button>
         )}

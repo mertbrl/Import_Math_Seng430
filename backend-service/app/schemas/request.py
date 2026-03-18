@@ -183,6 +183,7 @@ class ScalingStatsRequest(BaseModel):
 class DimensionalityStatsRequest(BaseModel):
     session_id: str = Field(default="demo-session")
     excluded_columns: list[str] = Field(default_factory=list)
+    protected_columns: list[str] = Field(default_factory=list)
 
 
 class ImbalanceStatsRequest(BaseModel):

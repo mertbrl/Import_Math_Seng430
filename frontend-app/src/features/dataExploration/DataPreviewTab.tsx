@@ -1,15 +1,33 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Table, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { PreviewData } from './mockEDAData';
 
 interface DataPreviewTabProps {
   preview: PreviewData;
+  page?: number;
+  onPageChange?: (page: number) => void;
+  compact?: boolean;
+  targetColumn?: string;
 }
 
 const PAGE_SIZE = 10;
 
-const DataPreviewTab: React.FC<DataPreviewTabProps> = ({ preview }) => {
-  const [page, setPage] = useState(0);
+const DataPreviewTab: React.FC<DataPreviewTabProps> = ({
+  preview,
+  page: controlledPage,
+  onPageChange,
+  compact = false,
+  targetColumn,
+}) => {
+  const [internalPage, setInternalPage] = useState(0);
+  const page = controlledPage ?? internalPage;
+
+  const setPage = (nextPage: number) => {
+    if (controlledPage === undefined) {
+      setInternalPage(nextPage);
+    }
+    onPageChange?.(nextPage);
+  };
 
   if (!preview || !preview.headers || preview.headers.length === 0) {
     return (
@@ -22,19 +40,28 @@ const DataPreviewTab: React.FC<DataPreviewTabProps> = ({ preview }) => {
   }
 
   const { headers, rows } = preview;
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+
+  useEffect(() => {
+    if (page > totalPages - 1) {
+      setPage(Math.max(0, totalPages - 1));
+    }
+  }, [page, totalPages]);
+
   const start = page * PAGE_SIZE;
   const pageRows = rows.slice(start, start + PAGE_SIZE);
-  const totalPages = Math.ceil(rows.length / PAGE_SIZE);
 
   return (
-    <div className="space-y-4">
+    <div className={compact ? 'space-y-3' : 'space-y-4'}>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Table size={17} className="text-indigo-600" />
-          <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-            Data Preview
-          </h3>
+          {!compact && (
+            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
+              Data Preview
+            </h3>
+          )}
           <span className="ml-2 text-[11px] bg-slate-100 text-slate-500 rounded-full px-2.5 py-0.5 font-semibold">
             {rows.length} rows · {headers.length} columns
           </span>
@@ -43,7 +70,7 @@ const DataPreviewTab: React.FC<DataPreviewTabProps> = ({ preview }) => {
         {totalPages > 1 && (
           <div className="flex items-center gap-2 text-xs text-slate-500">
             <button
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              onClick={() => setPage(Math.max(0, page - 1))}
               disabled={page === 0}
               className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 transition"
             >
@@ -53,7 +80,7 @@ const DataPreviewTab: React.FC<DataPreviewTabProps> = ({ preview }) => {
               {page + 1} / {totalPages}
             </span>
             <button
-              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
               disabled={page === totalPages - 1}
               className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 transition"
             >
@@ -77,7 +104,17 @@ const DataPreviewTab: React.FC<DataPreviewTabProps> = ({ preview }) => {
                   key={h}
                   className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider whitespace-nowrap border-r border-slate-700 last:border-0"
                 >
-                  {h}
+                  <span className="inline-flex items-center gap-1">
+                    <span>{h}</span>
+                    {targetColumn && h === targetColumn && (
+                      <span
+                        className="text-[11px] leading-none text-amber-300"
+                        title="Target column"
+                      >
+                        *
+                      </span>
+                    )}
+                  </span>
                 </th>
               ))}
             </tr>
@@ -122,19 +159,21 @@ const DataPreviewTab: React.FC<DataPreviewTabProps> = ({ preview }) => {
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-5 text-[11px] text-slate-500 px-1">
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded-sm bg-indigo-100 border border-indigo-200" />
-          Numeric values
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded-sm bg-slate-200 border border-slate-300" />
-          Text values
-        </span>
-        <span className="flex items-center gap-1.5 text-slate-300 italic">
-          — Missing / null
-        </span>
-      </div>
+      {!compact && (
+        <div className="flex items-center gap-5 text-[11px] text-slate-500 px-1">
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block w-3 h-3 rounded-sm bg-indigo-100 border border-indigo-200" />
+            Numeric values
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block w-3 h-3 rounded-sm bg-slate-200 border border-slate-300" />
+            Text values
+          </span>
+          <span className="flex items-center gap-1.5 text-slate-300 italic">
+            — Missing / null
+          </span>
+        </div>
+      )}
     </div>
   );
 };

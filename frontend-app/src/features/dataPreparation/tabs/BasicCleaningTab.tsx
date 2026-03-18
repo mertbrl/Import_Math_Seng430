@@ -104,7 +104,7 @@ const BasicCleaningTab: React.FC = () => {
                 <CopyX size={20} />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-800">1. Duplicate Rows (Tekrarlayan Satırlar)</h3>
+                <h3 className="text-sm font-bold text-slate-800">1. Duplicate Rows</h3>
                 <p className="text-xs text-slate-500 mt-1 leading-relaxed max-w-2xl">
                   <strong>Educational Note:</strong> Exact duplicate rows can cause the model to overfit to specific patterns 
                   and artificially inflate performance metrics if split across train/test sets. They hold redundant information.
@@ -140,7 +140,7 @@ const BasicCleaningTab: React.FC = () => {
                 <Equal size={20} />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-800">2. Zero-Variance Columns (Sıfır Varyanslı Kolonlar)</h3>
+                <h3 className="text-sm font-bold text-slate-800">2. Zero-Variance Columns</h3>
                 <p className="text-xs text-slate-500 mt-1 leading-relaxed max-w-2xl">
                   <strong>Educational Note:</strong> Features with zero variance contain no discriminative information. 
                   If every patient has the exact same value, the ML model cannot use this feature to learn boundaries.
@@ -183,7 +183,7 @@ const BasicCleaningTab: React.FC = () => {
                 <Type size={20} />
               </div>
               <div className="flex-1">
-                <h3 className="text-sm font-bold text-slate-800">3. Data Type Mismatches (Veri Tipi Düzeltmeleri)</h3>
+                <h3 className="text-sm font-bold text-slate-800">3. Data Type Mismatches</h3>
                 <p className="text-xs text-slate-500 mt-1 leading-relaxed max-w-2xl">
                   <strong>Educational Note:</strong> Some numerical values are read as text due to formatting
                   (e.g., commas or currency symbols). They must be cast to numeric types before mathematical operations.

@@ -106,19 +106,50 @@ const MiniStat: React.FC<{ label: string; value: string | number }> = ({ label, 
 
 interface FeatureExplorerTabProps {
   columns: ColumnStats[];
+  showBadges?: boolean;
+  selectedColumnName?: string;
+  onSelectedColumnChange?: (columnName: string) => void;
+  emptySelectionMessage?: string;
+  compact?: boolean;
 }
 
-const FeatureExplorerTab: React.FC<FeatureExplorerTabProps> = ({ columns }) => {
-  const [selectedCol, setSelectedCol] = useState<ColumnStats>(columns[0]);
-
+const FeatureExplorerTab: React.FC<FeatureExplorerTabProps> = ({
+  columns,
+  showBadges = true,
+  selectedColumnName,
+  onSelectedColumnChange,
+  emptySelectionMessage = 'Select a feature to inspect its distribution.',
+  compact = false,
+}) => {
+  const [internalSelectedName, setInternalSelectedName] = useState<string>(columns[0]?.name ?? '');
   const [search, setSearch] = useState('');
+  const activeSelectedName = selectedColumnName ?? internalSelectedName;
+  const selectedCol = columns.find((column) => column.name === activeSelectedName) ?? null;
+
+  const handleSelectColumn = (columnName: string) => {
+    if (selectedColumnName === undefined) {
+      setInternalSelectedName(columnName);
+    }
+    onSelectedColumnChange?.(columnName);
+  };
+
+  React.useEffect(() => {
+    if (selectedColumnName !== undefined) return;
+    if (!columns.length) {
+      setInternalSelectedName('');
+      return;
+    }
+    if (!columns.some((column) => column.name === internalSelectedName)) {
+      setInternalSelectedName(columns[0].name);
+    }
+  }, [columns, internalSelectedName, selectedColumnName]);
 
   const filtered = columns.filter((c) =>
     c.name.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4 min-h-[480px]">
+    <div className={`flex flex-col lg:flex-row gap-4 ${compact ? 'min-h-[420px]' : 'min-h-[480px]'}`}>
       {/* Left Sidebar — Column List */}
       <div className="w-full lg:w-64 shrink-0 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm flex flex-col">
         <div className="p-3 border-b border-slate-100">
@@ -133,14 +164,14 @@ const FeatureExplorerTab: React.FC<FeatureExplorerTabProps> = ({ columns }) => {
             />
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto max-h-[420px]">
+        <div className={`flex-1 overflow-y-auto ${compact ? 'max-h-[360px]' : 'max-h-[420px]'}`}>
           {filtered.map((col) => {
-            const active = col.name === selectedCol.name;
+            const active = col.name === activeSelectedName;
             const badges = getColumnBadges(col);
             return (
               <button
                 key={col.name}
-                onClick={() => setSelectedCol(col)}
+                onClick={() => handleSelectColumn(col.name)}
                 className={`w-full px-3 py-2.5 text-left text-xs font-medium transition-colors border-b border-slate-50 ${
                   active
                     ? 'bg-indigo-50 text-indigo-700 border-l-2 border-l-indigo-500'
@@ -153,7 +184,7 @@ const FeatureExplorerTab: React.FC<FeatureExplorerTabProps> = ({ columns }) => {
                     <span className="min-w-0 flex-1 truncate leading-5">{col.name}</span>
                   </div>
 
-                  {(badges.length > 0 || (col.missingPct > 0 && col.missingPct < 10)) && (
+                  {showBadges && (badges.length > 0 || (col.missingPct > 0 && col.missingPct < 10)) && (
                     <div className="flex w-full flex-wrap gap-1">
                       {badges.map((b, i) => (
                         <span
@@ -179,7 +210,14 @@ const FeatureExplorerTab: React.FC<FeatureExplorerTabProps> = ({ columns }) => {
 
       {/* Right Main Area — Distribution Chart + Stats */}
       <div className="flex-1 flex flex-col gap-4">
+        {!selectedCol && (
+          <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 px-6 text-center text-sm text-slate-500">
+            {emptySelectionMessage}
+          </div>
+        )}
+
         {/* Chart */}
+        {selectedCol && (
         <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex-1">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -201,7 +239,7 @@ const FeatureExplorerTab: React.FC<FeatureExplorerTabProps> = ({ columns }) => {
             </span>
           </div>
 
-          <ResponsiveContainer width="100%" height={280}>
+          <ResponsiveContainer width="100%" height={compact ? 240 : 280}>
             <BarChart data={selectedCol.distribution} barCategoryGap="15%">
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
               <XAxis
@@ -235,8 +273,10 @@ const FeatureExplorerTab: React.FC<FeatureExplorerTabProps> = ({ columns }) => {
             </BarChart>
           </ResponsiveContainer>
         </div>
+        )}
 
         {/* Mini-Stats Panel */}
+        {selectedCol && (
         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
             Column Statistics
@@ -266,6 +306,7 @@ const FeatureExplorerTab: React.FC<FeatureExplorerTabProps> = ({ columns }) => {
             )}
           </div>
         </div>
+        )}
       </div>
     </div>
   );

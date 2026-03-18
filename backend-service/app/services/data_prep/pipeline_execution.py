@@ -12,6 +12,8 @@ from sklearn.neighbors import LocalOutlierFactor, NearestNeighbors
 from sklearn.preprocessing import MinMaxScaler, PowerTransformer, RobustScaler, StandardScaler
 
 from app.core.exceptions import PipelineError
+from app.services.data_prep._column_resolution import resolve_column_name
+from app.services.data_prep.step09_dimensionality import drop_multicollinear_features_iteratively
 from app.services.data_prep.step02_sampling import apply_sampling
 from app.services.data_prep.step03_data_split import apply_data_split
 from app.services.data_prep.step09_feature_selection import apply_feature_selection
@@ -30,6 +32,9 @@ PIPELINE_STAGE_ORDER = [
     "feature_selection",
     "imbalance",
 ]
+
+OUTLIER_DETECTORS = {"iqr", "zscore", "isolation_forest", "lof", "dbscan"}
+OUTLIER_TREATMENTS = {"ignore", "drop_rows", "cap_1_99", "cap_5_95"}
 
 
 def normalize_pipeline_config(payload: dict[str, Any]) -> dict[str, Any]:
@@ -121,6 +126,7 @@ def apply_full_pipeline(
     problem_type = _resolve_problem_type(config, state)
 
     df_working = df.copy()
+    target_column = resolve_column_name(df_working, target_column)
 
     excluded_columns = [
         column
@@ -377,39 +383,78 @@ def _apply_outliers(
     df_working = df.copy()
 
     for column, strategy in strategies.items():
-        if column not in df_working.columns or column == target_column or strategy == "ignore":
+        if column not in df_working.columns or column == target_column:
             continue
 
         series = pd.to_numeric(df_working[column], errors="coerce")
         if series.notna().sum() < 3:
             continue
 
-        if strategy == "cap_1_99":
-            lower = float(series.quantile(0.01))
-            upper = float(series.quantile(0.99))
-            df_working[column] = series.clip(lower=lower, upper=upper)
+        rule = _normalize_outlier_rule(strategy)
+        if rule is None or rule["treatment"] == "ignore":
             continue
 
-        if strategy == "cap_5_95":
-            lower = float(series.quantile(0.05))
-            upper = float(series.quantile(0.95))
-            df_working[column] = series.clip(lower=lower, upper=upper)
+        if rule.get("apply_to_all"):
+            df_working[column] = _cap_series(series, str(rule["treatment"]))
             continue
 
-        mask = _build_outlier_mask(series, strategy)
+        detector = str(rule["detector"])
+        mask = _detect_outlier_mask(series, detector)
         if mask is not None and mask.any():
-            df_working = df_working.loc[~mask].copy()
+            treatment = str(rule["treatment"])
+            if treatment == "drop_rows":
+                df_working = df_working.loc[~mask].copy()
+            else:
+                clipped_full_series = _cap_series(series, treatment)
+                capped = series.copy()
+                capped.loc[mask] = clipped_full_series.loc[mask]
+                df_working[column] = capped
 
     return df_working
 
 
-def _build_outlier_mask(series: pd.Series, strategy: str) -> pd.Series | None:
+def _normalize_outlier_rule(raw: Any) -> dict[str, Any] | None:
+    if isinstance(raw, dict):
+        detector = str(raw.get("detector") or "").strip().lower()
+        treatment = str(raw.get("treatment") or "").strip().lower()
+        if detector not in OUTLIER_DETECTORS or treatment not in OUTLIER_TREATMENTS:
+            return None
+        return {"detector": detector, "treatment": treatment, "apply_to_all": False}
+
+    if not isinstance(raw, str):
+        return None
+
+    normalized = raw.strip().lower()
+    if normalized == "ignore":
+        return {"detector": "iqr", "treatment": "ignore", "apply_to_all": False}
+    if normalized in {"cap_1_99", "cap_5_95"}:
+        return {"detector": "iqr", "treatment": normalized, "apply_to_all": True}
+    if normalized == "drop_rows":
+        return {"detector": "iqr", "treatment": "drop_rows", "apply_to_all": False}
+    if normalized in OUTLIER_DETECTORS:
+        return {"detector": normalized, "treatment": "drop_rows", "apply_to_all": False}
+    return None
+
+
+def _cap_series(series: pd.Series, treatment: str) -> pd.Series:
+    if treatment == "cap_1_99":
+        lower = float(series.quantile(0.01))
+        upper = float(series.quantile(0.99))
+        return series.clip(lower=lower, upper=upper)
+    if treatment == "cap_5_95":
+        lower = float(series.quantile(0.05))
+        upper = float(series.quantile(0.95))
+        return series.clip(lower=lower, upper=upper)
+    return series
+
+
+def _detect_outlier_mask(series: pd.Series, strategy: str) -> pd.Series | None:
     mask = pd.Series(False, index=series.index)
     valid = series.dropna()
     if valid.empty:
         return mask
 
-    if strategy in {"drop_rows", "iqr"}:
+    if strategy == "iqr":
         q1 = float(valid.quantile(0.25))
         q3 = float(valid.quantile(0.75))
         iqr = q3 - q1
@@ -605,11 +650,26 @@ def _apply_dimensionality_reduction(
         ]
         return pd.concat([df_working[non_feature_columns], pca_frame], axis=1)
 
+    feature_columns = [
+        column for column in df_working.columns if column != target_column and pd.api.types.is_numeric_dtype(df_working[column])
+    ]
+    protected_features = [
+        column
+        for column, action in dict(config.get("actions", {}) or {}).items()
+        if action == "keep" and column in df_working.columns and column != target_column
+    ]
     to_drop = [
         column
         for column, action in dict(config.get("actions", {}) or {}).items()
         if action == "drop" and column in df_working.columns and column != target_column
     ]
+    if not to_drop and len(feature_columns) >= 2:
+        numeric_frame = df_working[feature_columns].apply(pd.to_numeric, errors="coerce")
+        _, to_drop = drop_multicollinear_features_iteratively(
+            numeric_frame,
+            threshold=10.0,
+            protected_features=protected_features,
+        )
     if to_drop:
         df_working = df_working.drop(columns=to_drop, errors="ignore")
 

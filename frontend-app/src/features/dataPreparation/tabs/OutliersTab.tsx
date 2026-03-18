@@ -1,7 +1,73 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
 import { ScanSearch, Activity, AlertTriangle, CheckCircle2, ChevronRight, Settings2, Loader2 } from 'lucide-react';
+import type { OutlierColumnStat } from '../../../api/dataPrepAPI';
+
+type OutlierDetector = 'zscore' | 'iqr' | 'isolation_forest' | 'lof' | 'dbscan';
+type OutlierTreatment = 'ignore' | 'cap_1_99' | 'cap_5_95' | 'drop_rows';
+
+const DETECTOR_OPTIONS: Array<{ value: OutlierDetector; label: string }> = [
+  { value: 'zscore', label: 'Z-Score' },
+  { value: 'iqr', label: 'IQR' },
+  { value: 'isolation_forest', label: 'Isolation Forest' },
+  { value: 'lof', label: 'LOF' },
+  { value: 'dbscan', label: 'DBSCAN' },
+];
+
+const TREATMENT_OPTIONS: Array<{ value: OutlierTreatment; label: string }> = [
+  { value: 'ignore', label: 'Keep' },
+  { value: 'cap_1_99', label: 'Winsorize 1/99' },
+  { value: 'cap_5_95', label: 'Winsorize 5/95' },
+  { value: 'drop_rows', label: 'Drop Rows' },
+];
+
+const mapRecommendationToDetector = (recommendation: string | undefined): OutlierDetector => {
+  if (!recommendation) return 'iqr';
+  const normalized = recommendation.trim().toLowerCase();
+
+  switch (normalized) {
+    case 'z-score':
+    case 'zscore':
+      return 'zscore';
+    case 'iqr':
+      return 'iqr';
+    case 'isolation forest':
+      return 'isolation_forest';
+    case 'lof':
+      return 'lof';
+    case 'dbscan':
+      return 'dbscan';
+    default:
+      return 'iqr';
+  }
+};
+
+const mapRecommendedTreatment = (treatment: string | undefined): OutlierTreatment => {
+  switch ((treatment ?? '').trim().toLowerCase()) {
+    case 'ignore':
+      return 'ignore';
+    case 'cap_1_99':
+      return 'cap_1_99';
+    case 'cap_5_95':
+      return 'cap_5_95';
+    case 'drop_rows':
+      return 'drop_rows';
+    default:
+      return 'cap_1_99';
+  }
+};
+
+const getRecommendedPlan = (column: OutlierColumnStat) => ({
+  detector: mapRecommendationToDetector(column.recommended_detector ?? column.recommendation),
+  treatment: mapRecommendedTreatment(column.recommended_treatment),
+});
+
+const detectorLabel = (value: string) =>
+  DETECTOR_OPTIONS.find((option) => option.value === value)?.label ?? value;
+
+const treatmentLabel = (value: string) =>
+  TREATMENT_OPTIONS.find((option) => option.value === value)?.label ?? value;
 
 const OutliersTab: React.FC = () => {
   const { 
@@ -19,6 +85,8 @@ const OutliersTab: React.FC = () => {
   } = useDataPrepStore();
 
   const ignoredColumns = useEDAStore(s => s.ignoredColumns);
+  const [bulkDetector, setBulkDetector] = useState<OutlierDetector>('iqr');
+  const [bulkTreatment, setBulkTreatment] = useState<OutlierTreatment>('cap_1_99');
 
   const isComplete = completedSteps.includes('outliers');
 
@@ -34,10 +102,7 @@ const OutliersTab: React.FC = () => {
       outlierColumns.forEach(col => {
         // Only set default if not already selected by user
         if (!outlierStrategies[col.column]) {
-          // If recommendation is isolation forest, we default to ignore for safety initially since its destructive, or default to the recommendation
-          const safeDefault = col.recommendation === 'Isolation Forest' ? 'isolation_forest' : 
-                              col.recommendation === 'IQR' ? 'iqr' : 'zscore';
-          setOutlierStrategy(col.column, safeDefault);
+          setOutlierStrategy(col.column, getRecommendedPlan(col));
         }
       });
     }
@@ -48,11 +113,15 @@ const OutliersTab: React.FC = () => {
       return;
     }
 
+    const plannedStrategies = Object.fromEntries(
+      outlierColumns.map((col) => [col.column, outlierStrategies[col.column] ?? getRecommendedPlan(col)])
+    );
+
     // Log the unified action to the pipeline
     addPipelineAction({
       step: 'outliers',
       action: 'handle_outliers',
-      strategies: outlierStrategies
+      strategies: plannedStrategies
     });
     toggleStepComplete('outliers', true);
     setActiveTab('imputation');
@@ -117,6 +186,29 @@ const OutliersTab: React.FC = () => {
     );
   }
 
+  const applyRecommendedPlans = () => {
+    outlierColumns.forEach((col) => {
+      setOutlierStrategy(col.column, getRecommendedPlan(col));
+    });
+  };
+
+  const applyBulkPlan = () => {
+    outlierColumns.forEach((col) => {
+      setOutlierStrategy(col.column, {
+        detector: bulkDetector,
+        treatment: bulkTreatment,
+      });
+    });
+  };
+
+  const flaggedRows = outlierColumns.reduce((sum, col) => sum + col.outlier_count, 0);
+  const recommendedKeepCount = outlierColumns.filter(
+    (col) => getRecommendedPlan(col).treatment === 'ignore'
+  ).length;
+  const recommendedWinsorizeCount = outlierColumns.filter(
+    (col) => getRecommendedPlan(col).treatment.startsWith('cap_')
+  ).length;
+
   // ─── Active Outlier Workspace ────────────────────────────────────
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -141,32 +233,48 @@ const OutliersTab: React.FC = () => {
               Rule of Thumb: True Errors vs. Natural Extremes
             </h3>
             <p className="text-sm text-amber-800 mt-1 leading-relaxed">
-              Outliers can carry critical clinical information. <strong>Do not drop them</strong> unless they are proven to be data entry errors (e.g., Age = 999). 
-              For valid clinical extremes, consider <strong>Capping (Winsorization)</strong> or using robust models (like Isolation Forest) rather than raw Z-scores.
+              Outliers should be handled because they can distort the mean, inflate variance, destabilize linear models, and make scaling less reliable.
+              <strong> Drop rows</strong> only when the value is clearly wrong or impossible, because deletion shrinks the dataset and can damage class balance.
+              <strong> Winsorization</strong> is usually better when the value is plausible but too extreme, since it reduces harmful leverage while keeping the patient record in the training set.
+              In practice: remove obvious errors, cap extreme but believable values, and keep rare clinically meaningful cases when they may contain signal.
             </p>
           </div>
         </div>
       </div>
 
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Affected Features</p>
+          <p className="mt-2 text-3xl font-black text-slate-900">{outlierColumns.length}</p>
+          <p className="mt-1 text-xs text-slate-500">Columns that currently have detected outlier candidates.</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Flagged Values</p>
+          <p className="mt-2 text-3xl font-black text-slate-900">{flaggedRows}</p>
+          <p className="mt-1 text-xs text-slate-500">Detector-specific flagged points across the visible numeric features.</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Recommended Actions</p>
+          <p className="mt-2 text-base font-bold text-slate-900">
+            {recommendedWinsorizeCount} winsorize, {recommendedKeepCount} keep
+          </p>
+          <p className="mt-1 text-xs text-slate-500">The system avoids row drops by default unless you explicitly choose them.</p>
+        </div>
+      </div>
+
       {/* Columns List */}
       <div className="space-y-4">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col gap-3 lg:flex-row lg:justify-between lg:items-center">
           <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
             <Settings2 size={16} className="text-indigo-500" />
-            Numerical Features ({outlierColumns.length} affected)
+            Feature-by-Feature Outlier Plan
           </h3>
           <button
             onClick={() => {
-              outlierColumns.forEach(col => {
-                const safeDefault = col.recommendation === 'Isolation Forest' ? 'isolation_forest' :
-                                    col.recommendation === 'IQR' ? 'iqr' : 'zscore';
-                setOutlierStrategy(col.column, safeDefault);
-              });
-
-              const strategies: Record<string, string> = {};
-              outlierColumns.forEach(col => {
-                strategies[col.column] = col.recommendation === 'Isolation Forest' ? 'isolation_forest' :
-                                         col.recommendation === 'IQR' ? 'iqr' : 'zscore';
+              applyRecommendedPlans();
+              const strategies: Record<string, { detector: string; treatment: string }> = {};
+              outlierColumns.forEach((col) => {
+                strategies[col.column] = getRecommendedPlan(col);
               });
 
               if (!confirmAndInvalidateLaterSteps('outliers', 'Applying these system suggestions will remove all accepted work in the later steps. Do you want to continue?')) return;
@@ -177,101 +285,164 @@ const OutliersTab: React.FC = () => {
             className="flex flex-col items-end gap-0.5 cursor-pointer"
           >
             <span className="text-xs font-bold bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors flex items-center gap-1">
-              <Settings2 size={14} /> Use System Suggestions
+              <Settings2 size={14} /> Accept Recommended Plans
             </span>
-            <span className="text-[10px] text-slate-400 pr-1">Applies suggestions &amp; advances to Missing Value Handling →</span>
+            <span className="text-[10px] text-slate-400 pr-1">Loads detector + treatment and advances to Missing Value Handling →</span>
           </button>
         </div>
 
-        {outlierColumns.map((col) => {
-          const isNormal = col.distribution === 'Normal';
-          const isSkewed = col.distribution === 'Highly Skewed';
-          const isMultimodal = col.distribution === 'Multimodal';
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+            <div>
+              <h4 className="text-sm font-bold text-slate-800">Bulk Apply to All Features</h4>
+              <p className="mt-1 text-xs text-slate-500">
+                Choose one detector and one treatment, then apply the same plan to every feature. You can still fine-tune individual rows afterward.
+              </p>
+            </div>
 
-          const systemSuggestion: string = col.recommendation === 'Isolation Forest' ? 'isolation_forest' : 
-                                   col.recommendation === 'IQR' ? 'iqr' : 'zscore';
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:min-w-[560px]">
+              <div>
+                <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
+                  Detector
+                </label>
+                <select
+                  value={bulkDetector}
+                  onChange={(e) => setBulkDetector(e.target.value as OutlierDetector)}
+                  className="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10"
+                >
+                  {DETECTOR_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-          const currentStrategy = outlierStrategies[col.column] || 'ignore';
-
-          return (
-            <div key={col.column} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:border-indigo-200 transition-colors">
-              <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                <div className="flex-1 space-y-3">
-                  <div className="flex items-center gap-3">
-                    <span className="font-bold text-slate-900 text-base">{col.column}</span>
-                    <span className={`text-[10px] items-center gap-1 font-bold px-2 py-1 rounded flex ${
-                      isNormal ? 'bg-sky-100 text-sky-700' : 
-                      isSkewed ? 'bg-indigo-100 text-indigo-700' : 'bg-purple-100 text-purple-700'
-                    }`}>
-                      <Activity size={12} />
-                      Distribution: {col.distribution}
-                    </span>
-                    <span className="text-[10px] font-bold bg-rose-100 text-rose-700 px-2 py-1 rounded flex items-center gap-1">
-                      <AlertTriangle size={12} />
-                      {col.outlier_count} Outliers ({col.outlier_percentage}%)
-                    </span>
-                  </div>
-
-                  <div className="text-xs p-3 rounded-lg border leading-relaxed bg-slate-50 border-slate-200 text-slate-700">
-                    <span className="font-bold block mb-1 tracking-wide uppercase text-[10px] text-indigo-600 flex items-center gap-1">
-                      <Settings2 size={12} /> SYSTEM SUGGESTION
-                    </span>
-                    {isNormal ? (
-                      <span>
-                        Since this feature satisfies the Gaussian assumption (Low Skew), a standard <strong>Z-Score (Threshold=3)</strong> is statistically valid and recommended.
-                      </span>
-                    ) : isSkewed ? (
-                      <span>
-                        Since this data is <strong>Highly Skewed</strong>, standard Z-Score will fail because the mean is heavily distorted. We recommend using the robust <strong>IQR (Interquartile Range)</strong> method.
-                      </span>
-                    ) : isMultimodal ? (
-                      <span>
-                        This feature has multiple peaks (no single &quot;center&quot;). Both Z-Score and IQR are invalid here. We recommend using an advanced spatial algorithm like <strong>Isolation Forest</strong>.
-                      </span>
-                    ) : (
-                      <span>We recommend carefully observing this feature.</span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="md:w-64 shrink-0 mt-3 md:mt-0">
-                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
-                    Handling Strategy
-                  </label>
-                  <select
-                    value={currentStrategy}
-                    onChange={(e) => setOutlierStrategy(col.column, e.target.value)}
-                    className="w-full appearance-none border-2 border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-800 bg-white focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 cursor-pointer transition-all"
-                  >
-                    <option value="ignore">Ignore (Keep Outliers)</option>
-                    <option value="drop_rows">Drop Outlier Rows {systemSuggestion === 'drop_rows' ? '(System Suggestion)' : ''}</option>
-                    <optgroup label="Capping (Winsorization)">
-                      <option value="cap_1_99">Cap at 1st/99th Percentile {systemSuggestion === 'cap_1_99' ? '(System Suggestion)' : ''}</option>
-                      <option value="cap_5_95">Cap at 5th/95th Percentile {systemSuggestion === 'cap_5_95' ? '(System Suggestion)' : ''}</option>
-                    </optgroup>
-                    <optgroup label="Detection Algorithms">
-                      <option value="zscore">Apply Z-Score (±3) {systemSuggestion === 'zscore' ? '(System Suggestion)' : ''}</option>
-                      <option value="iqr">Apply IQR Method {systemSuggestion === 'iqr' ? '(System Suggestion)' : ''}</option>
-                      <option value="isolation_forest">Apply Isolation Forest {systemSuggestion === 'isolation_forest' ? '(System Suggestion)' : ''}</option>
-                      <option value="lof">Apply LOF – Local Outlier Factor {systemSuggestion === 'lof' ? '(System Suggestion)' : ''}</option>
-                      <option value="dbscan">Apply DBSCAN {systemSuggestion === 'dbscan' ? '(System Suggestion)' : ''}</option>
-                    </optgroup>
-                  </select>
-                  <p className="text-[10px] text-slate-400 mt-2 text-right">
-                    {currentStrategy === 'ignore' && 'Retains extreme values.'}
-                    {currentStrategy === 'drop_rows' && 'Destroys rows across all columns.'}
-                    {currentStrategy === 'zscore' && 'Best for perfectly normal curves.'}
-                    {currentStrategy === 'iqr' && 'Best for skewed data distributions.'}
-                    {currentStrategy === 'isolation_forest' && 'Advanced density-based isolation.'}
-                    {currentStrategy === 'lof' && 'Density-comparison model, best for extreme tails.'}
-                    {currentStrategy === 'dbscan' && 'Cluster-based, best for large multimodal datasets.'}
-                    {currentStrategy.startsWith('cap') && 'Clips extremes to a fixed maximum ceiling.'}
-                  </p>
-                </div>
+              <div>
+                <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
+                  Treatment
+                </label>
+                <select
+                  value={bulkTreatment}
+                  onChange={(e) => setBulkTreatment(e.target.value as OutlierTreatment)}
+                  className="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10"
+                >
+                  {TREATMENT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
-          );
-        })}
+          </div>
+
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-slate-500">
+              Current bulk plan: <strong className="text-slate-700">{detectorLabel(bulkDetector)}</strong> + <strong className="text-slate-700">{treatmentLabel(bulkTreatment)}</strong>
+            </p>
+            <button
+              onClick={applyBulkPlan}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition-all hover:bg-slate-800 hover:shadow-md active:scale-[0.98]"
+            >
+              Apply to All Features
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="max-h-[560px] overflow-auto">
+            <div className="min-w-[1040px]">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
+                  <tr className="text-left">
+                    <th className="px-4 py-3 font-bold text-slate-600 uppercase tracking-[0.12em] text-[11px]">Feature</th>
+                    <th className="px-4 py-3 font-bold text-slate-600 uppercase tracking-[0.12em] text-[11px]">Shape</th>
+                    <th className="px-4 py-3 font-bold text-slate-600 uppercase tracking-[0.12em] text-[11px]">Flagged</th>
+                    <th className="px-4 py-3 font-bold text-slate-600 uppercase tracking-[0.12em] text-[11px]">Detector</th>
+                    <th className="px-4 py-3 font-bold text-slate-600 uppercase tracking-[0.12em] text-[11px]">Treatment</th>
+                    <th className="px-4 py-3 font-bold text-slate-600 uppercase tracking-[0.12em] text-[11px]">Recommended Plan</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {outlierColumns.map((col) => {
+                    const recommendedPlan = getRecommendedPlan(col);
+                    const currentPlan = outlierStrategies[col.column] ?? recommendedPlan;
+                    const isNormal = col.distribution === 'Normal';
+                    const isSkewed = col.distribution === 'Highly Skewed' || col.distribution === 'Non-Gaussian';
+
+                    return (
+                      <tr key={col.column} className="align-top hover:bg-slate-50/70 transition-colors">
+                        <td className="px-4 py-4">
+                          <div className="font-bold text-slate-900">{col.column}</div>
+                          <div className="mt-1 text-xs text-slate-500">{col.type} feature</div>
+                        </td>
+                        <td className="px-4 py-4">
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                            isNormal
+                              ? 'bg-sky-100 text-sky-700'
+                              : isSkewed
+                              ? 'bg-indigo-100 text-indigo-700'
+                              : 'bg-purple-100 text-purple-700'
+                          }`}>
+                            <Activity size={12} />
+                            {col.distribution}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="font-bold text-slate-900">{col.outlier_count}</div>
+                          <div className="mt-1 text-xs text-slate-500">{col.outlier_percentage}% of rows</div>
+                        </td>
+                        <td className="px-4 py-4">
+                          <select
+                            value={currentPlan.detector}
+                            onChange={(e) => setOutlierStrategy(col.column, { detector: e.target.value as OutlierDetector })}
+                            className="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10"
+                          >
+                            {DETECTOR_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-4 py-4">
+                          <select
+                            value={currentPlan.treatment}
+                            onChange={(e) => setOutlierStrategy(col.column, { treatment: e.target.value as OutlierTreatment })}
+                            className="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10"
+                          >
+                            {TREATMENT_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                          <p className="mt-2 text-[10px] text-slate-500">
+                            {currentPlan.treatment === 'ignore' && 'Keep values as they are.'}
+                            {currentPlan.treatment === 'drop_rows' && 'Detected rows will be removed from the training data.'}
+                            {currentPlan.treatment === 'cap_1_99' && 'Only detected values will be clipped to the 1st/99th percentiles.'}
+                            {currentPlan.treatment === 'cap_5_95' && 'Only detected values will be clipped to the 5th/95th percentiles.'}
+                          </p>
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                            <div className="text-xs font-bold text-slate-700">
+                              {detectorLabel(recommendedPlan.detector)} + {treatmentLabel(recommendedPlan.treatment)}
+                            </div>
+                            <p className="mt-1 text-xs leading-relaxed text-slate-600">
+                              {col.suggestion_reason ?? 'The recommendation is chosen from the feature shape and the proportion of flagged values.'}
+                            </p>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="pt-6 mt-4 border-t border-slate-200 flex items-center justify-between">
@@ -288,7 +459,7 @@ const OutliersTab: React.FC = () => {
           onClick={handleConfirm}
           className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-md transition-all active:scale-[0.98] cursor-pointer"
         >
-          Confirm Outlier Strategies
+          Confirm Outlier Plan
           <ChevronRight size={18} />
         </button>
       </div>

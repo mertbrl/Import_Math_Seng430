@@ -10,7 +10,8 @@ from pydantic import BaseModel, Field
 import pathlib
 
 from app.core.exceptions import PipelineError
-from app.schemas.exploration import EDAProfileResponse
+from app.ml_core.data_engine.eda import run_full_eda
+from app.schemas.exploration import EDAProfileResponse, PreprocessingReviewResponse
 from app.schemas.request import (
     BasicCleaningStatsRequest,
     CertificateCreateRequest,
@@ -177,22 +178,22 @@ async def explore_data(
 
 DEFAULT_DATASETS = [
     {"code": "cardiology_hf", "domain": "Cardiology", "target_column": "DEATH_EVENT"},
-    {"code": "radiology_pneumonia", "domain": "Radiology", "target_column": "Finding_Label"},
+    {"code": "radiology_pneumonia", "domain": "Radiology", "target_column": "Finding Labels"},
     {"code": "nephrology_ckd", "domain": "Nephrology", "target_column": "classification"},
-    {"code": "oncology_breast", "domain": "Oncology", "target_column": "diagnosis"},
+    {"code": "oncology_breast", "domain": "Oncology", "target_column": "Diagnosis"},
     {"code": "neurology_parkinson", "domain": "Neurology", "target_column": "status"},
     {"code": "endocrinology_diabetes", "domain": "Endocrinology", "target_column": "Outcome"},
-    {"code": "hepatology_liver", "domain": "Hepatology", "target_column": "Dataset"},
+    {"code": "hepatology_liver", "domain": "Hepatology", "target_column": "Selector"},
     {"code": "stroke_risk", "domain": "Stroke Risk", "target_column": "stroke"},
     {"code": "mental_health_depression", "domain": "Mental Health", "target_column": "severity_class"},
-    {"code": "pulmonology_copd", "domain": "Pulmonology", "target_column": "exacerbation"},
+    {"code": "pulmonology_copd", "domain": "Pulmonology", "target_column": "class"},
     {"code": "haematology_anaemia", "domain": "Haematology", "target_column": "anemia_type"},
     {"code": "dermatology_skin", "domain": "Dermatology", "target_column": "dx_type"},
-    {"code": "ophthalmology_retinopathy", "domain": "Ophthalmology", "target_column": "severity_grade"},
+    {"code": "ophthalmology_retinopathy", "domain": "Ophthalmology", "target_column": "class"},
     {"code": "orthopaedics_spine", "domain": "Orthopaedics", "target_column": "class"},
 
     {"code": "obstetrics_fetal", "domain": "Obstetrics", "target_column": "fetal_health"},
-    {"code": "cardiology_arrhythmia", "domain": "Cardiology Arrhythmia", "target_column": "arrhythmia"},
+    {"code": "cardiology_arrhythmia", "domain": "Cardiology Arrhythmia", "target_column": "Class"},
     {"code": "oncology_cervical", "domain": "Oncology Cervical", "target_column": "Biopsy"},
     {"code": "thyroid_endocrinology", "domain": "Thyroid", "target_column": "class"},
     {"code": "pharmacy_readmission", "domain": "Pharmacy", "target_column": "readmitted"},
@@ -387,6 +388,38 @@ def preview_cleaned_data(payload: PipelineExecutionRequest) -> dict[str, Any]:
         raise PipelineError(f"Pipeline execution failed: {exc}", status_code=400) from exc
 
 
+@router.post(
+    "/preprocessing-review",
+    response_model=PreprocessingReviewResponse,
+    summary="Compare dataset diagnostics before and after preprocessing",
+)
+def preprocessing_review(payload: PipelineExecutionRequest) -> dict[str, Any]:
+    """Return reusable EDA profiles for the current working set before and after preprocessing."""
+    pipeline_config = normalize_pipeline_config(payload.model_dump())
+    df = load_dataframe(pipeline_config["session_id"])
+
+    try:
+        before_df = apply_full_pipeline(df, pipeline_config, stop_before="basic_cleaning")
+        after_df = apply_full_pipeline(df, pipeline_config)
+
+        before_profile = _sanitize_for_json(run_full_eda(before_df))
+        after_profile = _sanitize_for_json(run_full_eda(after_df))
+
+        before_columns = list(before_df.columns)
+        after_columns = list(after_df.columns)
+
+        return {
+            "before": before_profile,
+            "after": after_profile,
+            "beforeShape": list(before_df.shape),
+            "afterShape": list(after_df.shape),
+            "removedColumns": [column for column in before_columns if column not in after_columns],
+            "addedColumns": [column for column in after_columns if column not in before_columns],
+        }
+    except Exception as exc:
+        raise PipelineError(f"Preprocessing review failed: {exc}", status_code=400) from exc
+
+
 @router.post("/download-preprocessed")
 def download_preprocessed(
     payload: PipelineExecutionRequest,
@@ -488,7 +521,9 @@ def scaling_stats(payload: ScalingStatsRequest) -> dict[str, Any]:
 @router.post("/dimensionality-stats")
 def dimensionality_stats(payload: DimensionalityStatsRequest) -> dict[str, Any]:
     try:
-        return _sanitize_for_json(analyze_vif(payload.session_id, payload.excluded_columns))  # type: ignore[return-value]
+        return _sanitize_for_json(
+            analyze_vif(payload.session_id, payload.excluded_columns, payload.protected_columns)
+        )  # type: ignore[return-value]
     except PipelineError:
         raise
     except Exception as exc:

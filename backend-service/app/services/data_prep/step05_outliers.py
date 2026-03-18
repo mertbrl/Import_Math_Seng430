@@ -1,17 +1,75 @@
-"""Step 05 – Outlier Handling (Dynamic Distribution-Aware)"""
+"""Step 05 – Outlier Handling (Dynamic Distribution-Aware)."""
 
-import warnings
 from typing import Any
 
 import numpy as np
 import pandas as pd
-from scipy.stats import skew, kurtosis
+from scipy.stats import normaltest, skew
 from sklearn.ensemble import IsolationForest
-from sklearn.neighbors import LocalOutlierFactor
-from sklearn.cluster import DBSCAN
 
-from app.core.exceptions import PipelineError
 from app.services.data_prep._dataframe_loader import load_dataframe
+
+
+def _detect_modality(clean_series: pd.Series) -> str:
+    """Heuristically classify a numeric series as uni/bi/multimodal."""
+    if len(clean_series) < 20:
+        return "Unimodal"
+
+    values = clean_series.to_numpy(dtype=float)
+    bin_count = min(12, max(6, int(np.sqrt(len(values)))))
+    hist, _ = np.histogram(values, bins=bin_count)
+
+    if len(hist) < 3:
+        return "Unimodal"
+
+    threshold = max(hist.mean() * 0.5, 1.0)
+    peaks = sum(
+        1
+        for i in range(1, len(hist) - 1)
+        if hist[i] > hist[i - 1] and hist[i] > hist[i + 1] and hist[i] > threshold
+    )
+
+    if peaks >= 3:
+        return "Multimodal"
+    if peaks == 2:
+        return "Bimodal"
+    return "Unimodal"
+
+
+def _normality_pvalue(clean_series: pd.Series) -> float | None:
+    """Return a normality-test p-value when it can be computed safely."""
+    if len(clean_series) < 8:
+        return None
+
+    try:
+        _, p_value = normaltest(clean_series.to_numpy(dtype=float), nan_policy="omit")
+    except Exception:
+        return None
+
+    if not np.isfinite(p_value):
+        return None
+    return float(p_value)
+
+
+def _recommended_treatment(distribution: str, outlier_percentage: float) -> str:
+    """Choose a safe default treatment after detection."""
+    if distribution in {"Bimodal", "Multimodal"}:
+        return "ignore"
+    if outlier_percentage >= 5:
+        return "cap_5_95"
+    return "cap_1_99"
+
+
+def _suggestion_reason(distribution: str, detector: str, treatment: str) -> str:
+    """Short human-readable reason for the recommended plan."""
+    if distribution == "Normal":
+        return "Approximately Gaussian data supports Z-Score detection; winsorization preserves rows better than deletion."
+    if distribution in {"Highly Skewed", "Non-Gaussian"}:
+        return "The feature is not Gaussian enough for Z-Score, so IQR is safer and capping is preferred over dropping."
+    if distribution in {"Bimodal", "Multimodal"}:
+        return "Multiple peaks may represent real clinical subgroups, so detect with Isolation Forest but keep values unless manually reviewed."
+    return f"Use {detector} for detection and {treatment} as the safest automatic action."
+
 
 def detect_distribution_and_outliers(series: pd.Series) -> dict[str, Any]:
     """
@@ -19,12 +77,12 @@ def detect_distribution_and_outliers(series: pd.Series) -> dict[str, Any]:
     provides a handling recommendation, and calculates the outlier count.
     
     Distribution Rules:
-    - Normal/Gaussian (Low Skew, Unimodal): Recommend Z-Score
-    - Highly Skewed (Left/Right): Recommend IQR
+    - Approximately Gaussian (Low Skew, Unimodal, passes normality): Recommend Z-Score
+    - Unimodal but non-Gaussian / skewed: Recommend IQR
     - Bimodal / Multimodal: Recommend Isolation Forest
     """
     # Drop NaNs for statistical calculations
-    clean_series = series.dropna()
+    clean_series = pd.to_numeric(series, errors="coerce").dropna()
     
     if len(clean_series) < 10:
         return {
@@ -34,89 +92,65 @@ def detect_distribution_and_outliers(series: pd.Series) -> dict[str, Any]:
             "recommendation": "Ignore"
         }
 
-    # 1. Calculate Skewness to check for Gaussian vs Highly Skewed
-    s = skew(clean_series)
-    abs_skew = abs(s)
-    
-    # 2. Heuristic for Multimodality using Bimodality Coefficient (BC)
-    # BC = (skew^2 + 1) / (kurtosis + 3*(n-1)^2 / ((n-2)*(n-3)))
-    # A BC > 0.555 (uniform distribution value) broadly indicates multimodality.
-    is_multimodal = False
-    n = len(clean_series)
-    if n > 3:
-        k = kurtosis(clean_series, fisher=True) # excess kurtosis
-        bc = (s**2 + 1) / (k + 3 * ((n - 1)**2) / ((n - 2) * (n - 3)))
-        if bc > 0.555:
-            is_multimodal = True
-        
-    # 3. Determine Recommendation & detect outliers
+    skew_value = float(skew(clean_series, bias=False))
+    if not np.isfinite(skew_value):
+        skew_value = 0.0
+
+    abs_skew = abs(skew_value)
+    modality = _detect_modality(clean_series)
+    normality_p = _normality_pvalue(clean_series)
+    is_approximately_normal = (
+        modality == "Unimodal"
+        and abs_skew < 0.5
+        and normality_p is not None
+        and normality_p >= 0.05
+    )
+
     outlier_idx = pd.Series(False, index=clean_series.index)
     total_len = len(clean_series)
     
-    if is_multimodal:
-        distribution = "Multimodal"
-        if total_len > 100:
-            recommendation = "DBSCAN"
-            try:
-                # Naive eps heuristic based on standard deviation
-                eps = clean_series.std() / 2.0 if clean_series.std() > 0 else 0.5
-                dbscan = DBSCAN(eps=eps, min_samples=5)
-                preds = dbscan.fit_predict(clean_series.values.reshape(-1, 1))
-                # DBSCAN uses -1 for noise (outliers)
-                outlier_idx.iloc[:] = (preds == -1)
-            except Exception:
-                pass
-        else:
-            recommendation = "Isolation Forest"
-            try:
-                iso = IsolationForest(contamination=0.05, random_state=42)
-                preds = iso.fit_predict(clean_series.values.reshape(-1, 1))
-                # Predictions: 1 = inlier, -1 = outlier
-                outlier_idx.iloc[:] = (preds == -1)
-            except Exception:
-                pass
-
-    elif abs_skew > 2.0:
-        distribution = "Extremely Skewed"
-        recommendation = "LOF"
-        # Local Outlier Factor
+    if modality in {"Bimodal", "Multimodal"}:
+        distribution = modality
+        recommendation = "Isolation Forest"
         try:
-            # Fallback to smaller n_neighbors if very little data
-            n_neighbors = min(20, total_len - 1)
-            lof = LocalOutlierFactor(n_neighbors=n_neighbors, contamination=0.05)
-            preds = lof.fit_predict(clean_series.values.reshape(-1, 1))
+            iso = IsolationForest(contamination=0.05, random_state=42)
+            preds = iso.fit_predict(clean_series.values.reshape(-1, 1))
             outlier_idx.iloc[:] = (preds == -1)
         except Exception:
             pass
 
-    elif abs_skew > 1.0:
-        distribution = "Highly Skewed"
-        recommendation = "IQR"
-        # IQR Outlier Detection
-        q1 = clean_series.quantile(0.25)
-        q3 = clean_series.quantile(0.75)
-        iqr = q3 - q1
-        lower_bound = q1 - 1.5 * iqr
-        upper_bound = q3 + 1.5 * iqr
-        outlier_idx = (clean_series < lower_bound) | (clean_series > upper_bound)
-        
-    else:
+    elif is_approximately_normal:
         distribution = "Normal"
         recommendation = "Z-Score"
-        # Z-Score Outlier Detection (Threshold = 3)
         mean = clean_series.mean()
         std = clean_series.std()
         if std > 0:
             z_scores = (clean_series - mean) / std
             outlier_idx = abs(z_scores) >= 3
 
+    else:
+        distribution = "Highly Skewed" if abs_skew >= 0.5 else "Non-Gaussian"
+        recommendation = "IQR"
+        q1 = clean_series.quantile(0.25)
+        q3 = clean_series.quantile(0.75)
+        iqr = q3 - q1
+        lower_bound = q1 - 1.5 * iqr
+        upper_bound = q3 + 1.5 * iqr
+        outlier_idx = (clean_series < lower_bound) | (clean_series > upper_bound)
+
     outlier_count = int(outlier_idx.sum())
+    outlier_percentage = round((outlier_count / total_len) * 100, 2) if total_len > 0 else 0.0
+    recommended_treatment = _recommended_treatment(distribution, outlier_percentage)
+    suggestion_reason = _suggestion_reason(distribution, recommendation, recommended_treatment)
     
     return {
         "distribution": distribution,
         "outlier_count": outlier_count,
-        "outlier_percentage": round((outlier_count / total_len) * 100, 2) if total_len > 0 else 0.0,
+        "outlier_percentage": outlier_percentage,
         "recommendation": recommendation,
+        "recommended_detector": recommendation,
+        "recommended_treatment": recommended_treatment,
+        "suggestion_reason": suggestion_reason,
     }
 
 def calculate_outlier_statistics(session_id: str, excluded_columns: list[str]) -> list[dict[str, Any]]:
@@ -151,7 +185,10 @@ def calculate_outlier_statistics(session_id: str, excluded_columns: list[str]) -
                 "distribution": stats["distribution"],
                 "outlier_count": stats["outlier_count"],
                 "outlier_percentage": stats["outlier_percentage"],
-                "recommendation": stats["recommendation"]
+                "recommendation": stats["recommendation"],
+                "recommended_detector": stats["recommended_detector"],
+                "recommended_treatment": stats["recommended_treatment"],
+                "suggestion_reason": stats["suggestion_reason"],
             })
             
     # Sort with highest amount of outliers first
