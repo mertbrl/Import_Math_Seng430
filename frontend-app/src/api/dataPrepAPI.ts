@@ -4,7 +4,10 @@
  * Components and Zustand stores import from here; never hit fetch() directly.
  */
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1';
+import type { PipelineConfig } from '../store/pipelineConfig';
+import type { MockEDADataset } from '../features/dataExploration/mockEDAData';
+
+const BASE_URL = (import.meta as any).env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -42,6 +45,29 @@ export interface OutlierColumnStat {
   outlier_count: number;
   outlier_percentage: number;
   recommendation: string;
+  recommended_detector?: string;
+  recommended_treatment?: string;
+  suggestion_reason?: string;
+}
+
+export interface FeatureImportanceStat {
+  feature: string;
+  score: number;
+}
+
+export interface PreviewPipelineResponse {
+  session_id: string;
+  shape: number[];
+  preview: Record<string, string | number | null>[];
+}
+
+export interface PreprocessingReviewResponse {
+  before: MockEDADataset;
+  after: MockEDADataset;
+  beforeShape: number[];
+  afterShape: number[];
+  removedColumns: string[];
+  addedColumns: string[];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -112,4 +138,65 @@ export async function fetchOutlierStats(
   });
   if (!res.ok) await throwDetailedError(res, 'outliers-stats');
   return res.json();
+}
+
+export async function fetchFeatureImportances(
+  pipelineConfig: PipelineConfig
+): Promise<FeatureImportanceStat[]> {
+  const res = await fetch(`${BASE_URL}/feature-importance-stats`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      session_id: pipelineConfig.session_id,
+      target_column: pipelineConfig.target_column,
+      excluded_columns: pipelineConfig.excluded_columns,
+      pipeline_config: pipelineConfig,
+    }),
+  });
+  if (!res.ok) await throwDetailedError(res, 'feature-importance-stats');
+  return res.json();
+}
+
+export async function previewPreprocessedData(
+  pipelineConfig: PipelineConfig
+): Promise<PreviewPipelineResponse> {
+  const res = await fetch(`${BASE_URL}/preview-cleaned-data`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pipeline_config: pipelineConfig }),
+  });
+  if (!res.ok) await throwDetailedError(res, 'preview-cleaned-data');
+  return res.json();
+}
+
+export async function fetchPreprocessingReview(
+  pipelineConfig: PipelineConfig
+): Promise<PreprocessingReviewResponse> {
+  const res = await fetch(`${BASE_URL}/preprocessing-review`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pipeline_config: pipelineConfig }),
+  });
+  if (!res.ok) await throwDetailedError(res, 'preprocessing-review');
+  return res.json();
+}
+
+export async function downloadPreprocessedCSV(
+  pipelineConfig: PipelineConfig
+): Promise<void> {
+  const res = await fetch(`${BASE_URL}/download-preprocessed`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pipeline_config: pipelineConfig }),
+  });
+  if (!res.ok) await throwDetailedError(res, 'download-preprocessed');
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'preprocessed_data.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }

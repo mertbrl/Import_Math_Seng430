@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
-import { PREP_TABS } from '../DataPrepTabsConfig';
 import { Tag, CheckCircle2, ChevronRight, Settings2, Loader2, AlertCircle } from 'lucide-react';
 
 interface EncodingColumn {
@@ -21,8 +20,9 @@ const ENCODING_LABELS: Record<string, string> = {
 };
 
 const EncodingTab: React.FC = () => {
-  const { toggleStepComplete, addPipelineAction, completedSteps, setActiveTab, clearSubsequentProgress } = useDataPrepStore();
+  const { toggleStepComplete, addPipelineAction, completedSteps, setActiveTab, confirmAndInvalidateLaterSteps } = useDataPrepStore();
   const ignoredColumns = useEDAStore(s => s.ignoredColumns);
+  const targetColumn = useEDAStore(s => s.targetColumn);
   const isComplete = completedSteps.includes('encoding');
 
   const [columns, setColumns] = useState<EncodingColumn[]>([]);
@@ -37,7 +37,11 @@ const EncodingTab: React.FC = () => {
       const res = await fetch(`${API_BASE}/encoding-stats`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: 'demo-session', excluded_columns: ignoredColumns ?? [], target_column: 'DEATH_EVENT' }),
+        body: JSON.stringify({
+          session_id: 'demo-session',
+          excluded_columns: ignoredColumns ?? [],
+          target_column: targetColumn || undefined,
+        }),
       });
       const data = await res.json();
       const cols = data.columns ?? [];
@@ -50,24 +54,19 @@ const EncodingTab: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [ignoredColumns]);
+  }, [ignoredColumns, targetColumn]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const handleConfirm = () => {
-    const currentIndex = PREP_TABS.findIndex(t => t.id === 'encoding');
-    const stepsToReset = PREP_TABS.slice(currentIndex + 1).map(t => t.id);
-    const hasCompletedAhead = stepsToReset.some(id => completedSteps.includes(id));
-    if (hasCompletedAhead) {
-      if (!window.confirm('Applying these changes will reset progress in later steps. Are you sure?')) return;
-      clearSubsequentProgress(stepsToReset);
-    }
+    if (!confirmAndInvalidateLaterSteps('encoding', 'Changing encoding will remove all accepted work in the later steps. Do you want to continue?')) return;
     addPipelineAction({ step: 'encoding', action: 'encode_categoricals', strategies });
     toggleStepComplete('encoding', true);
     setActiveTab('scaling');
   };
 
   const handleSkip = () => {
+    if (!confirmAndInvalidateLaterSteps('encoding', 'Skipping this step now will remove all accepted work in the later steps. Do you want to continue?')) return;
     toggleStepComplete('encoding', true);
     setActiveTab('scaling');
   };
@@ -123,13 +122,7 @@ const EncodingTab: React.FC = () => {
             columns.forEach(c => { s[c.column] = c.recommendation; });
             setStrategies(s);
 
-            const currentIndex = PREP_TABS.findIndex(t => t.id === 'encoding');
-            const stepsToReset = PREP_TABS.slice(currentIndex + 1).map(t => t.id);
-            const hasCompletedAhead = stepsToReset.some(id => completedSteps.includes(id));
-            if (hasCompletedAhead) {
-              if (!window.confirm('Applying these changes will reset progress in later steps. Are you sure?')) return;
-              clearSubsequentProgress(stepsToReset);
-            }
+            if (!confirmAndInvalidateLaterSteps('encoding', 'Applying these system suggestions will remove all accepted work in the later steps. Do you want to continue?')) return;
             addPipelineAction({ step: 'encoding', action: 'encode_categoricals', strategies: s });
             toggleStepComplete('encoding', true);
             setActiveTab('scaling');
@@ -143,8 +136,9 @@ const EncodingTab: React.FC = () => {
         </button>
       </div>
 
-      <div className="space-y-3">
-        {columns.map(col => {
+      <div className="max-h-[560px] overflow-y-auto pr-1">
+        <div className="space-y-3">
+          {columns.map(col => {
           const currentStrategy = strategies[col.column] ?? col.recommendation;
           return (
             <div key={col.column} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:border-sky-200 transition-colors">
@@ -184,7 +178,8 @@ const EncodingTab: React.FC = () => {
               </div>
             </div>
           );
-        })}
+          })}
+        </div>
       </div>
 
       <div className="pt-6 mt-4 border-t border-slate-200 flex items-center justify-between">

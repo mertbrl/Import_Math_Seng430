@@ -1,9 +1,11 @@
-import React from 'react';
-import { AlertOctagon, CheckCircle2, ChevronRight } from 'lucide-react';
+import React, { useState } from 'react';
+import { CheckCircle2, ChevronRight, Download, Loader2 } from 'lucide-react';
 import { useDataPrepStore } from '../../store/useDataPrepStore';
+import { buildPipelineConfig } from '../../store/pipelineConfig';
+import { downloadPreprocessedCSV } from '../../api/dataPrepAPI';
 import { PREP_TABS } from './DataPrepTabsConfig';
+import PrepTimingHint from './PrepTimingHint';
 import BasicCleaningTab from './tabs/BasicCleaningTab';
-import SamplingTab from './tabs/SamplingTab';
 import DataSplitTab from './tabs/DataSplitTab';
 import ImputationTab from './tabs/ImputationTab';
 import OutliersTab from './tabs/OutliersTab';
@@ -11,17 +13,33 @@ import TransformationTab from './tabs/TransformationTab';
 import EncodingTab from './tabs/EncodingTab';
 import ScalingTab from './tabs/ScalingTab';
 import DimensionalityTab from './tabs/DimensionalityTab';
+import FeatureSelectionTab from './tabs/FeatureSelectionTab';
 import ImbalanceTab from './tabs/ImbalanceTab';
+import PreprocessingReviewTab from './tabs/PreprocessingReviewTab';
 
 export const Step3_DataPreparation: React.FC = () => {
   const { activeTabId, completedSteps, setActiveTab } = useDataPrepStore();
+
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  const handleDownload = async () => {
+    setIsDownloading(true);
+    setDownloadError(null);
+    try {
+      const pipelineConfig = buildPipelineConfig('demo-session');
+      await downloadPreprocessedCSV(pipelineConfig);
+    } catch (e: any) {
+      setDownloadError(e.message ?? 'Download failed');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   const renderActiveComponent = () => {
     switch (activeTabId) {
       case 'data_cleaning':
         return <BasicCleaningTab />;
-      case 'sampling':
-        return <SamplingTab />;
       case 'data_split':
         return <DataSplitTab />;
       case 'imputation':
@@ -36,8 +54,12 @@ export const Step3_DataPreparation: React.FC = () => {
         return <ScalingTab />;
       case 'dimensionality_reduction':
         return <DimensionalityTab />;
+      case 'feature_selection':
+        return <FeatureSelectionTab />;
       case 'imbalance_handling':
         return <ImbalanceTab />;
+      case 'preprocessing_review':
+        return <PreprocessingReviewTab />;
       default:
         return (
           <div className="h-64 flex flex-col items-center justify-center text-slate-400 bg-slate-50 border border-slate-200 border-dashed rounded-xl animate-in fade-in">
@@ -49,14 +71,14 @@ export const Step3_DataPreparation: React.FC = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+    <div className="w-full space-y-6">
       
       {/* Two-Column Workspace */}
-      <div className="flex gap-6 items-start">
+      <div className="grid grid-cols-1 gap-6 items-start xl:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[340px_minmax(0,1fr)]">
         
         {/* Left Sidebar (1/4 Width) */}
-        <div className="w-1/4 shrink-0 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col h-[70vh]">
-          <div className="p-4 border-b border-slate-100 bg-slate-50">
+        <div className="w-full shrink-0 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col h-[68vh] xl:h-[75vh]">
+          <div className="min-h-[92px] p-4 border-b border-slate-100 bg-slate-50 flex flex-col justify-center">
             <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
               Data Prep Pipeline
             </h3>
@@ -108,6 +130,7 @@ export const Step3_DataPreparation: React.FC = () => {
                       <p className="text-[10px] text-slate-500 truncate mt-0.5">
                         {tab.subtitle}
                       </p>
+                      <PrepTimingHint tabId={tab.id} compact />
                     </div>
 
                     {/* Active Indicator Arrow */}
@@ -121,12 +144,43 @@ export const Step3_DataPreparation: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Content Area (3/4 Width) */}
-        <div className="flex-1 bg-white border border-slate-200 rounded-2xl shadow-sm min-h-[70vh] p-6 lg:p-8">
+        <div className="min-w-0 bg-white border border-slate-200 rounded-2xl shadow-sm min-h-[70vh] p-5 lg:p-6 xl:p-8 2xl:p-10">
           {renderActiveComponent()}
         </div>
 
       </div>
+
+      {/* Success Banner with Download Button */}
+      {completedSteps.includes('preprocessing_review') && (
+        <div className="bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl p-6 shadow-lg text-white flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between animate-in slide-in-from-bottom-4 duration-500">
+          <div className="flex items-center gap-4">
+            <div className="bg-white/20 p-3 rounded-xl backdrop-blur-sm">
+              <CheckCircle2 size={32} className="text-white" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold">Data Preparation Complete!</h3>
+              <p className="text-emerald-50 mt-1">
+                Data is clean, scaled, selected, and balanced. Download your preprocessed dataset.
+              </p>
+              {downloadError && (
+                <p className="text-red-200 text-xs mt-1">⚠ {downloadError}</p>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={handleDownload}
+            disabled={isDownloading}
+            className="w-full justify-center lg:w-auto flex items-center gap-2 bg-white text-emerald-700 px-6 py-3 rounded-xl font-bold hover:bg-emerald-50 hover:shadow-md transition-all active:scale-[0.98] cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
+          >
+            {isDownloading ? (
+              <><Loader2 size={18} className="animate-spin" /> Preparing CSV...</>
+            ) : (
+              <><Download size={18} /> Download Preprocessed CSV</>
+            )}
+          </button>
+        </div>
+      )}
+
     </div>
   );
 };

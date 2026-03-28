@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
-import { PREP_TABS } from '../DataPrepTabsConfig';
-import { Zap, CheckCircle2, ChevronRight, Settings2, Loader2, AlertCircle, TrendingUp } from 'lucide-react';
+import { CheckCircle2, ChevronRight, Settings2, Loader2, AlertCircle, TrendingUp } from 'lucide-react';
 
 interface TransformColumn {
   column: string;
@@ -16,7 +15,7 @@ interface TransformColumn {
 const API_BASE = 'http://localhost:8000/api/v1';
 
 const TransformationTab: React.FC = () => {
-  const { toggleStepComplete, addPipelineAction, completedSteps, setActiveTab, clearSubsequentProgress } = useDataPrepStore();
+  const { toggleStepComplete, addPipelineAction, completedSteps, setActiveTab, confirmAndInvalidateLaterSteps } = useDataPrepStore();
   const ignoredColumns = useEDAStore(s => s.ignoredColumns);
   const isComplete = completedSteps.includes('transformation');
 
@@ -52,19 +51,14 @@ const TransformationTab: React.FC = () => {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const handleConfirm = () => {
-    const currentIndex = PREP_TABS.findIndex(t => t.id === 'transformation');
-    const stepsToReset = PREP_TABS.slice(currentIndex + 1).map(t => t.id);
-    const hasCompletedAhead = stepsToReset.some(id => completedSteps.includes(id));
-    if (hasCompletedAhead) {
-      if (!window.confirm('Applying these changes will reset your progress in all later steps. Are you sure?')) return;
-      clearSubsequentProgress(stepsToReset);
-    }
+    if (!confirmAndInvalidateLaterSteps('transformation', 'Changing feature transformation will remove all accepted work in the later steps. Do you want to continue?')) return;
     addPipelineAction({ step: 'transformation', action: 'apply_transformation', strategies });
     toggleStepComplete('transformation', true);
     setActiveTab('encoding');
   };
 
   const handleSkip = () => {
+    if (!confirmAndInvalidateLaterSteps('transformation', 'Skipping this step now will remove all accepted work in the later steps. Do you want to continue?')) return;
     toggleStepComplete('transformation', true);
     setActiveTab('encoding');
   };
@@ -122,7 +116,6 @@ const TransformationTab: React.FC = () => {
         </div>
       </div>
 
-      {/* Use System Suggestions */}
       <div className="flex items-center justify-between">
         <span className="text-sm font-bold text-slate-700">{needsTransform.length} columns flagged for transformation</span>
         <button
@@ -131,13 +124,7 @@ const TransformationTab: React.FC = () => {
             columns.forEach(col => { suggestions[col.column] = col.recommendation ?? 'none'; });
             setStrategies(suggestions);
 
-            const currentIndex = PREP_TABS.findIndex(t => t.id === 'transformation');
-            const stepsToReset = PREP_TABS.slice(currentIndex + 1).map(t => t.id);
-            const hasCompletedAhead = stepsToReset.some(id => completedSteps.includes(id));
-            if (hasCompletedAhead) {
-              if (!window.confirm('Applying these changes will reset your progress in all later steps. Are you sure?')) return;
-              clearSubsequentProgress(stepsToReset);
-            }
+            if (!confirmAndInvalidateLaterSteps('transformation', 'Applying these system suggestions will remove all accepted work in the later steps. Do you want to continue?')) return;
             addPipelineAction({ step: 'transformation', action: 'apply_transformation', strategies: suggestions });
             toggleStepComplete('transformation', true);
             setActiveTab('encoding');
@@ -151,9 +138,9 @@ const TransformationTab: React.FC = () => {
         </button>
       </div>
 
-      {/* Column Cards */}
-      <div className="space-y-3">
-        {columns.map(col => {
+      <div className="max-h-[560px] overflow-y-auto pr-1">
+        <div className="space-y-3">
+          {columns.map(col => {
           const currentMethod = strategies[col.column] ?? 'none';
           const isFlagged = col.needs_transform;
           return (
@@ -209,10 +196,10 @@ const TransformationTab: React.FC = () => {
               </div>
             </div>
           );
-        })}
+          })}
+        </div>
       </div>
 
-      {/* Footer */}
       <div className="pt-6 mt-4 border-t border-slate-200 flex items-center justify-between">
         {isComplete ? (
           <div className="flex items-center gap-2 text-sm font-bold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100">

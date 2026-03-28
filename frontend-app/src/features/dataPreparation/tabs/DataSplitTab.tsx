@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
-import { PREP_TABS } from '../DataPrepTabsConfig';
 import { ShieldAlert, SplitSquareHorizontal, CheckCircle2, Info, ChevronRight } from 'lucide-react';
 
 type SplitStrategy = '2-way' | '3-way';
 
 const DataSplitTab: React.FC = () => {
-  const { toggleStepComplete, addPipelineAction, completedSteps, setActiveTab, clearSubsequentProgress, cleaningPipeline } = useDataPrepStore();
+  const { toggleStepComplete, addPipelineAction, completedSteps, setActiveTab, confirmAndInvalidateLaterSteps, cleaningPipeline } = useDataPrepStore();
   const mlTask = useEDAStore((s) => s.mlTask);
+  const targetColumn = useEDAStore((s) => s.targetColumn);
 
   const isComplete = completedSteps.includes('data_split');
   const isClassification = mlTask !== 'regression';
@@ -43,14 +43,9 @@ const DataSplitTab: React.FC = () => {
   // Helper: prompt user once if they try to change a completed step
   const guardChange = (): boolean => {
     if (!isComplete || hasWarnedRef.current) return true;
-    const currentIndex = PREP_TABS.findIndex(t => t.id === 'data_split');
-    const stepsToReset = PREP_TABS.slice(currentIndex + 1).map(t => t.id);
-    const hasCompletedAhead = stepsToReset.some(id => completedSteps.includes(id));
-    if (!hasCompletedAhead) return true;
-    if (!window.confirm("Changing the data split will reset your progress in all later steps. Are you sure?")) {
+    if (!confirmAndInvalidateLaterSteps('data_split', 'Changing the data split will remove all accepted work in the later steps. Do you want to continue?')) {
       return false;
     }
-    clearSubsequentProgress(stepsToReset);
     hasWarnedRef.current = true;
     return true;
   };
@@ -102,15 +97,10 @@ const DataSplitTab: React.FC = () => {
   };
 
   const handleConfirm = () => {
-    const currentIndex = PREP_TABS.findIndex(t => t.id === 'data_split');
-    const stepsToReset = PREP_TABS.slice(currentIndex + 1).map(t => t.id);
-    const hasCompletedAhead = stepsToReset.some(id => completedSteps.includes(id));
-      
-    if (hasCompletedAhead) {
-      if (!window.confirm("Applying these changes will reset your progress in all later steps. Are you sure?")) {
-        return; // User cancelled
+    if (!hasWarnedRef.current) {
+      if (!confirmAndInvalidateLaterSteps('data_split', 'Applying these split changes will remove all accepted work in the later steps. Do you want to continue?')) {
+        return;
       }
-      clearSubsequentProgress(stepsToReset);
     }
 
     addPipelineAction({
@@ -121,9 +111,10 @@ const DataSplitTab: React.FC = () => {
       val: strategy === '3-way' ? valRatio / 100 : 0,
       test: testRatio / 100,
       stratify: isClassification ? stratify : false,
+      target: isClassification ? targetColumn : undefined,
     });
     toggleStepComplete('data_split', true);
-    setActiveTab('sampling'); // Step 3 is now Sampling
+    setActiveTab('outliers'); // Next step is now Outliers
   };
 
   return (

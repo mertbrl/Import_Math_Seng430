@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
-import { PREP_TABS } from '../DataPrepTabsConfig';
 import { BarChart2, CheckCircle2, ChevronRight, Settings2, Loader2, AlertCircle, Info } from 'lucide-react';
 
 interface ScalingColumn {
@@ -17,7 +16,7 @@ interface ScalingColumn {
 const API_BASE = 'http://localhost:8000/api/v1';
 
 const ScalingTab: React.FC = () => {
-  const { toggleStepComplete, addPipelineAction, completedSteps, setActiveTab, clearSubsequentProgress } = useDataPrepStore();
+  const { toggleStepComplete, addPipelineAction, completedSteps, setActiveTab, confirmAndInvalidateLaterSteps } = useDataPrepStore();
   const ignoredColumns = useEDAStore(s => s.ignoredColumns);
   const isComplete = completedSteps.includes('scaling');
 
@@ -51,19 +50,14 @@ const ScalingTab: React.FC = () => {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const handleConfirm = () => {
-    const currentIndex = PREP_TABS.findIndex(t => t.id === 'scaling');
-    const stepsToReset = PREP_TABS.slice(currentIndex + 1).map(t => t.id);
-    const hasCompletedAhead = stepsToReset.some(id => completedSteps.includes(id));
-    if (hasCompletedAhead) {
-      if (!window.confirm('Applying these changes will reset progress in later steps. Are you sure?')) return;
-      clearSubsequentProgress(stepsToReset);
-    }
+    if (!confirmAndInvalidateLaterSteps('scaling', 'Changing scaling will remove all accepted work in the later steps. Do you want to continue?')) return;
     addPipelineAction({ step: 'scaling', action: 'apply_scaling', strategies });
     toggleStepComplete('scaling', true);
     setActiveTab('dimensionality_reduction');
   };
 
   const handleSkip = () => {
+    if (!confirmAndInvalidateLaterSteps('scaling', 'Skipping this step now will remove all accepted work in the later steps. Do you want to continue?')) return;
     toggleStepComplete('scaling', true);
     setActiveTab('dimensionality_reduction');
   };
@@ -114,13 +108,7 @@ const ScalingTab: React.FC = () => {
             columns.forEach(c => { s[c.column] = c.recommendation; });
             setStrategies(s);
 
-            const currentIndex = PREP_TABS.findIndex(t => t.id === 'scaling');
-            const stepsToReset = PREP_TABS.slice(currentIndex + 1).map(t => t.id);
-            const hasCompletedAhead = stepsToReset.some(id => completedSteps.includes(id));
-            if (hasCompletedAhead) {
-              if (!window.confirm('Applying these changes will reset progress in later steps. Are you sure?')) return;
-              clearSubsequentProgress(stepsToReset);
-            }
+            if (!confirmAndInvalidateLaterSteps('scaling', 'Applying these system suggestions will remove all accepted work in the later steps. Do you want to continue?')) return;
             addPipelineAction({ step: 'scaling', action: 'apply_scaling', strategies: s });
             toggleStepComplete('scaling', true);
             setActiveTab('dimensionality_reduction');
@@ -134,8 +122,9 @@ const ScalingTab: React.FC = () => {
         </button>
       </div>
 
-      <div className="space-y-3">
-        {columns.map(col => {
+      <div className="max-h-[560px] overflow-y-auto pr-1">
+        <div className="space-y-3">
+          {columns.map(col => {
           const currentScaler = strategies[col.column] ?? col.recommendation;
           return (
             <div key={col.column} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:border-teal-200 transition-colors">
@@ -178,7 +167,8 @@ const ScalingTab: React.FC = () => {
               </div>
             </div>
           );
-        })}
+          })}
+        </div>
       </div>
 
       <div className="pt-6 mt-4 border-t border-slate-200 flex items-center justify-between">

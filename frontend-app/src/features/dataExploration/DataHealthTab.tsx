@@ -37,11 +37,13 @@ interface DataHealthTabProps {
   summary: SummaryStats;
   alerts: Alert[];
   columns: import('./mockEDAData').ColumnStats[];
+  targetColumnName?: string;
 }
 
-const DataHealthTab: React.FC<DataHealthTabProps> = ({ summary, alerts, columns }) => {
-  // Detect class imbalance from the last column (assumed target)
-  const targetColumn = columns[columns.length - 1];
+const DataHealthTab: React.FC<DataHealthTabProps> = ({ summary, alerts, columns, targetColumnName }) => {
+  const targetColumn =
+    columns.find((column) => column.name === targetColumnName) ??
+    columns[columns.length - 1];
   const targetDist = targetColumn?.distribution ?? [];
   const totalTargetCount = targetDist.reduce((s, d) => s + d.value, 0);
 

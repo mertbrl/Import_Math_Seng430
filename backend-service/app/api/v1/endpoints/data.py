@@ -5,18 +5,17 @@ import math
 from typing import Any
 
 from fastapi import APIRouter, File, Form, UploadFile, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
-import os
 import pathlib
 
 from app.core.exceptions import PipelineError
-from app.schemas.exploration import EDAProfileResponse
+from app.ml_core.data_engine.eda import run_full_eda
+from app.schemas.exploration import EDAProfileResponse, PreprocessingReviewResponse
 from app.schemas.request import (
     BasicCleaningStatsRequest,
     CertificateCreateRequest,
     ContextRequest,
-    DataCleaningPreviewRequest,
     DataExplorationRequest,
     DatasetPatchRequest,
     DatasetUpsertRequest,
@@ -24,8 +23,10 @@ from app.schemas.request import (
     ExplainabilityLocalRequest,
     ExplainabilityRequest,
     FairnessRequest,
+    FeatureImportanceRequest,
     MappingUpsertRequest,
     MissingStatsRequest,
+    PipelineExecutionRequest,
     OutliersStatsRequest,
     PreprocessRequest,
     SessionCreateRequest,
@@ -49,13 +50,13 @@ from app.services.data_prep.step01_basic_cleaning import calculate_basic_cleanin
 from app.services.data_prep.step01b_type_casting import calculate_type_mismatch_stats
 from app.services.data_prep.step04_imputation import calculate_missing_statistics
 from app.services.data_prep.step05_outliers import calculate_outlier_statistics
-from app.services.data_prep.step02_sampling import apply_sampling
-from app.services.data_prep.step03_data_split import apply_data_split
 from app.services.data_prep.step06_transformation import analyze_transformation_candidates
 from app.services.data_prep.step07_encoding import analyze_encoding_candidates
 from app.services.data_prep.step08_scaling import analyze_scaling_candidates
 from app.services.data_prep.step09_dimensionality import analyze_vif
-from app.services.data_prep.step10_imbalance import analyze_class_balance
+from app.services.data_prep.step09_feature_selection import calculate_feature_importances
+from app.services.data_prep.step10_imbalance import analyze_class_balance, summarize_class_balance
+from app.services.data_prep.pipeline_execution import apply_full_pipeline, normalize_pipeline_config
 # Legacy pipeline preview — migrated inline below once preview_pipeline is moved
 from app.services.data_prep._dataframe_loader import load_dataframe
 
@@ -177,22 +178,22 @@ async def explore_data(
 
 DEFAULT_DATASETS = [
     {"code": "cardiology_hf", "domain": "Cardiology", "target_column": "DEATH_EVENT"},
-    {"code": "radiology_pneumonia", "domain": "Radiology", "target_column": "Finding_Label"},
+    {"code": "radiology_pneumonia", "domain": "Radiology", "target_column": "Finding Labels"},
     {"code": "nephrology_ckd", "domain": "Nephrology", "target_column": "classification"},
-    {"code": "oncology_breast", "domain": "Oncology", "target_column": "diagnosis"},
+    {"code": "oncology_breast", "domain": "Oncology", "target_column": "Diagnosis"},
     {"code": "neurology_parkinson", "domain": "Neurology", "target_column": "status"},
     {"code": "endocrinology_diabetes", "domain": "Endocrinology", "target_column": "Outcome"},
-    {"code": "hepatology_liver", "domain": "Hepatology", "target_column": "Dataset"},
+    {"code": "hepatology_liver", "domain": "Hepatology", "target_column": "Selector"},
     {"code": "stroke_risk", "domain": "Stroke Risk", "target_column": "stroke"},
     {"code": "mental_health_depression", "domain": "Mental Health", "target_column": "severity_class"},
-    {"code": "pulmonology_copd", "domain": "Pulmonology", "target_column": "exacerbation"},
+    {"code": "pulmonology_copd", "domain": "Pulmonology", "target_column": "class"},
     {"code": "haematology_anaemia", "domain": "Haematology", "target_column": "anemia_type"},
     {"code": "dermatology_skin", "domain": "Dermatology", "target_column": "dx_type"},
-    {"code": "ophthalmology_retinopathy", "domain": "Ophthalmology", "target_column": "severity_grade"},
+    {"code": "ophthalmology_retinopathy", "domain": "Ophthalmology", "target_column": "class"},
     {"code": "orthopaedics_spine", "domain": "Orthopaedics", "target_column": "class"},
 
     {"code": "obstetrics_fetal", "domain": "Obstetrics", "target_column": "fetal_health"},
-    {"code": "cardiology_arrhythmia", "domain": "Cardiology Arrhythmia", "target_column": "arrhythmia"},
+    {"code": "cardiology_arrhythmia", "domain": "Cardiology Arrhythmia", "target_column": "Class"},
     {"code": "oncology_cervical", "domain": "Oncology Cervical", "target_column": "Biopsy"},
     {"code": "thyroid_endocrinology", "domain": "Thyroid", "target_column": "class"},
     {"code": "pharmacy_readmission", "domain": "Pharmacy", "target_column": "readmitted"},
@@ -371,36 +372,79 @@ def validate_mapping(payload: ValidateMappingRequest) -> dict[str, Any]:
 
 
 @router.post("/preview-cleaned-data")
-def preview_cleaned_data(payload: DataCleaningPreviewRequest) -> dict[str, Any]:
-    """Preview the effect of a cleaning pipeline without mutating source data."""
-    import pandas as pd
-    from app.core.exceptions import PipelineError
-
-    df = load_dataframe(payload.session_id)
+def preview_cleaned_data(payload: PipelineExecutionRequest) -> dict[str, Any]:
+    """Preview the fully processed working dataframe without mutating the raw source CSV."""
+    pipeline_config = normalize_pipeline_config(payload.model_dump())
+    df = load_dataframe(pipeline_config["session_id"])
     try:
-        for step in payload.pipeline:
-            action = step.get("action")
-            if action == "drop_duplicates":
-                df = df.drop_duplicates()
-            elif action == "drop_zero_variance":
-                cols = [c for c in step.get("columns", []) if c in df.columns]
-                if cols:
-                    df = df.drop(columns=cols)
-            elif action == "cast_to_numeric":
-                for col in step.get("columns", []):
-                    if col in df.columns:
-                        df[col] = pd.to_numeric(df[col], errors="coerce")
-            elif action == "sample":
-                df = apply_sampling(df, step)
-            elif action == "split":
-                # For preview, we only show the training split, 
-                # as future pipeline steps should only learn from training data
-                splits = apply_data_split(df, step)
-                df = splits["train"]
-        preview = df.head(10).replace({float("nan"): None}).to_dict(orient="records")
-        return {"session_id": payload.session_id, "shape": list(df.shape), "preview": preview, "applied_steps": len(payload.pipeline)}
+        df_processed = apply_full_pipeline(df, pipeline_config)
+        preview = _sanitize_for_json(df_processed.head(10).to_dict(orient="records"))
+        return {
+            "session_id": pipeline_config["session_id"],
+            "shape": list(df_processed.shape),
+            "preview": preview,
+        }
     except Exception as exc:
         raise PipelineError(f"Pipeline execution failed: {exc}", status_code=400) from exc
+
+
+@router.post(
+    "/preprocessing-review",
+    response_model=PreprocessingReviewResponse,
+    summary="Compare dataset diagnostics before and after preprocessing",
+)
+def preprocessing_review(payload: PipelineExecutionRequest) -> dict[str, Any]:
+    """Return reusable EDA profiles for the current working set before and after preprocessing."""
+    pipeline_config = normalize_pipeline_config(payload.model_dump())
+    df = load_dataframe(pipeline_config["session_id"])
+
+    try:
+        before_df = apply_full_pipeline(df, pipeline_config, stop_before="basic_cleaning")
+        after_df = apply_full_pipeline(df, pipeline_config)
+
+        before_profile = _sanitize_for_json(run_full_eda(before_df))
+        after_profile = _sanitize_for_json(run_full_eda(after_df))
+
+        before_columns = list(before_df.columns)
+        after_columns = list(after_df.columns)
+
+        return {
+            "before": before_profile,
+            "after": after_profile,
+            "beforeShape": list(before_df.shape),
+            "afterShape": list(after_df.shape),
+            "removedColumns": [column for column in before_columns if column not in after_columns],
+            "addedColumns": [column for column in after_columns if column not in before_columns],
+        }
+    except Exception as exc:
+        raise PipelineError(f"Preprocessing review failed: {exc}", status_code=400) from exc
+
+
+@router.post("/download-preprocessed")
+def download_preprocessed(
+    payload: PipelineExecutionRequest,
+) -> StreamingResponse:
+    """
+    Execute the centralized pipeline engine on the immutable source CSV
+    and return the resulting working dataframe as a downloadable CSV.
+    """
+    import io as _io
+
+    pipeline_config = normalize_pipeline_config(payload.model_dump())
+    df = load_dataframe(pipeline_config["session_id"])
+    try:
+        df_processed = apply_full_pipeline(df, pipeline_config)
+        buffer = _io.StringIO()
+        df_processed.to_csv(buffer, index=False)
+        buffer.seek(0)
+
+        return StreamingResponse(
+            content=iter([buffer.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=preprocessed_data.csv"},
+        )
+    except Exception as exc:
+        raise PipelineError(f"Download pipeline failed: {exc}", status_code=400) from exc
 
 
 @router.post("/basic-cleaning-stats")
@@ -477,7 +521,9 @@ def scaling_stats(payload: ScalingStatsRequest) -> dict[str, Any]:
 @router.post("/dimensionality-stats")
 def dimensionality_stats(payload: DimensionalityStatsRequest) -> dict[str, Any]:
     try:
-        return _sanitize_for_json(analyze_vif(payload.session_id, payload.excluded_columns))  # type: ignore[return-value]
+        return _sanitize_for_json(
+            analyze_vif(payload.session_id, payload.excluded_columns, payload.protected_columns)
+        )  # type: ignore[return-value]
     except PipelineError:
         raise
     except Exception as exc:
@@ -488,11 +534,60 @@ def dimensionality_stats(payload: DimensionalityStatsRequest) -> dict[str, Any]:
 @router.post("/imbalance-stats")
 def imbalance_stats(payload: ImbalanceStatsRequest) -> dict[str, Any]:
     try:
+        if payload.pipeline_config is not None:
+            pipeline_config = normalize_pipeline_config(payload.model_dump())
+            df = load_dataframe(pipeline_config["session_id"])
+
+            before_df = apply_full_pipeline(df, pipeline_config, stop_before="imbalance")
+            before_summary = summarize_class_balance(before_df, payload.target_column)
+
+            after_config = dict(pipeline_config)
+            after_config["imbalance"] = {"enabled": True, "strategy": "smote"}
+            after_df = apply_full_pipeline(df, after_config)
+            after_summary = summarize_class_balance(after_df, payload.target_column)
+
+            response = {
+                **before_summary,
+                "class_distribution": before_summary.get("class_distribution", []),
+                "before_class_distribution": before_summary.get("class_distribution", []),
+                "after_smote_distribution": after_summary.get("class_distribution", []),
+                "working_set": "train",
+                "target_column": payload.target_column,
+            }
+            return _sanitize_for_json(response)  # type: ignore[return-value]
+
         return _sanitize_for_json(analyze_class_balance(payload.session_id, payload.target_column, payload.excluded_columns))  # type: ignore[return-value]
     except PipelineError:
         raise
     except Exception as exc:
         raise PipelineError(f"Imbalance stats failed: {exc}", status_code=500) from exc
+
+
+@router.post("/feature-importance-stats")
+def feature_importance_stats(payload: FeatureImportanceRequest) -> list[dict[str, Any]]:
+    try:
+        pipeline_config = normalize_pipeline_config(payload.model_dump())
+        df = load_dataframe(pipeline_config["session_id"])
+        state = session_service.get_or_create(pipeline_config["session_id"])
+        problem_type = pipeline_config.get("problem_type") or state.mapping.get("problem_type") or "classification"
+        if problem_type == "binary_classification":
+            problem_type = "classification"
+        elif problem_type == "multi_class_classification":
+            problem_type = "multiclass"
+
+        df_for_ranking = apply_full_pipeline(df, pipeline_config, stop_before="feature_selection")
+        target_column = (
+            pipeline_config.get("target_column")
+            or payload.target_column
+            or state.mapping.get("target_column")
+            or state.dataset.get("target_column")
+        )
+        importances = calculate_feature_importances(df_for_ranking, target_column, problem_type)
+        return _sanitize_for_json(importances)
+    except PipelineError:
+        raise
+    except Exception as exc:
+        raise PipelineError(f"Feature importance stats failed: {exc}", status_code=500) from exc
 
 
 @router.post("/prepare")

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
-import { PREP_TABS } from '../DataPrepTabsConfig';
 import { Trash2, CopyX, Equal, Type, CheckCircle2, ChevronRight, AlertCircle, Loader2 } from 'lucide-react';
 
 const BasicCleaningTab: React.FC = () => {
@@ -9,7 +8,7 @@ const BasicCleaningTab: React.FC = () => {
     toggleStepComplete, 
     addPipelineAction, 
     cleaningPipeline,
-    completedSteps, 
+    completedSteps,
     setActiveTab,
     fetchBasicCleaningStats,
     basicCleaningStats,
@@ -17,7 +16,7 @@ const BasicCleaningTab: React.FC = () => {
     fetchTypeMismatchStats,
     typeMismatchColumns,
     isTypeMismatchLoading,
-    clearSubsequentProgress
+    confirmAndInvalidateLaterSteps
   } = useDataPrepStore();
   
   const { ignoredColumns } = useEDAStore();
@@ -44,17 +43,10 @@ const BasicCleaningTab: React.FC = () => {
   const hasNoTypeMismatches = typeMismatchColumns.length === 0;
 
   const checkAndClearSubsequent = () => {
-    const currentIndex = PREP_TABS.findIndex(t => t.id === 'data_cleaning');
-    const stepsToReset = PREP_TABS.slice(currentIndex + 1).map(t => t.id);
-    const hasCompletedAhead = stepsToReset.some(id => completedSteps.includes(id));
-      
-    if (hasCompletedAhead) {
-      if (!window.confirm("Applying this cleaning action will reset your progress in all later steps. Are you sure?")) {
-        return false; // User cancelled
-      }
-      clearSubsequentProgress(stepsToReset);
-    }
-    return true;
+    return confirmAndInvalidateLaterSteps(
+      'data_cleaning',
+      'Applying this cleaning change will remove all accepted work in the later steps. Do you want to continue?'
+    );
   };
 
   const handleDropDuplicates = () => {
@@ -112,7 +104,7 @@ const BasicCleaningTab: React.FC = () => {
                 <CopyX size={20} />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-800">1. Duplicate Rows (Tekrarlayan Satırlar)</h3>
+                <h3 className="text-sm font-bold text-slate-800">1. Duplicate Rows</h3>
                 <p className="text-xs text-slate-500 mt-1 leading-relaxed max-w-2xl">
                   <strong>Educational Note:</strong> Exact duplicate rows can cause the model to overfit to specific patterns 
                   and artificially inflate performance metrics if split across train/test sets. They hold redundant information.
@@ -148,7 +140,7 @@ const BasicCleaningTab: React.FC = () => {
                 <Equal size={20} />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-800">2. Zero-Variance Columns (Sıfır Varyanslı Kolonlar)</h3>
+                <h3 className="text-sm font-bold text-slate-800">2. Zero-Variance Columns</h3>
                 <p className="text-xs text-slate-500 mt-1 leading-relaxed max-w-2xl">
                   <strong>Educational Note:</strong> Features with zero variance contain no discriminative information. 
                   If every patient has the exact same value, the ML model cannot use this feature to learn boundaries.
@@ -191,7 +183,7 @@ const BasicCleaningTab: React.FC = () => {
                 <Type size={20} />
               </div>
               <div className="flex-1">
-                <h3 className="text-sm font-bold text-slate-800">3. Data Type Mismatches (Veri Tipi Düzeltmeleri)</h3>
+                <h3 className="text-sm font-bold text-slate-800">3. Data Type Mismatches</h3>
                 <p className="text-xs text-slate-500 mt-1 leading-relaxed max-w-2xl">
                   <strong>Educational Note:</strong> Some numerical values are read as text due to formatting
                   (e.g., commas or currency symbols). They must be cast to numeric types before mathematical operations.
