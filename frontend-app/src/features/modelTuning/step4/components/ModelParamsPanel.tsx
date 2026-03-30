@@ -132,7 +132,8 @@ function toggleCandidateValue(expression: string, currentValue: unknown, candida
   const nextTokens = currentTokens.includes(candidate)
     ? currentTokens.filter((token) => token !== candidate)
     : [...currentTokens, candidate];
-  return nextTokens.length === 0 ? '' : nextTokens.join(', ');
+  const orderedTokens = orderCandidateValues(nextTokens);
+  return orderedTokens.length === 0 ? '' : orderedTokens.join(', ');
 }
 
 const GridSearchPanel: React.FC<{ model: ModelId }> = ({ model }) => {
@@ -152,25 +153,22 @@ const GridSearchPanel: React.FC<{ model: ModelId }> = ({ model }) => {
         </div>
         <button
           type="button"
+          aria-pressed={config.enabled}
           onClick={() => setSearchConfig(model, { enabled: !config.enabled })}
-          className={`inline-flex shrink-0 self-center items-center gap-3 rounded-full border px-3 py-2 text-xs font-bold shadow-sm transition-all ${
+          className={`inline-flex min-w-[172px] shrink-0 items-center justify-between rounded-full border px-3 py-2 text-xs font-bold shadow-sm transition-all ${
             config.enabled
-              ? 'border-indigo-200 bg-indigo-50 text-indigo-700'
-              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+              ? 'border-indigo-300 bg-indigo-50 text-indigo-700 hover:border-indigo-400'
+              : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
           }`}
         >
+          <span className="pr-3">{config.enabled ? 'Grid search on' : 'Grid search off'}</span>
           <span
-            className={`relative h-5 w-9 rounded-full transition-colors ${
-              config.enabled ? 'bg-indigo-500' : 'bg-slate-300'
+            className={`relative flex h-6 w-11 items-center rounded-full p-0.5 transition-colors ${
+              config.enabled ? 'bg-indigo-500 justify-end' : 'bg-slate-300 justify-start'
             }`}
           >
-            <span
-              className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
-                config.enabled ? 'translate-x-4' : 'translate-x-0.5'
-              }`}
-            />
+            <span className="block h-5 w-5 rounded-full bg-white shadow-sm transition-transform" />
           </span>
-          {config.enabled ? 'Grid search on' : 'Grid search off'}
         </button>
       </div>
 
