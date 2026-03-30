@@ -21,6 +21,7 @@ class SessionState:
     preprocessing_config: dict[str, Any] = field(default_factory=dict)
     preprocessing_result: dict[str, Any] = field(default_factory=dict)
     training_config: dict[str, Any] = field(default_factory=dict)
+    training_split_cache: dict[str, Any] = field(default_factory=dict)
     training_runs: dict[str, dict[str, Any]] = field(default_factory=dict)
     active_run_id: str | None = None
     evaluations: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -101,6 +102,7 @@ class SessionService:
         state.preprocessing_config = {}
         state.preprocessing_result = {}
         state.training_config = {}
+        state.training_split_cache = {}
         state.training_runs = {}
         state.active_run_id = None
         state.evaluations = {}
@@ -116,6 +118,7 @@ class SessionService:
         state.preprocessing_config = {}
         state.preprocessing_result = {}
         state.training_config = {}
+        state.training_split_cache = {}
         state.training_runs = {}
         state.active_run_id = None
         state.evaluations = {}

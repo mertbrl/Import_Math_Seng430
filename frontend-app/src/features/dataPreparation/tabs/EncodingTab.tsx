@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
+import { buildApiUrl } from '../../../config/apiConfig';
 import { Tag, CheckCircle2, ChevronRight, Settings2, Loader2, AlertCircle } from 'lucide-react';
 
 interface EncodingColumn {
@@ -9,8 +10,6 @@ interface EncodingColumn {
   sample_values: string[];
   recommendation: string;
 }
-
-const API_BASE = 'http://localhost:8000/api/v1';
 
 const ENCODING_LABELS: Record<string, string> = {
   onehot: 'One-Hot Encoding (drop first)',
@@ -34,7 +33,7 @@ const EncodingTab: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/encoding-stats`, {
+      const res = await fetch(buildApiUrl('/encoding-stats'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
+import { buildApiUrl } from '../../../config/apiConfig';
 import { Network, CheckCircle2, ChevronRight, Loader2, AlertCircle, AlertTriangle, Info } from 'lucide-react';
 
 interface VIFColumn {
@@ -9,8 +10,6 @@ interface VIFColumn {
   severity: string;
   flagged: boolean;
 }
-
-const API_BASE = 'http://localhost:8000/api/v1';
 
 const DimensionalityTab: React.FC = () => {
   const { toggleStepComplete, addPipelineAction, completedSteps, setActiveTab, confirmAndInvalidateLaterSteps } = useDataPrepStore();
@@ -30,7 +29,7 @@ const DimensionalityTab: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/dimensionality-stats`, {
+      const res = await fetch(buildApiUrl('/dimensionality-stats'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

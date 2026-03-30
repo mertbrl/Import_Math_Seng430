@@ -140,6 +140,8 @@ class TrainRequest(BaseModel):
     session_id: str = Field(default="demo-session")
     algorithm: str = Field(default="knn")
     parameters: dict[str, Any] = Field(default_factory=dict)
+    search_config: dict[str, Any] = Field(default_factory=dict)
+    pipeline_config: dict[str, Any] = Field(default_factory=dict)
 
 
 class EvaluationRequest(BaseModel):

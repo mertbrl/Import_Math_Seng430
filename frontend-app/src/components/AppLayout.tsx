@@ -4,9 +4,11 @@ import { HelpChatbotDrawer } from './HelpChatbotDrawer';
 import { useDomainStore } from '../store/useDomainStore';
 import { useEDAStore } from '../store/useEDAStore';
 import { useDataPrepStore } from '../store/useDataPrepStore';
+import { useModelStore } from '../store/useModelStore';
 import { domains } from '../config/domainConfig';
 import { Check } from 'lucide-react';
 import WarningModal from './common/WarningModal';
+import { cancelTrainingTasks } from '../services/pipelineApi';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -16,8 +18,8 @@ const STEPS = [
   { id: 1, name: 'Clinical Context', desc: 'Use case & goals' },
   { id: 2, name: 'Data Exploration', desc: 'Upload & understand' },
   { id: 3, name: 'Data Preparation', desc: 'Clean & split data' },
-  { id: 4, name: 'Model & Parameters', desc: 'Select & tune' },
-  { id: 5, name: 'Results', desc: 'Metrics & matrix' },
+  { id: 4, name: 'Model Queue', desc: 'Tune & send runs' },
+  { id: 5, name: 'Results', desc: 'Compare finished runs' },
   { id: 6, name: 'Explainability', desc: 'Why this prediction?' },
   { id: 7, name: 'Ethics & Bias', desc: 'Fairness check' },
 ];
@@ -26,6 +28,13 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const { selectedDomainId, setDomain, currentStep, setCurrentStep, schemaValid } = useDomainStore();
   const clearEDAConfig = useEDAStore((s) => s.clearConfig);
   const resetPrep = useDataPrepStore((s) => s.resetPrep);
+  const resetModelFlow = useModelStore((s) => s.resetAll);
+  const modelTasks = useModelStore((s) => s.tasks);
+  const modelResults = useModelStore((s) => s.results);
+  const hasModelResults = Object.keys(modelResults).length > 0;
+  const activeTrainingTaskIds = Object.values(modelTasks)
+    .filter((task) => ['queued', 'running', 'cancelling'].includes(task.status))
+    .map((task) => task.taskId);
 
   // Modal State
   const [modalConfig, setModalConfig] = React.useState<{
@@ -33,11 +42,15 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     title: string;
     message: string;
     onConfirm: () => void;
+    confirmText?: string;
+    cancelText?: string;
   }>({
     isOpen: false,
     title: '',
     message: '',
     onConfirm: () => {},
+    confirmText: undefined,
+    cancelText: undefined,
   });
 
   // Dynamic step state driven by currentStep from Zustand
@@ -46,6 +59,11 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     if (id === currentStep) return 'active';
     // Step 3 is unlockable when schemaValid is true
     if (id === 3 && schemaValid) return 'active';
+    
+    // Step 4 is optionally unlockable via the Next button, but clicking the stepper directly:
+      // we can allow it if the data prep store has 'preprocessing_review' completed
+    if (id === 4 && useDataPrepStore.getState().completedSteps.includes('preprocessing_review')) return 'active';
+    if (id === 5 && hasModelResults) return 'active';
     return 'locked';
   };
 
@@ -65,13 +83,50 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           if (targetStepId === 1) {
             clearEDAConfig();
             resetPrep();
+            resetModelFlow();
           } else if (targetStepId === 2) {
             resetPrep();
+            resetModelFlow();
+          } else if (targetStepId === 3) {
+            resetModelFlow();
           }
           
           setCurrentStep(targetStepId);
           closeModal();
-        }
+        },
+        confirmText: 'Yes, Erase Progress',
+        cancelText: 'Cancel',
+      });
+      return;
+    }
+
+    if (targetStepId === 5 && activeTrainingTaskIds.length > 0 && hasModelResults) {
+      setModalConfig({
+        isOpen: true,
+        title: 'Open Results Now?',
+        message: 'Some training runs are still in progress. If you continue, the remaining queue will be stopped and Step 5 will open with the finished results you already have.',
+        onConfirm: () => {
+          void (async () => {
+            await cancelTrainingTasks({ session_id: 'demo-session', task_ids: activeTrainingTaskIds });
+            const tasks = useModelStore.getState().tasks;
+            const setTask = useModelStore.getState().setTask;
+            activeTrainingTaskIds.forEach((taskId) => {
+              const task = tasks[taskId];
+              if (!task) {
+                return;
+              }
+              setTask(taskId, {
+                taskId,
+                model: task.model,
+                status: task.status === 'queued' ? 'cancelled' : 'cancelling',
+              });
+            });
+            setCurrentStep(targetStepId);
+            closeModal();
+          })();
+        },
+        confirmText: 'Stop And Open Results',
+        cancelText: 'Keep Training',
       });
       return;
     }
@@ -175,8 +230,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         message={modalConfig.message}
         onConfirm={modalConfig.onConfirm}
         onCancel={closeModal}
-        confirmText="Yes, Erase Progress"
-        cancelText="Cancel"
+        confirmText={modalConfig.confirmText}
+        cancelText={modalConfig.cancelText}
       />
     </div>
   );

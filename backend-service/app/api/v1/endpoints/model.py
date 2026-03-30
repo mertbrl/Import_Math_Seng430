@@ -4,33 +4,22 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from app.services.pipeline_service import pipeline_service
-from app.services.train_task_service import train_task_service
+from app.services.ddata_model import train_task_service
+from app.services.model_training import MODEL_PARAM_BOUNDS
 
 router = APIRouter(tags=["models"])
-
-MODEL_PARAM_BOUNDS: dict[str, dict[str, Any]] = {
-    "knn": {"k": {"type": "int", "min": 1, "max": 25, "default": 5}},
-    "svm": {
-        "kernel": {"type": "enum", "values": ["linear", "rbf", "poly"], "default": "rbf"},
-        "c": {"type": "float", "min": 0.01, "max": 100.0, "default": 1.0},
-    },
-    "dt": {"max_depth": {"type": "int", "min": 1, "max": 15, "default": 5}},
-    "rf": {
-        "n_estimators": {"type": "int", "min": 10, "max": 300, "default": 100},
-        "max_depth": {"type": "int", "min": 1, "max": 20, "default": 10},
-    },
-    "lr": {
-        "c": {"type": "float", "min": 0.01, "max": 100.0, "default": 1.0},
-        "max_iter": {"type": "int", "min": 100, "max": 2000, "default": 1000},
-    },
-    "nb": {"var_smoothing": {"type": "float", "min": 1e-12, "max": 1e-6, "default": 1e-9}},
-}
-
 
 class TrainStartRequest(BaseModel):
     session_id: str = Field(default="demo-session")
     model: str = Field(default="knn")
     parameters: dict[str, Any] = Field(default_factory=dict)
+    search_config: dict[str, Any] = Field(default_factory=dict)
+    pipeline_config: dict[str, Any] = Field(default_factory=dict)
+
+
+class TrainCancelRequest(BaseModel):
+    session_id: str = Field(default="demo-session")
+    task_ids: list[str] = Field(default_factory=list)
 
 
 def _model_catalog_response() -> dict[str, list[dict[str, Any]]]:
@@ -53,6 +42,8 @@ def start_training(payload: TrainStartRequest) -> dict[str, Any]:
         session_id=payload.session_id,
         algorithm=payload.model,
         parameters=payload.parameters,
+        search_config=payload.search_config,
+        pipeline_config=payload.pipeline_config,
     )
     return {
         "task_id": task.task_id,
@@ -72,9 +63,18 @@ def training_status(task_id: str) -> dict[str, Any]:
         "created_at": task.created_at,
         "started_at": task.started_at,
         "finished_at": task.finished_at,
+        "cancelled_at": task.cancelled_at,
     }
     if task.status == "completed":
         response["result"] = task.result
     if task.status == "failed":
         response["error"] = task.error
     return response
+
+
+@router.post("/models/train/cancel")
+def cancel_training(payload: TrainCancelRequest) -> dict[str, Any]:
+    return train_task_service.cancel_session(
+        session_id=payload.session_id,
+        task_ids=payload.task_ids,
+    )

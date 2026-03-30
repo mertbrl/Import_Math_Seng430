@@ -25,6 +25,7 @@ export interface PipelineConfig {
     val: number;
     test: number;
     stratify: boolean;
+    force_resplit?: boolean;
     target?: string;
   };
   imputation: {
@@ -114,6 +115,7 @@ export function buildPipelineConfig(sessionId = 'demo-session'): PipelineConfig 
       val: splitAction?.val ?? 0,
       test: splitAction?.test ?? 0.2,
       stratify: Boolean(splitAction?.stratify),
+      force_resplit: false,
       target: splitAction?.target ?? edaState.targetColumn ?? undefined,
     },
     imputation: {

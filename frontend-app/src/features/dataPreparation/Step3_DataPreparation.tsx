@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { CheckCircle2, ChevronRight, Download, Loader2 } from 'lucide-react';
 import { useDataPrepStore } from '../../store/useDataPrepStore';
+import { useDomainStore } from '../../store/useDomainStore';
 import { buildPipelineConfig } from '../../store/pipelineConfig';
 import { downloadPreprocessedCSV } from '../../api/dataPrepAPI';
 import { PREP_TABS } from './DataPrepTabsConfig';
@@ -18,6 +19,7 @@ import ImbalanceTab from './tabs/ImbalanceTab';
 import PreprocessingReviewTab from './tabs/PreprocessingReviewTab';
 
 export const Step3_DataPreparation: React.FC = () => {
+  const setCurrentStep = useDomainStore((s) => s.setCurrentStep);
   const { activeTabId, completedSteps, setActiveTab } = useDataPrepStore();
 
   const [isDownloading, setIsDownloading] = useState(false);
@@ -167,17 +169,25 @@ export const Step3_DataPreparation: React.FC = () => {
               )}
             </div>
           </div>
-          <button
-            onClick={handleDownload}
-            disabled={isDownloading}
-            className="w-full justify-center lg:w-auto flex items-center gap-2 bg-white text-emerald-700 px-6 py-3 rounded-xl font-bold hover:bg-emerald-50 hover:shadow-md transition-all active:scale-[0.98] cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
-          >
-            {isDownloading ? (
-              <><Loader2 size={18} className="animate-spin" /> Preparing CSV...</>
-            ) : (
-              <><Download size={18} /> Download Preprocessed CSV</>
-            )}
-          </button>
+          <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto mt-4 lg:mt-0">
+            <button
+              onClick={handleDownload}
+              disabled={isDownloading}
+              className="w-full justify-center lg:w-auto flex items-center gap-2 bg-white text-emerald-700 px-6 py-3 rounded-xl font-bold hover:bg-emerald-50 hover:shadow-md transition-all active:scale-[0.98] cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              {isDownloading ? (
+                <><Loader2 size={18} className="animate-spin" /> Preparing CSV...</>
+              ) : (
+                <><Download size={18} /> Download CSV</>
+              )}
+            </button>
+            <button
+              onClick={() => setCurrentStep(4)}
+              className="w-full justify-center lg:w-auto flex items-center gap-2 bg-emerald-700 text-white px-6 py-3 rounded-xl font-bold hover:bg-emerald-800 hover:shadow-md transition-all active:scale-[0.98] cursor-pointer"
+            >
+              Proceed to Tuning <ChevronRight size={18} />
+            </button>
+          </div>
         </div>
       )}
 

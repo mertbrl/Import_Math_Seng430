@@ -4,7 +4,8 @@ import SmartEDA from './SmartEDA';
 import { useDomainStore } from '../../store/useDomainStore';
 import { useEDAStore } from '../../store/useEDAStore';
 import { domains } from '../../config/domainConfig';
-import { exploreDataset } from '../../services/pipelineApi';
+import { BACKEND_URL_HINT } from '../../config/apiConfig';
+import { checkBackendHealth, exploreDataset } from '../../services/pipelineApi';
 import { Loader2, AlertCircle } from 'lucide-react';
 import ColumnConfigurator from './ColumnConfigurator';
 import PreAnalysisPreview from './PreAnalysisPreview';
@@ -27,9 +28,12 @@ export const Step2_DataExploration: React.FC = () => {
       const data = await exploreDataset(file, ignoredColumns);
       setEdaData(data);
     } catch (err: any) {
+      const health = await checkBackendHealth();
       const msg =
         err?.response?.data?.error ||
-        err?.message ||
+        (!health.reachable
+          ? `Could not reach the FastAPI backend at ${BACKEND_URL_HINT}. Start the backend server and try again.`
+          : err?.message) ||
         'Failed to analyse dataset. Is the backend running?';
       setError(msg);
     } finally {
@@ -108,7 +112,7 @@ export const Step2_DataExploration: React.FC = () => {
               <p className="text-xs text-red-500 mt-2">
                 Ensure the FastAPI backend is running at{' '}
                 <code className="bg-red-100 px-1.5 py-0.5 rounded text-red-800 font-mono">
-                  http://localhost:8000
+                  {BACKEND_URL_HINT}
                 </code>
               </p>
             </div>

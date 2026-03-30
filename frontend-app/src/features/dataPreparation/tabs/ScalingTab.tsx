@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
+import { buildApiUrl } from '../../../config/apiConfig';
 import { BarChart2, CheckCircle2, ChevronRight, Settings2, Loader2, AlertCircle, Info } from 'lucide-react';
 
 interface ScalingColumn {
@@ -12,8 +13,6 @@ interface ScalingColumn {
   has_outliers: boolean;
   recommendation: string;
 }
-
-const API_BASE = 'http://localhost:8000/api/v1';
 
 const ScalingTab: React.FC = () => {
   const { toggleStepComplete, addPipelineAction, completedSteps, setActiveTab, confirmAndInvalidateLaterSteps } = useDataPrepStore();
@@ -29,7 +28,7 @@ const ScalingTab: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/scaling-stats`, {
+      const res = await fetch(buildApiUrl('/scaling-stats'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: 'demo-session', excluded_columns: ignoredColumns ?? [] }),

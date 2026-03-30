@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
+import { buildApiUrl } from '../../../config/apiConfig';
 import { CheckCircle2, ChevronRight, Settings2, Loader2, AlertCircle, TrendingUp } from 'lucide-react';
 
 interface TransformColumn {
@@ -11,8 +12,6 @@ interface TransformColumn {
   needs_transform: boolean;
   recommendation: string | null;
 }
-
-const API_BASE = 'http://localhost:8000/api/v1';
 
 const TransformationTab: React.FC = () => {
   const { toggleStepComplete, addPipelineAction, completedSteps, setActiveTab, confirmAndInvalidateLaterSteps } = useDataPrepStore();
@@ -28,7 +27,7 @@ const TransformationTab: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/transformation-stats`, {
+      const res = await fetch(buildApiUrl('/transformation-stats'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: 'demo-session', excluded_columns: ignoredColumns ?? [] }),

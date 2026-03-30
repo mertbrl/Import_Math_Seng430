@@ -1,7 +1,6 @@
 import axios from 'axios';
 import api from './api';
-
-const BACKEND_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+import { buildApiUrl, buildBackendUrl } from '../config/apiConfig';
 
 export async function setContext(payload) {
   const response = await api.post("/context", payload);
@@ -27,11 +26,31 @@ export const exploreDataset = async (file, ignoredColumns = []) => {
     formData.append('ignored_columns', JSON.stringify(ignoredColumns));
   }
 
-  const response = await axios.post(`${BACKEND_URL}/explore`, formData, {
+  const response = await axios.post(buildApiUrl('/explore'), formData, {
     headers: { "Content-Type": "multipart/form-data" },
     timeout: 30000, // EDA can take longer on large files
   });
   return response.data;
+}
+
+export async function checkBackendHealth(timeoutMs = 4000) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(buildBackendUrl('/healthz'), { method: 'GET', signal: controller.signal });
+    return {
+      reachable: response.ok,
+      status: response.status,
+    };
+  } catch (error) {
+    return {
+      reachable: false,
+      status: null,
+      error,
+    };
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 }
 
 export async function preprocessData(payload) {
@@ -52,6 +71,11 @@ export async function validateMapping(sessionId) {
 
 export async function trainModel(payload) {
   const response = await api.post("/models/train/start", payload);
+  return response.data;
+}
+
+export async function cancelTrainingTasks(payload) {
+  const response = await api.post("/models/train/cancel", payload);
   return response.data;
 }
 

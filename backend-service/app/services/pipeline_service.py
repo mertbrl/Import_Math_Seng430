@@ -304,6 +304,7 @@ class PipelineService:
             "dataset_version": state.dataset_version,
             "metrics": result["metrics"],
             "confusion_matrix": result["confusion_matrix"],
+            "roc_curve": result.get("roc_curve"),
         }
         state.evaluations[resolved_run_id] = response
         if state.active_run_id == resolved_run_id:
@@ -453,7 +454,11 @@ class PipelineService:
         state = session_service.get(payload.session_id)
         run_id = self._find_run_id(payload.session_id, payload.model_id)
         result = self.get_evaluation(payload.session_id, run_id or state.active_run_id or "")
-        return {"metrics": result["metrics"], "confusion_matrix": result["confusion_matrix"]}
+        return {
+            "metrics": result["metrics"],
+            "confusion_matrix": result["confusion_matrix"],
+            "roc_curve": result.get("roc_curve"),
+        }
 
     def explain(self, payload: ExplainabilityRequest) -> dict[str, object]:
         state = session_service.get(payload.session_id)

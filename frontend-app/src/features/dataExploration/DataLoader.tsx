@@ -2,6 +2,8 @@ import React, { useState, useCallback, useRef } from 'react';
 import Papa from 'papaparse';
 import { useDomainStore } from '../../store/useDomainStore';
 import { useEDAStore } from '../../store/useEDAStore';
+import { buildApiUrl } from '../../config/apiConfig';
+import { checkBackendHealth } from '../../services/pipelineApi';
 import {
   Upload,
   FileSpreadsheet,
@@ -85,13 +87,18 @@ const DataLoader: React.FC<DataLoaderProps> = ({ onFileLoaded, isLoading = false
     setLoadedFile('');
     try {
       const fileName = `${selectedDomainId}.csv`;
-      const res = await fetch(`http://localhost:8000/api/v1/datasets/${fileName}`);
+      const res = await fetch(buildApiUrl(`/datasets/${fileName}`));
       if (!res.ok) throw new Error(`Failed to fetch dataset from backend (${res.status})`);
       const blob = await res.blob();
       const file = new File([blob], fileName, { type: 'text/csv' });
       deliverFile(file);
     } catch (err: any) {
-      setError(err.message || 'Failed to load default dataset.');
+      const health = await checkBackendHealth();
+      setError(
+        health.reachable
+          ? err.message || 'Failed to load default dataset.'
+          : 'Could not reach the FastAPI backend. Start the backend at http://localhost:5001 and try again.'
+      );
     } finally {
       setFetchingDefault(false);
     }

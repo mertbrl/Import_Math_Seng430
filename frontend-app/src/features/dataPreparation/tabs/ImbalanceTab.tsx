@@ -3,6 +3,7 @@ import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
 import { buildPipelineConfig } from '../../../store/pipelineConfig';
 import { PREP_TABS } from '../DataPrepTabsConfig';
+import { buildApiUrl } from '../../../config/apiConfig';
 import { Shuffle, CheckCircle2, ChevronRight, Loader2, AlertCircle, ShieldAlert, Info, Sparkles, AlertTriangle } from 'lucide-react';
 import WarningModal from '../../../components/common/WarningModal';
 
@@ -29,8 +30,6 @@ interface ImbalanceData {
   target_column?: string;
   error?: string;
 }
-
-const API_BASE = 'http://localhost:8000/api/v1';
 
 const SEVERITY_STYLES: Record<string, string> = {
   balanced: 'border-emerald-200 bg-emerald-50 text-emerald-900',
@@ -83,7 +82,7 @@ const ImbalanceTab: React.FC = () => {
     setError(null);
     try {
       const pipelineConfig = buildPipelineConfig('demo-session');
-      const res = await fetch(`${API_BASE}/imbalance-stats`, {
+      const res = await fetch(buildApiUrl('/imbalance-stats'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
