@@ -31,21 +31,25 @@ interface DataPrepState {
 
   // Step 01 – Basic Cleaning (duplicates + zero-variance)
   basicCleaningStats: BasicCleaningStats | null;
+  basicCleaningCacheKey: string | null;
   isStatsLoading: boolean;
   statsError: string | null;
 
   // Step 01b – Type Casting (dynamic mismatch detection)
   typeMismatchColumns: TypeMismatchColumn[];
+  typeMismatchCacheKey: string | null;
   isTypeMismatchLoading: boolean;
   typeMismatchError: string | null;
 
   // Step 04 - Missing Value Handling (Imputation)
   missingColumns: MissingColumnStat[];
+  missingCacheKey: string | null;
   isMissingLoading: boolean;
   missingError: string | null;
 
   // Step 05 - Outlier Handling
   outlierColumns: OutlierColumnStat[];
+  outlierCacheKey: string | null;
   isOutlierLoading: boolean;
   outlierError: string | null;
   outlierStrategies: Record<string, OutlierStrategyPlan>;
@@ -53,6 +57,7 @@ interface DataPrepState {
 
   // Step 09 - Feature Selection (Before SMOTE)
   featureImportances: FeatureImportanceStat[];
+  featureImportancesCacheKey: string | null;
   isFeatureImportancesLoading: boolean;
   featureImportancesError: string | null;
   featureSelection: { method: string; top_k?: number; selected_features?: string[] } | null;
@@ -82,18 +87,22 @@ export const useDataPrepStore = create<DataPrepState>((set, get) => ({
   previewError: null,
 
   basicCleaningStats: null,
+  basicCleaningCacheKey: null,
   isStatsLoading: false,
   statsError: null,
 
   typeMismatchColumns: [],
+  typeMismatchCacheKey: null,
   isTypeMismatchLoading: false,
   typeMismatchError: null,
 
   missingColumns: [],
+  missingCacheKey: null,
   isMissingLoading: false,
   missingError: null,
 
   outlierColumns: [],
+  outlierCacheKey: null,
   isOutlierLoading: false,
   outlierError: null,
   outlierStrategies: {},
@@ -110,6 +119,7 @@ export const useDataPrepStore = create<DataPrepState>((set, get) => ({
   })),
 
   featureImportances: [],
+  featureImportancesCacheKey: null,
   isFeatureImportancesLoading: false,
   featureImportancesError: null,
   featureSelection: null,
@@ -151,14 +161,17 @@ export const useDataPrepStore = create<DataPrepState>((set, get) => ({
 
     if (invalidStepIds.includes('imputation')) {
       resetState.missingColumns = [];
+      resetState.missingCacheKey = null;
     }
     if (invalidStepIds.includes('outliers')) {
       resetState.outlierColumns = [];
+      resetState.outlierCacheKey = null;
       resetState.outlierStrategies = {};
     }
     if (invalidStepIds.includes('feature_selection')) {
       resetState.featureSelection = null;
       resetState.featureImportances = [];
+      resetState.featureImportancesCacheKey = null;
     }
 
     return resetState;
@@ -196,50 +209,87 @@ export const useDataPrepStore = create<DataPrepState>((set, get) => ({
 
   // ── Now delegates to dataPrepAPI.ts ─────────────────────────────────────
   fetchBasicCleaningStats: async (sessionId, excludedColumns) => {
+    const cacheKey = JSON.stringify([sessionId, [...excludedColumns].sort()]);
+    const current = get();
+    if (current.basicCleaningCacheKey === cacheKey && current.basicCleaningStats) {
+      return;
+    }
     set({ isStatsLoading: true, statsError: null });
     try {
       const data = await apiFetchBasicCleaningStats(sessionId, excludedColumns);
-      set({ basicCleaningStats: data, isStatsLoading: false });
+      set({ basicCleaningStats: data, basicCleaningCacheKey: cacheKey, isStatsLoading: false });
     } catch (err: any) {
       set({ statsError: err.message, isStatsLoading: false });
     }
   },
 
   fetchTypeMismatchStats: async (sessionId, excludedColumns) => {
+    const cacheKey = JSON.stringify([sessionId, [...excludedColumns].sort()]);
+    const current = get();
+    if (current.typeMismatchCacheKey === cacheKey && current.typeMismatchError === null) {
+      return;
+    }
     set({ isTypeMismatchLoading: true, typeMismatchError: null });
     try {
       const data = await apiFetchTypeMismatchStats(sessionId, excludedColumns);
-      set({ typeMismatchColumns: data.mismatched_columns, isTypeMismatchLoading: false });
+      set({
+        typeMismatchColumns: data.mismatched_columns,
+        typeMismatchCacheKey: cacheKey,
+        isTypeMismatchLoading: false,
+      });
     } catch (err: any) {
       set({ typeMismatchError: err.message, isTypeMismatchLoading: false });
     }
   },
 
   fetchMissingStats: async (sessionId, excludedColumns) => {
+    const cacheKey = JSON.stringify([sessionId, [...excludedColumns].sort()]);
+    const current = get();
+    if (current.missingCacheKey === cacheKey && current.missingError === null) {
+      return;
+    }
     set({ isMissingLoading: true, missingError: null });
     try {
       const data = await apiFetchMissingStats(sessionId, excludedColumns);
-      set({ missingColumns: data, isMissingLoading: false });
+      set({ missingColumns: data, missingCacheKey: cacheKey, isMissingLoading: false });
     } catch (err: any) {
       set({ missingError: err.message, isMissingLoading: false });
     }
   },
 
   fetchOutlierStats: async (sessionId, excludedColumns) => {
+    const cacheKey = JSON.stringify([sessionId, [...excludedColumns].sort()]);
+    const current = get();
+    if (current.outlierCacheKey === cacheKey && current.outlierError === null) {
+      return;
+    }
     set({ isOutlierLoading: true, outlierError: null });
     try {
       const data = await apiFetchOutlierStats(sessionId, excludedColumns);
-      set({ outlierColumns: data, isOutlierLoading: false });
+      set({ outlierColumns: data, outlierCacheKey: cacheKey, isOutlierLoading: false });
     } catch (err: any) {
       set({ outlierError: err.message, isOutlierLoading: false });
     }
   },
 
   fetchFeatureImportances: async (pipelineConfig) => {
+    const cacheKey = JSON.stringify({
+      ...pipelineConfig,
+      feature_selection: undefined,
+    });
+    const current = get();
+    if (current.featureImportancesCacheKey === cacheKey && current.featureImportances.length > 0) {
+      return;
+    }
+
     set({ isFeatureImportancesLoading: true, featureImportancesError: null });
     try {
       const data = await apiFetchFeatureImportances(pipelineConfig);
-      set({ featureImportances: data, isFeatureImportancesLoading: false });
+      set({
+        featureImportances: data,
+        featureImportancesCacheKey: cacheKey,
+        isFeatureImportancesLoading: false,
+      });
     } catch (err: any) {
       set({ featureImportancesError: err.message, isFeatureImportancesLoading: false });
     }
@@ -253,19 +303,24 @@ export const useDataPrepStore = create<DataPrepState>((set, get) => ({
     previewShape: null,
     previewError: null,
     basicCleaningStats: null,
+    basicCleaningCacheKey: null,
     isStatsLoading: false,
     statsError: null,
     typeMismatchColumns: [],
+    typeMismatchCacheKey: null,
     isTypeMismatchLoading: false,
     typeMismatchError: null,
     missingColumns: [],
+    missingCacheKey: null,
     isMissingLoading: false,
     missingError: null,
     outlierColumns: [],
+    outlierCacheKey: null,
     isOutlierLoading: false,
     outlierError: null,
     outlierStrategies: {},
     featureImportances: [],
+    featureImportancesCacheKey: null,
     isFeatureImportancesLoading: false,
     featureImportancesError: null,
     featureSelection: null,

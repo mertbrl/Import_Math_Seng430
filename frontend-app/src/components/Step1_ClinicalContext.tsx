@@ -4,7 +4,7 @@ import { domains } from '../config/domainConfig';
 
 export const Step1_ClinicalContext: React.FC = () => {
   const selectedDomainId = useDomainStore((state) => state.selectedDomainId);
-  const setCurrentStep = useDomainStore((state) => state.setCurrentStep);
+  const confirmStep1 = useDomainStore((state) => state.confirmStep1);
   const domain = domains.find((d) => d.id === selectedDomainId) || domains[0];
 
   return (
@@ -31,7 +31,7 @@ export const Step1_ClinicalContext: React.FC = () => {
             <span>⏱</span> Estimated Time: 3 mins
           </div>
           <button 
-            onClick={() => setCurrentStep(2)}
+            onClick={confirmStep1}
             className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-6 py-2.5 rounded-xl transition-all shadow-sm hover:shadow-md active:scale-[0.98] w-full md:w-auto"
           >            Proceed to Data Exploration →
           </button>

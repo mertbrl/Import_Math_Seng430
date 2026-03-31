@@ -82,9 +82,8 @@ def calculate_type_mismatch_stats(
     Load the immutable dataset, apply the exclusion mask, and run
     `detect_type_mismatches` on the working subset.
     """
-    df = load_dataframe(session_id)
-
     try:
+        df = load_dataframe(session_id)
         existing_excludes = [col for col in excluded_columns if col in df.columns]
         df_working = df.drop(columns=existing_excludes) if existing_excludes else df.copy()
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
+import { useDomainStore } from '../../../store/useDomainStore';
 import { buildApiUrl } from '../../../config/apiConfig';
 import { Network, CheckCircle2, ChevronRight, Loader2, AlertCircle, AlertTriangle, Info } from 'lucide-react';
 
@@ -14,6 +15,7 @@ interface VIFColumn {
 const DimensionalityTab: React.FC = () => {
   const { toggleStepComplete, addPipelineAction, completedSteps, setActiveTab, confirmAndInvalidateLaterSteps } = useDataPrepStore();
   const ignoredColumns = useEDAStore(s => s.ignoredColumns);
+  const sessionId = useDomainStore((s) => s.sessionId);
   const isComplete = completedSteps.includes('dimensionality_reduction');
 
   const [columns, setColumns] = useState<VIFColumn[]>([]);
@@ -33,7 +35,7 @@ const DimensionalityTab: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          session_id: 'demo-session',
+          session_id: sessionId,
           excluded_columns: ignoredColumns ?? [],
           protected_columns: protectedFeatures,
         }),
@@ -48,7 +50,7 @@ const DimensionalityTab: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [ignoredColumns, protectedFeatures]);
+  }, [ignoredColumns, protectedFeatures, sessionId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 

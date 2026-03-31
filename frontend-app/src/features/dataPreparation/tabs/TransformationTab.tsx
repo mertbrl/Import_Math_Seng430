@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
+import { useDomainStore } from '../../../store/useDomainStore';
 import { buildApiUrl } from '../../../config/apiConfig';
 import { CheckCircle2, ChevronRight, Settings2, Loader2, AlertCircle, TrendingUp } from 'lucide-react';
 
@@ -16,6 +17,7 @@ interface TransformColumn {
 const TransformationTab: React.FC = () => {
   const { toggleStepComplete, addPipelineAction, completedSteps, setActiveTab, confirmAndInvalidateLaterSteps } = useDataPrepStore();
   const ignoredColumns = useEDAStore(s => s.ignoredColumns);
+  const sessionId = useDomainStore((s) => s.sessionId);
   const isComplete = completedSteps.includes('transformation');
 
   const [columns, setColumns] = useState<TransformColumn[]>([]);
@@ -30,7 +32,7 @@ const TransformationTab: React.FC = () => {
       const res = await fetch(buildApiUrl('/transformation-stats'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: 'demo-session', excluded_columns: ignoredColumns ?? [] }),
+        body: JSON.stringify({ session_id: sessionId, excluded_columns: ignoredColumns ?? [] }),
       });
       const data = await res.json();
       setColumns(data.columns ?? []);
@@ -45,7 +47,7 @@ const TransformationTab: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [ignoredColumns]);
+  }, [ignoredColumns, sessionId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 

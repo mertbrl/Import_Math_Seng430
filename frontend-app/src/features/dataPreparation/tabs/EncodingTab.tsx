@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
+import { useDomainStore } from '../../../store/useDomainStore';
 import { buildApiUrl } from '../../../config/apiConfig';
 import { Tag, CheckCircle2, ChevronRight, Settings2, Loader2, AlertCircle } from 'lucide-react';
 
@@ -22,6 +23,7 @@ const EncodingTab: React.FC = () => {
   const { toggleStepComplete, addPipelineAction, completedSteps, setActiveTab, confirmAndInvalidateLaterSteps } = useDataPrepStore();
   const ignoredColumns = useEDAStore(s => s.ignoredColumns);
   const targetColumn = useEDAStore(s => s.targetColumn);
+  const sessionId = useDomainStore((s) => s.sessionId);
   const isComplete = completedSteps.includes('encoding');
 
   const [columns, setColumns] = useState<EncodingColumn[]>([]);
@@ -37,7 +39,7 @@ const EncodingTab: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          session_id: 'demo-session',
+          session_id: sessionId,
           excluded_columns: ignoredColumns ?? [],
           target_column: targetColumn || undefined,
         }),
@@ -53,7 +55,7 @@ const EncodingTab: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [ignoredColumns, targetColumn]);
+  }, [ignoredColumns, targetColumn, sessionId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 

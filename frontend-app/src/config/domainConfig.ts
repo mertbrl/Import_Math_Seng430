@@ -91,10 +91,10 @@ export const domains: DomainConfig[] = [
   {
     id: "haematology-anaemia",
     domainName: "Haematology — Anaemia",
-    clinicalQuestion: "Type of anaemia from full blood count results",
+    clinicalQuestion: "Anaemia status from full blood count results",
     dataSource: "Kaggle Anaemia Classification Dataset",
-    targetVariable: "anemia_type (multi-class)",
-    whyThisMatters: "Treating B12-deficiency with iron supplements is medically futile. Multi-class classification automates precise anemia-type diagnoses from standard blood draws, ensuring the right nutrient replacement."
+    targetVariable: "Result (0/1)",
+    whyThisMatters: "Even a simple early anaemia screening model can flag patients who need confirmatory workup sooner, helping clinicians react before fatigue, hypoxia, or other downstream complications worsen."
   },
   {
     id: "dermatology-skin-lesion",
@@ -150,7 +150,7 @@ export const domains: DomainConfig[] = [
     domainName: "Thyroid / Endocrinology",
     clinicalQuestion: "Thyroid function classification",
     dataSource: "UCI Thyroid Disease Dataset",
-    targetVariable: "class (3 types)",
+    targetVariable: "target",
     whyThisMatters: "Hyper- and hypothyroidism present with confusing, overlapping systemic symptoms. Classifying precise endocrine dysfunction accelerates the timeline to establish stable hormonal regulation."
   },
   {

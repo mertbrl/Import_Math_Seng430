@@ -17,9 +17,10 @@ export async function exploreData(payload) {
  * @param {File} file
  * @param {string[]} ignoredColumns Columns tagged as ID or Metadata to be excluded from correlations
  */
-export const exploreDataset = async (file, ignoredColumns = []) => {
+export const exploreDataset = async (file, ignoredColumns = [], sessionId = 'demo-session') => {
   const formData = new FormData();
   formData.append('file', file);
+  formData.append('session_id', sessionId);
 
   // Append ignored columns as JSON list
   if (ignoredColumns.length > 0) {
@@ -77,6 +78,22 @@ export async function trainModel(payload) {
 export async function cancelTrainingTasks(payload) {
   const response = await api.post("/models/train/cancel", payload);
   return response.data;
+}
+
+export async function deleteSession(sessionId) {
+  if (!sessionId) {
+    return null;
+  }
+
+  try {
+    const response = await api.delete(`/sessions/${sessionId}`);
+    return response.data;
+  } catch (error) {
+    if (error?.response?.status === 404) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 export async function evaluateModel(payload) {

@@ -20,6 +20,7 @@ import PreprocessingReviewTab from './tabs/PreprocessingReviewTab';
 
 export const Step3_DataPreparation: React.FC = () => {
   const setCurrentStep = useDomainStore((s) => s.setCurrentStep);
+  const sessionId = useDomainStore((s) => s.sessionId);
   const { activeTabId, completedSteps, setActiveTab } = useDataPrepStore();
 
   const [isDownloading, setIsDownloading] = useState(false);
@@ -29,7 +30,7 @@ export const Step3_DataPreparation: React.FC = () => {
     setIsDownloading(true);
     setDownloadError(null);
     try {
-      const pipelineConfig = buildPipelineConfig('demo-session');
+      const pipelineConfig = buildPipelineConfig(sessionId);
       await downloadPreprocessedCSV(pipelineConfig);
     } catch (e: any) {
       setDownloadError(e.message ?? 'Download failed');

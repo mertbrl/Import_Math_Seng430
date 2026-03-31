@@ -1,5 +1,6 @@
 import { useEDAStore } from './useEDAStore';
 import { useDataPrepStore } from './useDataPrepStore';
+import { getActiveSessionId } from './useDomainStore';
 
 export interface PipelineConfig {
   session_id: string;
@@ -73,7 +74,7 @@ export function getEffectiveExcludedColumns(
   return ignoredColumns.filter((column) => column && column !== targetColumn);
 }
 
-export function buildPipelineConfig(sessionId = 'demo-session'): PipelineConfig {
+export function buildPipelineConfig(sessionId = getActiveSessionId()): PipelineConfig {
   const edaState = useEDAStore.getState();
   const prepState = useDataPrepStore.getState();
   const actionMap = new Map(

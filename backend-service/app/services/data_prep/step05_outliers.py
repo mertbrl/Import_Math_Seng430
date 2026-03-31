@@ -106,16 +106,16 @@ def detect_distribution_and_outliers(series: pd.Series) -> dict[str, Any]:
         and normality_p >= 0.05
     )
 
-    outlier_idx = pd.Series(False, index=clean_series.index)
     total_len = len(clean_series)
+    outlier_count = 0
     
     if modality in {"Bimodal", "Multimodal"}:
         distribution = modality
         recommendation = "Isolation Forest"
         try:
-            iso = IsolationForest(contamination=0.05, random_state=42)
+            iso = IsolationForest(contamination=0.05, random_state=42, n_jobs=-1)
             preds = iso.fit_predict(clean_series.values.reshape(-1, 1))
-            outlier_idx.iloc[:] = (preds == -1)
+            outlier_count = int((preds == -1).sum())
         except Exception:
             pass
 
@@ -126,7 +126,7 @@ def detect_distribution_and_outliers(series: pd.Series) -> dict[str, Any]:
         std = clean_series.std()
         if std > 0:
             z_scores = (clean_series - mean) / std
-            outlier_idx = abs(z_scores) >= 3
+            outlier_count = int((abs(z_scores) >= 3).sum())
 
     else:
         distribution = "Highly Skewed" if abs_skew >= 0.5 else "Non-Gaussian"
@@ -136,9 +136,7 @@ def detect_distribution_and_outliers(series: pd.Series) -> dict[str, Any]:
         iqr = q3 - q1
         lower_bound = q1 - 1.5 * iqr
         upper_bound = q3 + 1.5 * iqr
-        outlier_idx = (clean_series < lower_bound) | (clean_series > upper_bound)
-
-    outlier_count = int(outlier_idx.sum())
+        outlier_count = int(((clean_series < lower_bound) | (clean_series > upper_bound)).sum())
     outlier_percentage = round((outlier_count / total_len) * 100, 2) if total_len > 0 else 0.0
     recommended_treatment = _recommended_treatment(distribution, outlier_percentage)
     suggestion_reason = _suggestion_reason(distribution, recommendation, recommended_treatment)
@@ -170,10 +168,6 @@ def calculate_outlier_statistics(session_id: str, excluded_columns: list[str]) -
     
     for col in eligible_cols:
         series = df[col]
-        
-        # Guard against fully null columns
-        if series.isna().all():
-            continue
             
         stats = detect_distribution_and_outliers(series)
         
@@ -193,5 +187,5 @@ def calculate_outlier_statistics(session_id: str, excluded_columns: list[str]) -
             
     # Sort with highest amount of outliers first
     results.sort(key=lambda x: x["outlier_percentage"], reverse=True)
-    
+
     return results

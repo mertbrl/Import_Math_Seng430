@@ -11,7 +11,6 @@ import ModelParamsPanel from './components/ModelParamsPanel';
 import TrainingQueuePanel from './components/TrainingQueuePanel';
 import { buildResolvedSearchConfig } from './searchSpace';
 
-const SESSION_ID = 'demo-session';
 const ACTIVE_TASK_STATUSES: TaskStatus[] = ['queued', 'running', 'cancelling'];
 
 export const Step4ModelTraining: React.FC = () => {
@@ -27,6 +26,7 @@ export const Step4ModelTraining: React.FC = () => {
     setTask,
   } = useModelStore();
   const setCurrentStep = useDomainStore((state) => state.setCurrentStep);
+  const sessionId = useDomainStore((state) => state.sessionId);
 
   const [requestFreshSplit, setRequestFreshSplit] = useState(false);
   const [stopModalOpen, setStopModalOpen] = useState(false);
@@ -43,7 +43,7 @@ export const Step4ModelTraining: React.FC = () => {
     setQueueingModelId(model);
     setPhase('training');
 
-    const pipelineConfig = buildPipelineConfig(SESSION_ID);
+    const pipelineConfig = buildPipelineConfig(sessionId);
     pipelineConfig.data_split = {
       ...pipelineConfig.data_split,
       force_resplit: requestFreshSplit,
@@ -54,7 +54,7 @@ export const Step4ModelTraining: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          session_id: SESSION_ID,
+          session_id: sessionId,
           model,
           parameters: modelParams[model],
           search_config: buildResolvedSearchConfig(model, searchConfigs[model], modelParams[model]),
@@ -94,7 +94,7 @@ export const Step4ModelTraining: React.FC = () => {
 
     try {
       await cancelTrainingTasks({
-        session_id: SESSION_ID,
+        session_id: sessionId,
         task_ids: activeQueue.map((task) => task.taskId),
       });
 

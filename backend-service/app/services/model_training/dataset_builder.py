@@ -193,6 +193,7 @@ class TrainingDatasetBuilder:
         seed: int,
     ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         validation_df = pd.DataFrame(columns=df.columns)
+        anchor_train_df, split_df = self._reserve_train_anchor_rows(df, target_column, problem_type, seed)
         if split_config.get("enabled"):
             strategy = str(split_config.get("strategy", "2-way"))
             train_ratio = float(split_config.get("train", 0.8))
@@ -200,8 +201,8 @@ class TrainingDatasetBuilder:
             test_ratio = float(split_config.get("test", 0.2))
             use_stratify = bool(split_config.get("stratify") and problem_type != "regression")
 
-            stratify = self._stratify_labels(df, target_column, problem_type, use_stratify)
-            train_df, temp_df = self._safe_train_test_split(df, train_ratio, stratify, seed)
+            stratify = self._stratify_labels(split_df, target_column, problem_type, use_stratify)
+            train_df, temp_df = self._safe_train_test_split(split_df, train_ratio, stratify, seed)
 
             if strategy == "2-way" or val_ratio <= 0.0 or temp_df.empty:
                 test_df = temp_df.copy()
@@ -211,8 +212,11 @@ class TrainingDatasetBuilder:
                 temp_stratify = self._stratify_labels(temp_df, target_column, problem_type, use_stratify)
                 validation_df, test_df = self._safe_train_test_split(temp_df, relative_val_ratio, temp_stratify, seed)
         else:
-            stratify = self._stratify_labels(df, target_column, problem_type, True)
-            train_df, test_df = self._safe_train_test_split(df, 0.8, stratify, seed)
+            stratify = self._stratify_labels(split_df, target_column, problem_type, True)
+            train_df, test_df = self._safe_train_test_split(split_df, 0.8, stratify, seed)
+
+        if not anchor_train_df.empty:
+            train_df = pd.concat([train_df, anchor_train_df], ignore_index=True)
 
         if test_df.empty and len(train_df) > 1:
             fallback_stratify = self._stratify_labels(train_df, target_column, problem_type, True)
@@ -222,6 +226,29 @@ class TrainingDatasetBuilder:
             raise PipelineError("Training requires a non-empty test split.", status_code=400)
 
         return train_df, validation_df, test_df
+
+    def _reserve_train_anchor_rows(
+        self,
+        df: pd.DataFrame,
+        target_column: str,
+        problem_type: str,
+        seed: int,
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+        if problem_type == "regression" or target_column not in df.columns or df.empty:
+            return pd.DataFrame(columns=df.columns), df
+
+        anchor_indices: list[Any] = []
+        for _, group in df.groupby(target_column, dropna=False, sort=False):
+            if group.empty:
+                continue
+            anchor_indices.append(group.sample(n=1, random_state=seed).index[0])
+
+        if not anchor_indices:
+            return pd.DataFrame(columns=df.columns), df
+
+        anchor_df = df.loc[anchor_indices].copy()
+        remaining_df = df.drop(index=anchor_indices).copy()
+        return anchor_df, remaining_df
 
     def _safe_train_test_split(
         self,
@@ -312,6 +339,12 @@ class TrainingDatasetBuilder:
         X_validation_raw = validation_df.drop(columns=[target_column], errors="ignore").copy() if not validation_df.empty else pd.DataFrame(columns=X_train_raw.columns)
         X_test_raw = test_df.drop(columns=[target_column], errors="ignore").copy()
 
+        unsafe_columns = self._identify_unsafe_feature_columns(X_train_raw)
+        if unsafe_columns:
+            X_train_raw = X_train_raw.drop(columns=unsafe_columns, errors="ignore")
+            X_validation_raw = X_validation_raw.drop(columns=unsafe_columns, errors="ignore")
+            X_test_raw = X_test_raw.drop(columns=unsafe_columns, errors="ignore")
+
         X_train_raw = X_train_raw.replace([np.inf, -np.inf], np.nan)
         X_validation_raw = X_validation_raw.replace([np.inf, -np.inf], np.nan)
         X_test_raw = X_test_raw.replace([np.inf, -np.inf], np.nan)
@@ -334,6 +367,35 @@ class TrainingDatasetBuilder:
             X_validation.astype(float) if X_validation is not None else None,
             X_test.astype(float),
         )
+
+    def _identify_unsafe_feature_columns(self, train_df: pd.DataFrame) -> list[str]:
+        row_count = max(1, len(train_df))
+        high_cardinality_limit = min(200, max(32, int(np.sqrt(row_count) * 4)))
+        identifier_hints = ("id", "index", "uuid", "patient", "encounter", "image", "record", "name")
+
+        drop_columns: list[str] = []
+        for column in train_df.columns:
+            series = train_df[column]
+            observed = series.dropna()
+            if observed.empty:
+                continue
+
+            unique_count = observed.astype(str).nunique()
+            unique_ratio = unique_count / max(1, len(observed))
+            column_name = column.lower()
+            looks_like_identifier = any(hint in column_name for hint in identifier_hints)
+            is_text_like = not pd.api.types.is_numeric_dtype(series)
+
+            if looks_like_identifier and unique_ratio >= 0.5:
+                drop_columns.append(column)
+                continue
+
+            if is_text_like and (
+                unique_count > high_cardinality_limit or (unique_ratio >= 0.9 and unique_count >= 20)
+            ):
+                drop_columns.append(column)
+
+        return drop_columns
 
     def _encode_target(
         self,

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { buildPipelineConfig } from '../../../store/pipelineConfig';
+import { useDomainStore } from '../../../store/useDomainStore';
 import { ShieldCheck, Filter, ChevronRight, CheckCircle2, Loader2, AlertCircle, TrendingUp } from 'lucide-react';
 
 const FeatureSelectionTab: React.FC = () => {
@@ -18,12 +19,13 @@ const FeatureSelectionTab: React.FC = () => {
     featureImportancesError,
     confirmAndInvalidateLaterSteps
   } = useDataPrepStore();
+  const sessionId = useDomainStore((s) => s.sessionId);
   const isComplete = completedSteps.includes('feature_selection');
 
   // Load feature importances when the tab opens
   useEffect(() => {
-    fetchFeatureImportances(buildPipelineConfig('demo-session'));
-  }, [fetchFeatureImportances, cleaningPipeline]);
+    fetchFeatureImportances(buildPipelineConfig(sessionId));
+  }, [fetchFeatureImportances, cleaningPipeline, sessionId]);
 
   const totalFeatures = Math.max(1, featureImportances.length);
 

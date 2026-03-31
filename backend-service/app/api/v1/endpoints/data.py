@@ -187,7 +187,7 @@ DEFAULT_DATASETS = [
     {"code": "stroke_risk", "domain": "Stroke Risk", "target_column": "stroke"},
     {"code": "mental_health_depression", "domain": "Mental Health", "target_column": "severity_class"},
     {"code": "pulmonology_copd", "domain": "Pulmonology", "target_column": "class"},
-    {"code": "haematology_anaemia", "domain": "Haematology", "target_column": "anemia_type"},
+    {"code": "haematology_anaemia", "domain": "Haematology", "target_column": "Result"},
     {"code": "dermatology_skin", "domain": "Dermatology", "target_column": "dx_type"},
     {"code": "ophthalmology_retinopathy", "domain": "Ophthalmology", "target_column": "class"},
     {"code": "orthopaedics_spine", "domain": "Orthopaedics", "target_column": "class"},
@@ -195,7 +195,7 @@ DEFAULT_DATASETS = [
     {"code": "obstetrics_fetal", "domain": "Obstetrics", "target_column": "fetal_health"},
     {"code": "cardiology_arrhythmia", "domain": "Cardiology Arrhythmia", "target_column": "Class"},
     {"code": "oncology_cervical", "domain": "Oncology Cervical", "target_column": "Biopsy"},
-    {"code": "thyroid_endocrinology", "domain": "Thyroid", "target_column": "class"},
+    {"code": "thyroid_endocrinology", "domain": "Thyroid", "target_column": "target"},
     {"code": "pharmacy_readmission", "domain": "Pharmacy", "target_column": "readmitted"},
 ]
 

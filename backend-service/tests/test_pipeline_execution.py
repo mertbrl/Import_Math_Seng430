@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services.data_prep.pipeline_execution import apply_full_pipeline
+from app.services.data_prep.step09_feature_selection import calculate_feature_importances
 from app.services.session_service import session_service
 
 TEMP_SESSION_DIR = Path(__file__).resolve().parents[1] / "temp_sessions"
@@ -182,6 +183,23 @@ def test_feature_importance_endpoint_ranks_processed_columns() -> None:
     ranked_features = response.json()
 
     assert any(item["feature"] == "category_y" for item in ranked_features)
+
+
+def test_feature_importance_ranking_handles_wide_frames_without_dropping_features() -> None:
+    rows = 4500
+    rng = pd.Series(range(rows))
+    wide_df = pd.DataFrame(
+        {
+            **{f"feature_{index}": ((rng * (index + 3)) % 17).astype(float) for index in range(320)},
+            "target": (rng % 3).astype(int),
+        }
+    )
+
+    ranked_features = calculate_feature_importances(wide_df, "target", "multiclass")
+
+    assert ranked_features
+    assert len(ranked_features) == 320
+    assert ranked_features[0]["score"] >= ranked_features[-1]["score"]
 
 
 def test_imbalance_stats_endpoint_returns_dynamic_before_and_after_smote_distributions() -> None:

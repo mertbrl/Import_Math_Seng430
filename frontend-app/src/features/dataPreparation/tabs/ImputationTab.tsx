@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
+import { useDomainStore } from '../../../store/useDomainStore';
 import { CheckCircle2, FlaskConical, AlertTriangle, ChevronRight, Settings2, Loader2 } from 'lucide-react';
 
 type ImputationStrategy = 'drop_rows' | 'drop_column' | 'mean' | 'median' | 'mode' | 'knn';
@@ -19,14 +20,14 @@ const ImputationTab: React.FC = () => {
   } = useDataPrepStore();
   
   const ignoredColumns = useEDAStore(s => s.ignoredColumns);
+  const sessionId = useDomainStore((s) => s.sessionId);
 
   const isComplete = completedSteps.includes('imputation');
 
   // Fetch missing stats when the component mounts
   useEffect(() => {
-    // We assume the sessionId is 'demo-session' for this learning tool context unless we have a real one
-    fetchMissingStats('demo-session', ignoredColumns);
-  }, [fetchMissingStats, ignoredColumns]);
+    fetchMissingStats(sessionId, ignoredColumns);
+  }, [fetchMissingStats, ignoredColumns, sessionId]);
 
   // Strategy State maps ColumnName -> Strategy
   const [strategies, setStrategies] = useState<Record<string, ImputationStrategy>>({});

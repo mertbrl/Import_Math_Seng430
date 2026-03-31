@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
+import { useDomainStore } from '../../../store/useDomainStore';
 import { ScanSearch, Activity, AlertTriangle, CheckCircle2, ChevronRight, Settings2, Loader2 } from 'lucide-react';
 import type { OutlierColumnStat } from '../../../api/dataPrepAPI';
 
@@ -85,6 +86,7 @@ const OutliersTab: React.FC = () => {
   } = useDataPrepStore();
 
   const ignoredColumns = useEDAStore(s => s.ignoredColumns);
+  const sessionId = useDomainStore((s) => s.sessionId);
   const [bulkDetector, setBulkDetector] = useState<OutlierDetector>('iqr');
   const [bulkTreatment, setBulkTreatment] = useState<OutlierTreatment>('cap_1_99');
 
@@ -92,9 +94,8 @@ const OutliersTab: React.FC = () => {
 
   // Fetch missing stats when the component mounts
   useEffect(() => {
-    // We assume the sessionId is 'demo-session' for this learning tool context unless we have a real one
-    fetchOutlierStats('demo-session', ignoredColumns);
-  }, [fetchOutlierStats, ignoredColumns]);
+    fetchOutlierStats(sessionId, ignoredColumns);
+  }, [fetchOutlierStats, ignoredColumns, sessionId]);
 
   // Sync initial strategies when live data arrives
   useEffect(() => {

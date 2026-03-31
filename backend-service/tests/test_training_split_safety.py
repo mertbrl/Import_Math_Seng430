@@ -95,6 +95,42 @@ def test_test_only_categories_do_not_leak_into_train_features(monkeypatch) -> No
     assert data.X_train.shape[1] == data.X_test.shape[1]
 
 
+def test_identifier_like_high_cardinality_columns_are_dropped_from_training_features(monkeypatch) -> None:
+    session_id = "split-safe-high-cardinality-id"
+    _seed_session(session_id)
+
+    df = pd.DataFrame(
+        {
+            "patient_id": [f"patient-{index:04d}" for index in range(40)],
+            "signal": np.linspace(0, 1, 40),
+            "target": [0, 1] * 20,
+        }
+    )
+    monkeypatch.setattr(dataset_builder_module, "load_dataframe", lambda _: df.copy())
+
+    data = TrainingDatasetBuilder().prepare(session_id, _base_pipeline_config(session_id))
+
+    assert "patient_id" not in data.feature_names
+    assert "signal" in data.feature_names
+
+
+def test_split_reserves_one_example_per_class_for_training(monkeypatch) -> None:
+    session_id = "split-safe-class-anchor"
+    _seed_session(session_id)
+
+    df = pd.DataFrame(
+        {
+            "feature": np.linspace(0, 1, 12),
+            "target": ["common"] * 10 + ["rare_a", "rare_b"],
+        }
+    )
+    monkeypatch.setattr(dataset_builder_module, "load_dataframe", lambda _: df.copy())
+
+    data = TrainingDatasetBuilder().prepare(session_id, _base_pipeline_config(session_id))
+
+    assert set(data.class_names) == {"common", "rare_a", "rare_b"}
+
+
 def test_split_is_reused_until_force_resplit(monkeypatch) -> None:
     session_id = "split-cache-reuse"
     _seed_session(session_id)

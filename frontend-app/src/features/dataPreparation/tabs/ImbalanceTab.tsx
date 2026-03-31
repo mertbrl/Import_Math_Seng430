@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
 import { buildPipelineConfig } from '../../../store/pipelineConfig';
+import { useDomainStore } from '../../../store/useDomainStore';
 import { PREP_TABS } from '../DataPrepTabsConfig';
 import { buildApiUrl } from '../../../config/apiConfig';
 import { Shuffle, CheckCircle2, ChevronRight, Loader2, AlertCircle, ShieldAlert, Info, Sparkles, AlertTriangle } from 'lucide-react';
@@ -63,6 +64,7 @@ const ImbalanceTab: React.FC = () => {
     cleaningPipeline,
   } = useDataPrepStore();
   const targetColumn = useEDAStore((s) => s.targetColumn);
+  const sessionId = useDomainStore((s) => s.sessionId);
   const isComplete = completedSteps.includes('imbalance_handling');
   const savedAction = cleaningPipeline.find((action) => action.action === 'handle_imbalance');
 
@@ -81,12 +83,12 @@ const ImbalanceTab: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const pipelineConfig = buildPipelineConfig('demo-session');
+      const pipelineConfig = buildPipelineConfig(sessionId);
       const res = await fetch(buildApiUrl('/imbalance-stats'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          session_id: 'demo-session',
+          session_id: sessionId,
           target_column: effectiveTarget,
           excluded_columns: pipelineConfig.excluded_columns,
           pipeline_config: pipelineConfig,
@@ -106,7 +108,7 @@ const ImbalanceTab: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [effectiveTarget, savedAction?.strategy, cleaningPipeline]);
+  }, [effectiveTarget, savedAction?.strategy, cleaningPipeline, sessionId]);
 
   useEffect(() => {
     fetchData();

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
+import { useDomainStore } from '../../../store/useDomainStore';
 import { Trash2, CopyX, Equal, Type, CheckCircle2, ChevronRight, AlertCircle, Loader2 } from 'lucide-react';
 
 const BasicCleaningTab: React.FC = () => {
@@ -20,6 +21,7 @@ const BasicCleaningTab: React.FC = () => {
   } = useDataPrepStore();
   
   const { ignoredColumns } = useEDAStore();
+  const sessionId = useDomainStore((s) => s.sessionId);
   
   const isComplete = completedSteps.includes('data_cleaning');
 
@@ -30,9 +32,9 @@ const BasicCleaningTab: React.FC = () => {
 
   // Dynamic Data Logic
   useEffect(() => {
-    fetchBasicCleaningStats('demo-session', ignoredColumns);
-    fetchTypeMismatchStats('demo-session', ignoredColumns);
-  }, [fetchBasicCleaningStats, fetchTypeMismatchStats, ignoredColumns]);
+    fetchBasicCleaningStats(sessionId, ignoredColumns);
+    fetchTypeMismatchStats(sessionId, ignoredColumns);
+  }, [fetchBasicCleaningStats, fetchTypeMismatchStats, ignoredColumns, sessionId]);
 
   const duplicateCount = basicCleaningStats?.duplicates_count ?? 0;
   const zeroVarCols = basicCleaningStats?.zero_variance_columns ?? [];

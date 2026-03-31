@@ -25,13 +25,32 @@ const STEPS = [
 ];
 
 export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
-  const { selectedDomainId, setDomain, currentStep, setCurrentStep, schemaValid } = useDomainStore();
+  const { selectedDomainId, setDomain, currentStep, setCurrentStep, schemaValid, sessionId, step1Confirmed } = useDomainStore();
   const clearEDAConfig = useEDAStore((s) => s.clearConfig);
   const resetPrep = useDataPrepStore((s) => s.resetPrep);
+  const prepReviewComplete = useDataPrepStore((s) => s.completedSteps.includes('preprocessing_review'));
   const resetModelFlow = useModelStore((s) => s.resetAll);
   const modelTasks = useModelStore((s) => s.tasks);
   const modelResults = useModelStore((s) => s.results);
   const hasModelResults = Object.keys(modelResults).length > 0;
+  const maxUnlockedStep = React.useMemo(() => {
+    let maxStep = 1;
+    if (!step1Confirmed) {
+      return maxStep;
+    }
+    maxStep = 2;
+    if (schemaValid) {
+      maxStep = 3;
+    }
+    if (prepReviewComplete) {
+      maxStep = 4;
+    }
+    if (hasModelResults) {
+      maxStep = 5;
+    }
+    return maxStep;
+  }, [step1Confirmed, schemaValid, prepReviewComplete, hasModelResults]);
+  const nextReachableStep = currentStep < maxUnlockedStep ? currentStep + 1 : currentStep;
   const activeTrainingTaskIds = Object.values(modelTasks)
     .filter((task) => ['queued', 'running', 'cancelling'].includes(task.status))
     .map((task) => task.taskId);
@@ -57,13 +76,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const getStepState = (id: number): 'completed' | 'active' | 'locked' => {
     if (id < currentStep) return 'completed';
     if (id === currentStep) return 'active';
-    // Step 3 is unlockable when schemaValid is true
-    if (id === 3 && schemaValid) return 'active';
-    
-    // Step 4 is optionally unlockable via the Next button, but clicking the stepper directly:
-      // we can allow it if the data prep store has 'preprocessing_review' completed
-    if (id === 4 && useDataPrepStore.getState().completedSteps.includes('preprocessing_review')) return 'active';
-    if (id === 5 && hasModelResults) return 'active';
+    if (id === nextReachableStep && id <= maxUnlockedStep) return 'active';
     return 'locked';
   };
 
@@ -107,7 +120,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         message: 'Some training runs are still in progress. If you continue, the remaining queue will be stopped and Step 5 will open with the finished results you already have.',
         onConfirm: () => {
           void (async () => {
-            await cancelTrainingTasks({ session_id: 'demo-session', task_ids: activeTrainingTaskIds });
+            await cancelTrainingTasks({ session_id: sessionId, task_ids: activeTrainingTaskIds });
             const tasks = useModelStore.getState().tasks;
             const setTask = useModelStore.getState().setTask;
             activeTrainingTaskIds.forEach((taskId) => {
@@ -156,7 +169,9 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                 return (
                   <button
                     key={d.id}
-                    onClick={() => setDomain(d.id)}
+                    onClick={() => {
+                      void setDomain(d.id);
+                    }}
                     className={`flex-none px-4 py-2 rounded-lg text-[13px] font-medium transition-all duration-200 border ${
                       isActive
                         ? 'bg-slate-900 text-white border-slate-900 shadow-sm'

@@ -22,6 +22,7 @@ import {
 import { buildPipelineConfig } from '../../../store/pipelineConfig';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
+import { useDomainStore } from '../../../store/useDomainStore';
 import {
   fetchPreprocessingReview,
   type PreprocessingReviewResponse,
@@ -122,6 +123,7 @@ const compactDelta = (before: number, after: number, unit: string) => {
 const PreprocessingReviewTab: React.FC = () => {
   const { completedSteps, toggleStepComplete, cleaningPipeline } = useDataPrepStore();
   const targetColumn = useEDAStore((state) => state.targetColumn);
+  const sessionId = useDomainStore((state) => state.sessionId);
 
   const [activeTab, setActiveTab] = useState<ReviewTabId>('preview');
   const [review, setReview] = useState<PreprocessingReviewResponse | null>(null);
@@ -139,7 +141,7 @@ const PreprocessingReviewTab: React.FC = () => {
       setIsLoading(true);
       setError(null);
       try {
-        const result = await fetchPreprocessingReview(buildPipelineConfig('demo-session'));
+        const result = await fetchPreprocessingReview(buildPipelineConfig(sessionId));
         if (!cancelled) {
           setReview(result);
         }
@@ -158,7 +160,7 @@ const PreprocessingReviewTab: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [cleaningPipeline]);
+  }, [cleaningPipeline, sessionId]);
 
   const comparableFeatures = useMemo(() => {
     if (!review) return [];

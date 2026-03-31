@@ -19,9 +19,8 @@ def calculate_basic_cleaning_stats(
         zero_variance_columns    – column names where nunique() <= 1
         excluded_columns_applied – how many excluded cols were actually present
     """
-    df = load_dataframe(session_id)
-
     try:
+        df = load_dataframe(session_id)
         existing_excludes = [col for col in excluded_columns if col in df.columns]
         df_working = df.drop(columns=existing_excludes) if existing_excludes else df.copy()
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useDataPrepStore } from '../../../store/useDataPrepStore';
 import { useEDAStore } from '../../../store/useEDAStore';
+import { useDomainStore } from '../../../store/useDomainStore';
 import { buildApiUrl } from '../../../config/apiConfig';
 import { BarChart2, CheckCircle2, ChevronRight, Settings2, Loader2, AlertCircle, Info } from 'lucide-react';
 
@@ -17,6 +18,7 @@ interface ScalingColumn {
 const ScalingTab: React.FC = () => {
   const { toggleStepComplete, addPipelineAction, completedSteps, setActiveTab, confirmAndInvalidateLaterSteps } = useDataPrepStore();
   const ignoredColumns = useEDAStore(s => s.ignoredColumns);
+  const sessionId = useDomainStore((s) => s.sessionId);
   const isComplete = completedSteps.includes('scaling');
 
   const [columns, setColumns] = useState<ScalingColumn[]>([]);
@@ -31,7 +33,7 @@ const ScalingTab: React.FC = () => {
       const res = await fetch(buildApiUrl('/scaling-stats'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: 'demo-session', excluded_columns: ignoredColumns ?? [] }),
+        body: JSON.stringify({ session_id: sessionId, excluded_columns: ignoredColumns ?? [] }),
       });
       const data = await res.json();
       const cols = data.columns ?? [];
@@ -44,7 +46,7 @@ const ScalingTab: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [ignoredColumns]);
+  }, [ignoredColumns, sessionId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 

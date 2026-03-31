@@ -12,6 +12,7 @@ import PreAnalysisPreview from './PreAnalysisPreview';
 
 export const Step2_DataExploration: React.FC = () => {
   const selectedDomainId = useDomainStore((s) => s.selectedDomainId);
+  const sessionId = useDomainStore((s) => s.sessionId);
   const domain = domains.find((d) => d.id === selectedDomainId) || domains[0];
   const { clearConfig, previewAccepted, edaData, setEdaData, prepareForAnalysis } = useEDAStore();
 
@@ -25,7 +26,7 @@ export const Step2_DataExploration: React.FC = () => {
     prepareForAnalysis(ignoredColumns);
 
     try {
-      const data = await exploreDataset(file, ignoredColumns);
+      const data = await exploreDataset(file, ignoredColumns, sessionId);
       setEdaData(data);
     } catch (err: any) {
       const health = await checkBackendHealth();
