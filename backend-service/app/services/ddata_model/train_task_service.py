@@ -12,6 +12,7 @@ from uuid import uuid4
 
 from app.core.exceptions import PipelineError
 from app.schemas.request import TrainRequest
+from app.services.explainability_service import explainability_service
 from app.services.model_training import TrainingCancelledError
 from app.services.session_service import session_service
 from app.services.training_service import TrainingService
@@ -186,6 +187,7 @@ class TrainTaskService:
                 task.finished_at = _utc_now()
 
     def _store_success(self, task_id: str, result: dict[str, Any]) -> None:
+        artifacts = result.pop("_artifacts", None)
         final_metrics = result.get("test_metrics") or result["metrics"]
         final_confusion_matrix = result.get("test_confusion_matrix") or result["confusion_matrix"]
         final_roc_curve = result.get("test_roc_curve") or result.get("roc_curve", {})
@@ -200,29 +202,27 @@ class TrainTaskService:
 
             run_id = f"run-{task.algorithm}-{task.task_id[-6:]}"
             resolved_model_id = f"{result['model_id']}-{run_id}"
-            task.status = "completed"
             task.run_id = run_id
-            task.result = {
-                "run_id": run_id,
-                "model_id": resolved_model_id,
-                "model": result["model"],
-                "parameters": result["parameters"],
-                "metrics": result["metrics"],
-                "confusion_matrix": result["confusion_matrix"],
-                "roc_curve": result.get("roc_curve", {}),
-                "feature_importance": result.get("feature_importance", []),
-                "feature_importance_source": result.get("feature_importance_source"),
-                "visualization": result.get("visualization", {}),
-                "evaluation_split": result.get("evaluation_split", "test"),
-                "search": result.get("search", {}),
-                "train_metrics": result.get("train_metrics"),
-                "test_metrics": result.get("test_metrics"),
-                "test_confusion_matrix": result.get("test_confusion_matrix"),
-                "test_roc_curve": result.get("test_roc_curve"),
-                "test_visualization": result.get("test_visualization"),
-            }
-            task.finished_at = _utc_now()
-            task.error = None
+
+        task_result = {
+            "run_id": run_id,
+            "model_id": resolved_model_id,
+            "model": result["model"],
+            "parameters": result["parameters"],
+            "metrics": result["metrics"],
+            "confusion_matrix": result["confusion_matrix"],
+            "roc_curve": result.get("roc_curve", {}),
+            "feature_importance": result.get("feature_importance", []),
+            "feature_importance_source": result.get("feature_importance_source"),
+            "visualization": result.get("visualization", {}),
+            "evaluation_split": result.get("evaluation_split", "test"),
+            "search": result.get("search", {}),
+            "train_metrics": result.get("train_metrics"),
+            "test_metrics": result.get("test_metrics"),
+            "test_confusion_matrix": result.get("test_confusion_matrix"),
+            "test_roc_curve": result.get("test_roc_curve"),
+            "test_visualization": result.get("test_visualization"),
+        }
 
         state = session_service.get_or_create(task.session_id)
         evaluation = {
@@ -248,6 +248,38 @@ class TrainTaskService:
         state.evaluations[run_id] = evaluation
         state.evaluation = evaluation
         session_service.touch(state, bump_revision=False)
+
+        if artifacts:
+            visualization = result.get("test_visualization") or result.get("visualization") or {}
+            try:
+                explainability_service.register_training_artifacts(
+                    session_id=task.session_id,
+                    run_id=run_id,
+                    model_id=resolved_model_id,
+                    algorithm=result["model"],
+                    estimator=artifacts["estimator"],
+                    data=artifacts["data"],
+                    search_summary=result.get("search"),
+                    train_metrics=result.get("train_metrics"),
+                    final_metrics=final_metrics,
+                    generalization=visualization.get("generalization"),
+                    feature_importance=result.get("feature_importance"),
+                    feature_importance_source=result.get("feature_importance_source"),
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Explainability cache build failed for %s: %s", run_id, exc)
+
+        with self._lock:
+            task = self._tasks.get(task_id)
+            if task is None:
+                return
+            if task.cancel_requested:
+                self._finalize_cancelled(task)
+                return
+            task.status = "completed"
+            task.result = task_result
+            task.finished_at = _utc_now()
+            task.error = None
 
     def _is_cancel_requested(self, task_id: str) -> bool:
         with self._lock:

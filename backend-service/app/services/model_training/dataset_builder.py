@@ -26,6 +26,9 @@ class PreparedTrainingData:
     feature_names: list[str]
     class_names: list[str]
     selection_split: str
+    train_row_ids: list[str]
+    validation_row_ids: list[str]
+    test_row_ids: list[str]
     X_train: pd.DataFrame
     X_validation: pd.DataFrame | None
     X_test: pd.DataFrame
@@ -62,8 +65,22 @@ class TrainingDatasetBuilder:
             raise PipelineError("Training requires at least one row with a non-empty target.", status_code=400)
 
         train_source, validation_source, test_source = self._split_dataframe(state, source_df, config, target_column, problem_type)
-        train_df, validation_df = self._preprocessor.fit_transform(train_source, validation_source, config, target_column, problem_type)
-        _, test_df = self._preprocessor.fit_transform(train_source, test_source, config, target_column, problem_type)
+        train_df, validation_df = self._preprocessor.fit_transform(
+            train_source,
+            validation_source,
+            config,
+            target_column,
+            problem_type,
+            preserve_row_id=True,
+        )
+        _, test_df = self._preprocessor.fit_transform(
+            train_source,
+            test_source,
+            config,
+            target_column,
+            problem_type,
+            preserve_row_id=True,
+        )
 
         train_df = self._drop_missing_target_rows(train_df, target_column)
         validation_df = self._drop_missing_target_rows(validation_df, target_column) if not validation_df.empty else validation_df
@@ -87,6 +104,9 @@ class TrainingDatasetBuilder:
             feature_names=X_train.columns.tolist(),
             class_names=class_names,
             selection_split="validation" if X_validation is not None and not X_validation.empty else "test",
+            train_row_ids=[str(value) for value in train_df[ROW_ID_COLUMN].tolist()],
+            validation_row_ids=[str(value) for value in validation_df[ROW_ID_COLUMN].tolist()] if not validation_df.empty else [],
+            test_row_ids=[str(value) for value in test_df[ROW_ID_COLUMN].tolist()],
             X_train=X_train,
             X_validation=X_validation,
             X_test=X_test,

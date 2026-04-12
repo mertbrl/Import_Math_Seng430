@@ -55,6 +55,11 @@ class TrainingService:
             "model": payload.algorithm,
             "parameters": search_result.parameters,
             "search": search_result.summary,
+            "_artifacts": {
+                "estimator": search_result.estimator,
+                "data": data,
+                "algorithm": payload.algorithm,
+            },
             **evaluation,
         }
 

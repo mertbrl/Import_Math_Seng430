@@ -23,6 +23,18 @@ class FairnessInsightRequest(BaseModel):
     run_id: str = Field(default="run-1")
 
 
+class ExplainWorkbenchRequest(BaseModel):
+    session_id: str = Field(default="demo-session")
+    run_id: str = Field(default="run-1")
+
+
+class ExplainSimulateRequest(BaseModel):
+    session_id: str = Field(default="demo-session")
+    run_id: str = Field(default="run-1")
+    record_id: str = Field(default="0")
+    feature_overrides: dict[str, float | int | bool | str | None] = Field(default_factory=dict)
+
+
 @router.post("/explain/global")
 def explain_global(payload: ExplainGlobalRequest) -> dict[str, object]:
     return pipeline_service.get_explainability_global(payload.session_id, payload.run_id)
@@ -34,6 +46,21 @@ def explain_local(payload: ExplainLocalRequest) -> dict[str, object]:
         payload.session_id,
         payload.run_id,
         ExplainabilityLocalRequest(patient_id=payload.patient_id),
+    )
+
+
+@router.post("/explain/workbench")
+def explain_workbench(payload: ExplainWorkbenchRequest) -> dict[str, object]:
+    return pipeline_service.get_explainability_workbench(payload.session_id, payload.run_id)
+
+
+@router.post("/explain/simulate")
+def explain_simulate(payload: ExplainSimulateRequest) -> dict[str, object]:
+    return pipeline_service.simulate_explainability(
+        payload.session_id,
+        payload.run_id,
+        record_id=payload.record_id,
+        feature_overrides=payload.feature_overrides,
     )
 
 

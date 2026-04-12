@@ -66,6 +66,8 @@ class LeakageSafeTrainingPreprocessor:
         config: dict[str, Any],
         target_column: str,
         problem_type: str,
+        *,
+        preserve_row_id: bool = False,
     ) -> tuple[pd.DataFrame, pd.DataFrame]:
         train_working = train_df.copy()
         test_working = test_df.copy()
@@ -83,8 +85,11 @@ class LeakageSafeTrainingPreprocessor:
         if imbalance_config.get("enabled"):
             train_working = _apply_imbalance(train_working, imbalance_config, target_column=target_column)
 
-        train_working = train_working.drop(columns=[ROW_ID_COLUMN], errors="ignore").reset_index(drop=True)
-        test_working = test_working.drop(columns=[ROW_ID_COLUMN], errors="ignore").reset_index(drop=True)
+        if not preserve_row_id:
+            train_working = train_working.drop(columns=[ROW_ID_COLUMN], errors="ignore")
+            test_working = test_working.drop(columns=[ROW_ID_COLUMN], errors="ignore")
+        train_working = train_working.reset_index(drop=True)
+        test_working = test_working.reset_index(drop=True)
         return train_working, test_working
 
     def _apply_zero_variance(

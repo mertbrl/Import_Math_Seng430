@@ -22,7 +22,7 @@ from app.services.certificate_service import CertificateService
 from app.services.context_service import ContextService
 from app.services.data_exploration_service import DataExplorationService
 from app.services.evaluation_service import EvaluationService
-from app.services.explainability_service import ExplainabilityService
+from app.services.explainability_service import explainability_service
 from app.services.fairness_service import FairnessService
 from app.services.preprocessing_service import PreprocessingService
 from app.services.session_service import session_service
@@ -36,7 +36,7 @@ class PipelineService:
         self.preprocessing_service = PreprocessingService()
         self.training_service = TrainingService()
         self.evaluation_service = EvaluationService()
-        self.explainability_service = ExplainabilityService()
+        self.explainability_service = explainability_service
         self.fairness_service = FairnessService()
         self.certificate_service = CertificateService()
 
@@ -64,6 +64,7 @@ class PipelineService:
         return session_service.snapshot(session_id)
 
     def delete_session(self, session_id: str) -> dict[str, str]:
+        explainability_service.clear_session(session_id)
         session_service.delete(session_id)
         return {"status": "deleted", "session_id": session_id}
 
@@ -240,6 +241,7 @@ class PipelineService:
             raise PipelineError("Training config is not set. Use PUT first.")
         request = TrainRequest(session_id=session_id, algorithm=config["algorithm"], parameters=config["parameters"])
         result = self.training_service.train(request)
+        artifacts = result.pop("_artifacts", None)
         run_id = f"run-{len(state.training_runs) + 1}"
         run = {
             "run_id": run_id,
@@ -253,6 +255,27 @@ class PipelineService:
         state.active_run_id = run_id
         state.training = run
         session_service.touch(state)
+
+        if artifacts:
+            final_metrics = result.get("test_metrics") or result["metrics"]
+            visualization = result.get("test_visualization") or result.get("visualization") or {}
+            try:
+                explainability_service.register_training_artifacts(
+                    session_id=session_id,
+                    run_id=run_id,
+                    model_id=run["model_id"],
+                    algorithm=result["model"],
+                    estimator=artifacts["estimator"],
+                    data=artifacts["data"],
+                    search_summary=result.get("search"),
+                    train_metrics=result.get("train_metrics"),
+                    final_metrics=final_metrics,
+                    generalization=visualization.get("generalization"),
+                    feature_importance=result.get("feature_importance"),
+                    feature_importance_source=result.get("feature_importance_source"),
+                )
+            except Exception:
+                pass
         return {"session_id": session_id, "run": run}
 
     def list_training_runs(self, session_id: str) -> dict[str, object]:
@@ -275,6 +298,7 @@ class PipelineService:
         if run_id not in state.training_runs:
             raise PipelineError(f"Run '{run_id}' not found.", status_code=404)
         del state.training_runs[run_id]
+        explainability_service.clear_run(session_id, run_id)
         state.evaluations.pop(run_id, None)
         state.explainability.pop(run_id, None)
         state.fairness.pop(run_id, None)
@@ -313,42 +337,61 @@ class PipelineService:
         return response
 
     def get_explainability_global(self, session_id: str, run_id: str) -> dict[str, object]:
-        state, resolved_run_id, run = self._resolve_run(session_id, run_id)
+        state, resolved_run_id, _run = self._resolve_run(session_id, run_id)
         self.get_evaluation(session_id, resolved_run_id)
-        cached = state.explainability.get(resolved_run_id)
-        if not cached:
-            base = self.explainability_service.explain(
-                ExplainabilityRequest(session_id=session_id, model_id=run["model_id"], patient_id="patient-47")
-            )
-            cached = {"global_importance": base["global_importance"], "local_by_patient": {"patient-47": base["local_explanation"]}}
-            state.explainability[resolved_run_id] = cached
+        global_payload = explainability_service.get_global_payload(session_id, resolved_run_id)
+        state.explainability[resolved_run_id] = {
+            "summary": global_payload["summary"],
+            "global_explanation": global_payload["global_explanation"],
+        }
         session_service.touch(state, bump_revision=False)
         return {
             "session_id": session_id,
             "run_id": resolved_run_id,
-            "global_importance": cached["global_importance"],
+            "summary": global_payload["summary"],
+            "global_explanation": global_payload["global_explanation"],
+            "global_importance": [
+                {"feature": item["feature"], "importance": item["importance"]}
+                for item in global_payload["global_explanation"]["features"]
+            ],
         }
 
     def get_explainability_local(self, session_id: str, run_id: str, payload: ExplainabilityLocalRequest) -> dict[str, object]:
-        state, resolved_run_id, run = self._resolve_run(session_id, run_id)
+        state, resolved_run_id, _run = self._resolve_run(session_id, run_id)
         self.get_evaluation(session_id, resolved_run_id)
-        cached = state.explainability.get(resolved_run_id)
-        if not cached:
-            self.get_explainability_global(session_id, resolved_run_id)
-            cached = state.explainability[resolved_run_id]
+        local_payload = explainability_service.get_local_payload(session_id, resolved_run_id, str(payload.patient_id))
+        cached = state.explainability.setdefault(resolved_run_id, {})
         local_store = cached.setdefault("local_by_patient", {})
-        if payload.patient_id not in local_store:
-            explained = self.explainability_service.explain(
-                ExplainabilityRequest(session_id=session_id, model_id=run["model_id"], patient_id=payload.patient_id)
-            )
-            local_store[payload.patient_id] = explained["local_explanation"]
+        local_store[str(payload.patient_id)] = local_payload["scenario"]
         session_service.touch(state, bump_revision=False)
         return {
             "session_id": session_id,
             "run_id": resolved_run_id,
             "patient_id": payload.patient_id,
-            "local_explanation": local_store[payload.patient_id],
+            "record_id": str(payload.patient_id),
+            "scenario": local_payload["scenario"],
+            "local_explanation": local_payload["scenario"]["local_explanation"]["top_features"],
         }
+
+    def get_explainability_workbench(self, session_id: str, run_id: str) -> dict[str, object]:
+        self.get_evaluation(session_id, run_id)
+        return explainability_service.get_workbench(session_id, run_id)
+
+    def simulate_explainability(
+        self,
+        session_id: str,
+        run_id: str,
+        *,
+        record_id: str,
+        feature_overrides: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        self.get_evaluation(session_id, run_id)
+        return explainability_service.simulate(
+            session_id,
+            run_id,
+            record_id=record_id,
+            feature_overrides=feature_overrides or {},
+        )
 
     def get_fairness(self, session_id: str, run_id: str) -> dict[str, object]:
         state, resolved_run_id, run = self._resolve_run(session_id, run_id)
