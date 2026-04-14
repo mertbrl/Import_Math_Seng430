@@ -116,7 +116,40 @@ export async function buildCertificate(payload) {
   return response.data;
 }
 
+export async function getExplainabilityWorkbench(payload) {
+  const response = await api.post("/insights/explain/workbench", payload);
+  return response.data;
+}
+
+export async function simulateExplainability(payload) {
+  const response = await api.post("/insights/explain/simulate", payload);
+  return response.data;
+}
+
 export async function getModelCatalog() {
   const response = await api.get("/models");
   return response.data;
+}
+
+/**
+ * Downloads the audit certificate as a .docx file.
+ * Triggers an automatic browser download.
+ */
+export async function downloadCertificateDocx(payload) {
+  const response = await api.post("/certificate/download-docx", payload, {
+    responseType: "arraybuffer",
+  });
+  const blob = new Blob([response.data], {
+    type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  const disposition = response.headers["content-disposition"] ?? "";
+  const match = disposition.match(/filename="?([^"]+)"?/);
+  anchor.download = match ? match[1] : "audit_certificate.docx";
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
 }

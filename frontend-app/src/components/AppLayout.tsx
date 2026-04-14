@@ -25,7 +25,7 @@ const STEPS = [
 ];
 
 export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
-  const { selectedDomainId, setDomain, currentStep, setCurrentStep, schemaValid, sessionId, step1Confirmed } = useDomainStore();
+  const { selectedDomainId, setDomain, currentStep, setCurrentStep, schemaValid, sessionId, step1Confirmed, step5Completed, step6Completed, invalidateFromStep } = useDomainStore();
   const clearEDAConfig = useEDAStore((s) => s.clearConfig);
   const resetPrep = useDataPrepStore((s) => s.resetPrep);
   const prepReviewComplete = useDataPrepStore((s) => s.completedSteps.includes('preprocessing_review'));
@@ -48,8 +48,14 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     if (hasModelResults) {
       maxStep = 5;
     }
+    if (step5Completed) {
+      maxStep = 6;
+    }
+    if (step6Completed) {
+      maxStep = 7;
+    }
     return maxStep;
-  }, [step1Confirmed, schemaValid, prepReviewComplete, hasModelResults]);
+  }, [step1Confirmed, schemaValid, prepReviewComplete, hasModelResults, step5Completed, step6Completed]);
   const nextReachableStep = currentStep < maxUnlockedStep ? currentStep + 1 : currentStep;
   const activeTrainingTaskIds = Object.values(modelTasks)
     .filter((task) => ['queued', 'running', 'cancelling'].includes(task.status))
@@ -92,18 +98,14 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         title: 'Loss of Downstream Progress',
         message: `Warning: Going back to "${stepName}" will erase all progress made in the subsequent steps (e.g., Data Preparation configurations). Do you want to proceed?`,
         onConfirm: () => {
-          // Cascading State Invalidation
+          // Cascading State Invalidation via invalidateFromStep
+          invalidateFromStep(targetStepId);
           if (targetStepId === 1) {
             clearEDAConfig();
             resetPrep();
-            resetModelFlow();
           } else if (targetStepId === 2) {
             resetPrep();
-            resetModelFlow();
-          } else if (targetStepId === 3) {
-            resetModelFlow();
           }
-          
           setCurrentStep(targetStepId);
           closeModal();
         },

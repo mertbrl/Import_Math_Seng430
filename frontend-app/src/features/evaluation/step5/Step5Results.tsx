@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Activity, AlertCircle, BarChart3, Gauge, LineChart, Target, Trophy } from 'lucide-react';
+import { Activity, AlertCircle, ArrowRight, BarChart3, Gauge, LineChart, Target, Trophy } from 'lucide-react';
 import InfoPopover from '../../../components/common/InfoPopover';
 import { useDomainStore } from '../../../store/useDomainStore';
 import { ModelResult, useModelStore } from '../../../store/useModelStore';
@@ -25,6 +25,7 @@ export const Step5Results: React.FC = () => {
   const [selectedRocTaskId, setSelectedRocTaskId] = useState<string | null>(null);
 
   const setCurrentStep = useDomainStore((state) => state.setCurrentStep);
+  const completeStep5 = useDomainStore((state) => state.completeStep5);
   const resultsMap = useModelStore((state) => state.results);
   const tasks = useModelStore((state) => state.tasks);
   const bestResultTaskId = useModelStore((state) => state.bestResultTaskId);
@@ -414,6 +415,34 @@ export const Step5Results: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Step 5 → Step 6 Transition CTA */}
+      {trainedRuns.length > 0 && (
+        <div className="overflow-hidden rounded-[32px] border border-emerald-200 bg-gradient-to-r from-emerald-50 via-teal-50 to-sky-50 shadow-sm">
+          <div className="flex flex-col items-center gap-6 px-8 py-8 text-center sm:flex-row sm:text-left">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg">
+              <Trophy size={26} className="text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-600">Evaluation Complete</p>
+              <h3 className="mt-1 text-xl font-black tracking-tight text-slate-900">
+                Ready to explain the champion model?
+              </h3>
+              <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                Step 6 unlocks SHAP-based explanations, a live What-If simulator, and a global feature importance breakdown — all powered by <strong>{championLabel}</strong>.
+              </p>
+            </div>
+            <button
+              id="proceed-to-explainability-btn"
+              onClick={completeStep5}
+              className="flex shrink-0 items-center gap-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4 text-sm font-black text-white shadow-lg transition-all duration-200 hover:scale-[1.03] hover:shadow-xl active:scale-[0.98]"
+            >
+              Complete Training &amp; Proceed to Explainability
+              <ArrowRight size={18} />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
