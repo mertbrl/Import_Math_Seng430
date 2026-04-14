@@ -132,22 +132,22 @@ export async function getModelCatalog() {
 }
 
 /**
- * Downloads the audit certificate as a .docx file.
+ * Downloads the audit certificate as a PDF file.
  * Triggers an automatic browser download.
  */
-export async function downloadCertificateDocx(payload) {
-  const response = await api.post("/certificate/download-docx", payload, {
+export async function downloadCertificatePdf(payload) {
+  const response = await api.post("/certificate/download-pdf", payload, {
     responseType: "arraybuffer",
   });
   const blob = new Blob([response.data], {
-    type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    type: "application/pdf",
   });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
   const disposition = response.headers["content-disposition"] ?? "";
   const match = disposition.match(/filename="?([^"]+)"?/);
-  anchor.download = match ? match[1] : "audit_certificate.docx";
+  anchor.download = match ? match[1] : "audit_certificate.pdf";
   document.body.appendChild(anchor);
   anchor.click();
   document.body.removeChild(anchor);

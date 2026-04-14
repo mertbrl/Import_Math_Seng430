@@ -15,7 +15,7 @@ import {
 import { useDomainStore } from '../../../store/useDomainStore';
 import { useModelStore } from '../../../store/useModelStore';
 import { MODEL_CATALOG } from '../../modelTuning/modelCatalog';
-import { checkFairness, downloadCertificateDocx } from '../../../services/pipelineApi';
+import { checkFairness, downloadCertificatePdf } from '../../../services/pipelineApi';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -275,7 +275,7 @@ const DownloadButton: React.FC<{
     ) : (
       <Download size={size === 'lg' ? 18 : 14} />
     )}
-    {isDownloading ? 'Generating Document…' : 'Download Audit Report (.docx)'}
+    {isDownloading ? 'Generating PDF…' : 'Download Audit Report (.pdf)'}
   </button>
 );
 
@@ -417,7 +417,7 @@ export const Step7EthicsBias: React.FC = () => {
     ).slice(0, 8).map((f) => ({ feature: f.feature, importance: f.importance }));
 
     try {
-      await downloadCertificateDocx({
+      await downloadCertificatePdf({
         session_id: sessionId,
         run_id: champion.runId,
         participant: 'ML Practitioner',
@@ -600,7 +600,7 @@ export const Step7EthicsBias: React.FC = () => {
             <div>
               <h3 className="text-xl font-black tracking-tight text-slate-900">Generate Audit Certificate</h3>
               <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-600">
-                Downloads a professionally formatted Word document (.docx) containing the champion model summary,
+              Downloads a professionally formatted PDF containing the champion model summary,
                 top SHAP features, subgroup fairness table, EU AI Act checklist, and a bias warning section (if applicable).
               </p>
             </div>

@@ -725,7 +725,7 @@ const LocalExplainabilityPanel: React.FC<{
               {scenario.local_explanation.top_features.map((item) => (
                 <Cell
                   key={item.feature}
-                  fill={item.impact >= 0 ? '#dc2626' : '#059669'}
+                  fill={item.direction === 'increase' ? '#dc2626' : '#059669'}
                   opacity={0.88}
                 />
               ))}
@@ -742,7 +742,8 @@ const LocalExplainabilityPanel: React.FC<{
         {controlFeatures.map((control, idx) => {
           const value = activeValues[control.feature] ?? control.default_value;
           const impact = scenario.local_explanation.top_features.find((f) => f.feature === control.feature);
-          const isRisky = impact ? impact.impact >= 0 : false;
+          // Use the explicit `direction` field: 'increase' → red (risk up), 'decrease' → green (risk down)
+          const isRisky = impact ? impact.direction === 'increase' : false;
           // Slider fill percentage
           const pct = control.max > control.min
             ? ((value - control.min) / (control.max - control.min)) * 100
@@ -866,17 +867,26 @@ const FeatureTooltip: React.FC<any> = ({ active, payload }) => {
 const ImpactTooltip: React.FC<any> = ({ active, payload }) => {
   if (!active || !payload?.length) return null;
   const feat: ScenarioFeature = payload[0].payload;
-  const isPositive = feat.impact >= 0;
+  // Use the explicit direction field — not the sign of impact — for semantic color coding
+  const increasesRisk = feat.direction === 'increase';
   return (
-    <div className="w-56 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
+    <div className={`w-56 rounded-2xl border p-4 shadow-xl ${
+      increasesRisk
+        ? 'border-rose-200 bg-rose-50'
+        : 'border-emerald-200 bg-emerald-50'
+    }`}>
       <p className="text-sm font-bold text-slate-900">{feat.feature}</p>
       <p className="mt-1 text-xs text-slate-500">Current value: <strong>{feat.value}</strong></p>
-      <div className={`mt-2 flex items-center gap-1 text-sm font-black ${isPositive ? 'text-rose-700' : 'text-emerald-700'}`}>
-        {isPositive ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-        {isPositive ? '+' : ''}{feat.impact.toFixed(4)} impact
+      <div className={`mt-2 flex items-center gap-1 text-sm font-black ${
+        increasesRisk ? 'text-rose-700' : 'text-emerald-700'
+      }`}>
+        {increasesRisk ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+        {increasesRisk ? '+' : ''}{feat.impact.toFixed(4)} impact
       </div>
-      <p className={`mt-1 text-[11px] font-semibold ${isPositive ? 'text-rose-500' : 'text-emerald-500'}`}>
-        {isPositive ? '▲ Increases risk' : '▼ Decreases risk'}
+      <p className={`mt-1 text-[11px] font-semibold ${
+        increasesRisk ? 'text-rose-500' : 'text-emerald-500'
+      }`}>
+        {increasesRisk ? '▲ Increases risk' : '▼ Decreases risk'}
       </p>
     </div>
   );
