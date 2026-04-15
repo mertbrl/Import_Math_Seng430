@@ -13,7 +13,12 @@ class Settings(BaseSettings):
     app_env: str = "development"
     api_v1_prefix: str = "/api/v1"
     cors_origins: list[str] = Field(
-        default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"]
+        default_factory=lambda: [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "https://mertbrl.github.io",
+            "https://mertbrl.github.io/Import_Math_Seng430",
+        ]
     )
 
     model_config = SettingsConfigDict(

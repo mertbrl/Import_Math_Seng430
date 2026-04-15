@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: import-math-seng430-api
+    runtime: python
+    rootDir: backend-service
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: API_V1_PREFIX
+        value: /api/v1
+      - key: CORS_ORIGINS
+        value: '["http://localhost:5173","http://127.0.0.1:5173","https://mertbrl.github.io","https://mertbrl.github.io/Import_Math_Seng430"]'
