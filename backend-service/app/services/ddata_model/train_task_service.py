@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from threading import Lock
 from typing import Any
 from uuid import uuid4
@@ -23,7 +23,7 @@ FINAL_TASK_STATUSES = {"completed", "failed", "cancelled"}
 
 
 def _utc_now() -> str:
-    return datetime.now(UTC).isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 @dataclass

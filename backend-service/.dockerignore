@@ -1,0 +1,10 @@
+.env
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+.pyre
+imp_math.db
+temp_run
+temp_sessions
