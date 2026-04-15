@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import Papa from 'papaparse';
 import { useDomainStore } from '../../store/useDomainStore';
 import { useEDAStore } from '../../store/useEDAStore';
-import { buildApiUrl } from '../../config/apiConfig';
+import { BACKEND_URL_HINT, buildApiUrl } from '../../config/apiConfig';
 import { checkBackendHealth } from '../../services/pipelineApi';
 import {
   Upload,
@@ -97,7 +97,7 @@ const DataLoader: React.FC<DataLoaderProps> = ({ onFileLoaded, isLoading = false
       setError(
         health.reachable
           ? err.message || 'Failed to load default dataset.'
-          : 'Could not reach the FastAPI backend. Start the backend at http://localhost:5001 and try again.'
+          : `Could not reach the FastAPI backend. Start the backend at ${BACKEND_URL_HINT} and try again.`
       );
     } finally {
       setFetchingDefault(false);

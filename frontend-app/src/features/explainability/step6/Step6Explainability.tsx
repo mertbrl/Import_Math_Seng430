@@ -722,7 +722,7 @@ const LocalExplainabilityPanel: React.FC<{
             <ReferenceLine x={0} stroke="#94a3b8" strokeWidth={1.5} label={{ value: 'baseline', position: 'insideTopLeft', fontSize: 10, fill: '#94a3b8' }} />
             <Tooltip content={<ImpactTooltip />} />
             <Bar dataKey="impact" radius={[0, 6, 6, 0]}>
-              {scenario.local_explanation.top_features.map((item) => (
+              {[...scenario.local_explanation.top_features].reverse().map((item) => (
                 <Cell
                   key={item.feature}
                   fill={item.direction === 'increase' ? '#dc2626' : '#059669'}

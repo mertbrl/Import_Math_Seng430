@@ -57,6 +57,31 @@ class CertificateCreateRequest(BaseModel):
     organization: str = Field(default="Demo Hospital")
 
 
+class CertificateDownloadRequest(BaseModel):
+    session_id: str
+    run_id: str
+    participant: str = Field(default="ML Practitioner")
+    organization: str = Field(default="Clinical Institution")
+    champion_name: str
+    model_id: str
+    cv_score: float | None = None
+    train_test_gap: float | None = None
+    overfitting_risk: str
+    accuracy: float | None = None
+    precision: float | None = None
+    sensitivity: float | None = None
+    specificity: float | None = None
+    f1_score: float | None = None
+    auc: float | None = None
+    top_features: list[dict[str, Any]] = Field(default_factory=list)
+    bias_detected: bool = False
+    bias_threshold: float = 0.10
+    subgroup_metrics: list[dict[str, Any]] = Field(default_factory=list)
+    fairness_warnings: list[str] = Field(default_factory=list)
+    checklist: list[dict[str, Any]] = Field(default_factory=list)
+    demographics: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class ContextRequest(BaseModel):
     session_id: str = Field(default="demo-session")
     domain: str = Field(default="Cardiology")

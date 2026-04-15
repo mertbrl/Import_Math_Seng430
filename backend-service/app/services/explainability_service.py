@@ -297,11 +297,11 @@ class ExplainabilityService:
         overfitting_risk = str(generalization.get("risk") or self._risk_from_gap(train_test_gap))
 
         rationale = (
-            "Egitim ve tutarlilik metrikleri birlikte incelendiginde bu model en dengeli profil ile one cikti."
+            "Considering the training and stability metrics together, this model stands out with the most balanced profile."
             if stability_score >= 0.85 and train_test_gap <= 0.05
-            else "Egitim ve test setleri arasindaki fark dusuk oldugu icin bu model daha guvenilir gorunuyor."
+            else "Because the gap between training and test performance is low, this model appears to be reliable."
             if stability_score >= 0.7 and train_test_gap <= 0.08
-            else "Skor guclu olsa da train-test boslugu daha yuksek; bu nedenle aciklamalar dikkatle yorumlanmali."
+            else "Although the score is strong, the train-test gap is higher; therefore, explanations should be interpreted carefully."
         )
 
         return {

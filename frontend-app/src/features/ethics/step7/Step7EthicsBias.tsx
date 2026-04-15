@@ -433,8 +433,10 @@ export const Step7EthicsBias: React.FC = () => {
             : null,
         overfitting_risk: champion.visualization?.generalization?.risk ?? 'unknown',
         accuracy: metrics.accuracy ?? null,
+        precision: metrics.precision ?? null,
         sensitivity: metrics.sensitivity ?? metrics.recall ?? null,
         specificity: metrics.specificity ?? null,
+        f1_score: metrics.f1_score ?? null,
         auc: metrics.auc ?? null,
 
         // Step 6 — SHAP features
@@ -591,24 +593,6 @@ export const Step7EthicsBias: React.FC = () => {
               />
             </div>
           )}
-
-          {/* ── Bottom download CTA ── */}
-          <div className="flex flex-col items-center gap-4 rounded-[28px] border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-8 text-center shadow-sm">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-900 shadow-lg">
-              <Download size={26} className="text-white" />
-            </div>
-            <div>
-              <h3 className="text-xl font-black tracking-tight text-slate-900">Generate Audit Certificate</h3>
-              <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-600">
-              Downloads a professionally formatted PDF containing the champion model summary,
-                top SHAP features, subgroup fairness table, EU AI Act checklist, and a bias warning section (if applicable).
-              </p>
-            </div>
-            <DownloadButton onClick={handleDownload} isDownloading={isDownloading} size="lg" />
-            {downloadError && (
-              <p className="text-sm text-rose-700">{downloadError}</p>
-            )}
-          </div>
         </div>
       </div>
     </div>

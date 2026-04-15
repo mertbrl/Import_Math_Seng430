@@ -12,7 +12,9 @@ class Settings(BaseSettings):
     app_name: str = "IMP ML Tool API"
     app_env: str = "development"
     api_v1_prefix: str = "/api/v1"
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    cors_origins: list[str] = Field(
+        default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"]
+    )
 
     model_config = SettingsConfigDict(
         # Load config reliably even when uvicorn is started from a different CWD.
