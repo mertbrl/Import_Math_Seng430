@@ -1,0 +1,16 @@
+.git
+.gitignore
+
+frontend-app/node_modules
+frontend-app/dist
+
+backend-service/.env
+backend-service/.venv
+backend-service/venv
+backend-service/__pycache__
+backend-service/**/*.pyc
+backend-service/.pytest_cache
+backend-service/.pyre
+backend-service/imp_math.db
+backend-service/temp_run
+backend-service/temp_sessions
