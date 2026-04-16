@@ -39,15 +39,19 @@ function resolveMaxUnlockedStep(
 }
 
 async function teardownSession(sessionId: string) {
-  const taskIds = Object.values(useModelStore.getState().tasks)
-    .filter((task) => ['queued', 'running', 'cancelling'].includes(task.status))
-    .map((task) => task.taskId);
+  try {
+    const taskIds = Object.values(useModelStore.getState().tasks)
+      .filter((task) => ['queued', 'running', 'cancelling'].includes(task.status))
+      .map((task) => task.taskId);
 
-  if (taskIds.length > 0) {
-    await cancelTrainingTasks({ session_id: sessionId, task_ids: taskIds });
+    if (taskIds.length > 0) {
+      await cancelTrainingTasks({ session_id: sessionId, task_ids: taskIds });
+    }
+
+    await deleteSession(sessionId);
+  } catch {
+    // Domain switching and reset must remain responsive even if the hosted API is waking up.
   }
-
-  await deleteSession(sessionId);
 }
 
 function clearWorkflowState() {
@@ -105,7 +109,6 @@ export const useDomainStore = create<DomainState>((set, get) => ({
   setDomain: async (id: string) => {
     if (id === get().selectedDomainId) return;
     const { sessionId, workflowVersion } = get();
-    await teardownSession(sessionId);
     clearWorkflowState();
     const nextWorkflowVersion = workflowVersion + 1;
     set({
@@ -118,12 +121,12 @@ export const useDomainStore = create<DomainState>((set, get) => ({
       step5Completed: false,
       step6Completed: false,
     });
+    void teardownSession(sessionId);
   },
 
   resetApp: async () => {
     if (window.confirm('Are you sure you want to reset all progress? This will return you to Step 1.')) {
       const { sessionId, workflowVersion } = get();
-      await teardownSession(sessionId);
       clearWorkflowState();
       const nextWorkflowVersion = workflowVersion + 1;
       set({
@@ -137,6 +140,7 @@ export const useDomainStore = create<DomainState>((set, get) => ({
         step5Completed: false,
         step6Completed: false,
       });
+      void teardownSession(sessionId);
     }
   },
 
