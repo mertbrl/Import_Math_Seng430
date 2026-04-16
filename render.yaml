@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: import-math-seng430-api
+    name: import-math-seng430
     runtime: docker
     dockerfilePath: ./backend-service/Dockerfile
     dockerContext: .
