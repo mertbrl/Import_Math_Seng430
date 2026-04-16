@@ -29,7 +29,7 @@ export const exploreDataset = async (file, ignoredColumns = [], sessionId = 'dem
 
   const response = await axios.post(buildApiUrl('/explore'), formData, {
     headers: { "Content-Type": "multipart/form-data" },
-    timeout: 30000, // EDA can take longer on large files
+    timeout: 90000, // Render free instances can need time to wake before EDA starts
   });
   return response.data;
 }

@@ -20,6 +20,7 @@ interface DataLoaderProps {
 
 const MAX_SIZE_MB = 50;
 const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
+const DEFAULT_DATASET_TIMEOUT_MS = 90000;
 
 const DataLoader: React.FC<DataLoaderProps> = ({ onFileLoaded, isLoading = false }) => {
   const selectedDomainId = useDomainStore((s) => s.selectedDomainId);
@@ -85,9 +86,13 @@ const DataLoader: React.FC<DataLoaderProps> = ({ onFileLoaded, isLoading = false
     setFetchingDefault(true);
     setError('');
     setLoadedFile('');
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), DEFAULT_DATASET_TIMEOUT_MS);
     try {
       const fileName = `${selectedDomainId}.csv`;
-      const res = await fetch(buildApiUrl(`/datasets/${fileName}`));
+      const res = await fetch(buildApiUrl(`/datasets/${fileName}`), {
+        signal: controller.signal,
+      });
       if (!res.ok) throw new Error(`Failed to fetch dataset from backend (${res.status})`);
       const blob = await res.blob();
       const file = new File([blob], fileName, { type: 'text/csv' });
@@ -97,9 +102,10 @@ const DataLoader: React.FC<DataLoaderProps> = ({ onFileLoaded, isLoading = false
       setError(
         health.reachable
           ? err.message || 'Failed to load default dataset.'
-          : `Could not reach the FastAPI backend. Start the backend at ${BACKEND_URL_HINT} and try again.`
+          : `Could not reach the FastAPI backend at ${BACKEND_URL_HINT}. Redeploy the Render backend and try again.`
       );
     } finally {
+      window.clearTimeout(timeoutId);
       setFetchingDefault(false);
     }
   };
