@@ -11,9 +11,12 @@ import {
   type MissingColumnStat,
   type OutlierColumnStat,
   type FeatureImportanceStat,
+  requestAutoPrep,
 } from '../api/dataPrepAPI';
 import type { PipelineConfig } from './pipelineConfig';
 import { PREP_TABS } from '../features/dataPreparation/DataPrepTabsConfig';
+import { buildPipelineConfig } from './pipelineConfig';
+import { useEDAStore } from './useEDAStore';
 
 export interface OutlierStrategyPlan {
   detector: string;
@@ -75,6 +78,7 @@ interface DataPrepState {
   clearSubsequentProgress: (invalidStepIds: string[]) => void;
   confirmAndInvalidateLaterSteps: (stepId: string, warningMessage?: string) => boolean;
   resetPrep: () => void;
+  runAutoPrep: (sessionId: string, imbalanceEnabled: boolean) => Promise<void>;
 }
 
 export const useDataPrepStore = create<DataPrepState>((set, get) => ({
@@ -295,6 +299,24 @@ export const useDataPrepStore = create<DataPrepState>((set, get) => ({
     }
   },
 
+  runAutoPrep: async (sessionId, imbalanceEnabled) => {
+    try {
+      const pipelineConfig = buildPipelineConfig(sessionId);
+      const totalRows = useEDAStore.getState().totalRows;
+      const actions = await requestAutoPrep(sessionId, imbalanceEnabled, pipelineConfig, totalRows);
+      set({ cleaningPipeline: actions });
+      
+      const ALL_STEPS = [
+        'data_cleaning', 'data_split', 'imputation', 'outliers',
+        'transformation', 'encoding', 'scaling', 'dimensionality_reduction',
+        'feature_selection', 'imbalance_handling', 'preprocessing_review'
+      ];
+      set({ completedSteps: ALL_STEPS });
+    } catch (e: any) {
+      console.error(e);
+      throw e;
+    }
+  },
   resetPrep: () => set({
     activeTabId: 'data_cleaning',
     completedSteps: [],

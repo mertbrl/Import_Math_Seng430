@@ -48,6 +48,56 @@ from app.services import (
 # Modular data_prep package (replaces old monolithic data_preparation_service)
 from app.services.data_prep.step01_basic_cleaning import calculate_basic_cleaning_stats
 from app.services.data_prep.step01b_type_casting import calculate_type_mismatch_stats
+import csv
+import io
+import json
+import math
+from typing import Any
+
+from fastapi import APIRouter, File, Form, UploadFile, HTTPException
+from fastapi.responses import FileResponse, StreamingResponse
+from pydantic import BaseModel, Field
+import pathlib
+
+from app.core.exceptions import PipelineError
+from app.ml_core.data_engine.eda import run_full_eda
+from app.schemas.exploration import EDAProfileResponse, PreprocessingReviewResponse
+from app.schemas.request import (
+    BasicCleaningStatsRequest,
+    CertificateCreateRequest,
+    ContextRequest,
+    DataExplorationRequest,
+    DatasetPatchRequest,
+    DatasetUpsertRequest,
+    EvaluationRequest,
+    ExplainabilityLocalRequest,
+    ExplainabilityRequest,
+    FairnessRequest,
+    FeatureImportanceRequest,
+    MappingUpsertRequest,
+    MissingStatsRequest,
+    PipelineExecutionRequest,
+    OutliersStatsRequest,
+    PreprocessRequest,
+    SessionCreateRequest,
+    SessionPatchRequest,
+    TrainRequest,
+    TypeMismatchStatsRequest,
+    ValidateMappingRequest,
+    TransformationStatsRequest,
+    EncodingStatsRequest,
+    ScalingStatsRequest,
+    DimensionalityStatsRequest,
+    ImbalanceStatsRequest,
+)
+from app.services import (
+    data_exploration_service,
+    pipeline_service,
+    session_service
+)
+# Modular data_prep package (replaces old monolithic data_preparation_service)
+from app.services.data_prep.step01_basic_cleaning import calculate_basic_cleaning_stats
+from app.services.data_prep.step01b_type_casting import calculate_type_mismatch_stats
 from app.services.data_prep.step04_imputation import calculate_missing_statistics
 from app.services.data_prep.step05_outliers import calculate_outlier_statistics
 from app.services.data_prep.step06_transformation import analyze_transformation_candidates
@@ -56,6 +106,7 @@ from app.services.data_prep.step08_scaling import analyze_scaling_candidates
 from app.services.data_prep.step09_dimensionality import analyze_vif
 from app.services.data_prep.step09_feature_selection import calculate_feature_importances
 from app.services.data_prep.step10_imbalance import analyze_class_balance, summarize_class_balance
+from app.services.data_prep.auto_prep_service import run_auto_prep
 from app.services.data_prep.pipeline_execution import apply_full_pipeline, normalize_pipeline_config
 # Legacy pipeline preview — migrated inline below once preview_pipeline is moved
 from app.services.data_prep._dataframe_loader import load_dataframe
@@ -419,15 +470,10 @@ def preprocessing_review(payload: PipelineExecutionRequest) -> dict[str, Any]:
     except Exception as exc:
         raise PipelineError(f"Preprocessing review failed: {exc}", status_code=400) from exc
 
-
 @router.post("/download-preprocessed")
 def download_preprocessed(
     payload: PipelineExecutionRequest,
 ) -> StreamingResponse:
-    """
-    Execute the centralized pipeline engine on the immutable source CSV
-    and return the resulting working dataframe as a downloadable CSV.
-    """
     import io as _io
 
     pipeline_config = normalize_pipeline_config(payload.model_dump())
@@ -437,7 +483,6 @@ def download_preprocessed(
         buffer = _io.StringIO()
         df_processed.to_csv(buffer, index=False)
         buffer.seek(0)
-
         return StreamingResponse(
             content=iter([buffer.getvalue()]),
             media_type="text/csv",
@@ -445,6 +490,19 @@ def download_preprocessed(
         )
     except Exception as exc:
         raise PipelineError(f"Download pipeline failed: {exc}", status_code=400) from exc
+
+
+class AutoPrepRequest(BaseModel):
+    session_id: str
+    imbalance_enabled: bool = True
+
+@router.post("/auto-prep")
+def auto_prep_pipeline(payload: AutoPrepRequest) -> list[dict[str, Any]]:
+    try:
+        actions = run_auto_prep(payload.session_id, payload.imbalance_enabled)
+        return _sanitize_for_json(actions)  # type: ignore[return-value]
+    except Exception as exc:
+        raise PipelineError(f"Auto-prep failed: {exc}", status_code=500) from exc
 
 
 @router.post("/basic-cleaning-stats")
@@ -461,14 +519,11 @@ def type_mismatch_stats(payload: TypeMismatchStatsRequest) -> dict[str, Any]:
 def missing_stats(payload: MissingStatsRequest) -> list[dict[str, Any]]:
     try:
         result = calculate_missing_statistics(payload.session_id, payload.excluded_columns)
-        # Final safety net: ensure every value is JSON-serializable
         return _sanitize_for_json(result)  # type: ignore[return-value]
     except PipelineError:
         raise
     except Exception as exc:
-        raise PipelineError(
-            f"Missing stats serialization failed: {exc}", status_code=500
-        ) from exc
+        raise PipelineError(f"Missing stats serialization failed: {exc}", status_code=500) from exc
 
 
 @router.post("/outliers-stats")
@@ -479,9 +534,7 @@ def outliers_stats(payload: OutliersStatsRequest) -> list[dict[str, Any]]:
     except PipelineError:
         raise
     except Exception as exc:
-        raise PipelineError(
-            f"Outlier stats serialization failed: {exc}", status_code=500
-        ) from exc
+        raise PipelineError(f"Outlier stats serialization failed: {exc}", status_code=500) from exc
 
 
 # ── Step 06: Feature Transformation ──────────────────────────────────

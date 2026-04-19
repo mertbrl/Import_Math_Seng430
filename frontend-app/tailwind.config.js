@@ -1,4 +1,3 @@
-import { defineConfig } from "vitest/config";
 export default {
   content: [
     "./index.html",
@@ -6,8 +5,87 @@ export default {
   ],
   theme: {
     extend: {
+      colors: {
+        clinical: {
+          50: '#f4fbfb',
+          100: '#dff4f3',
+          200: '#bfe8e5',
+          300: '#8dd7d2',
+          400: '#54beb8',
+          500: '#2f9d98',
+          600: '#257f7b',
+          700: '#226663',
+          800: '#214f4d',
+          900: '#1f4341',
+        },
+        trust: {
+          50: '#f3f9ff',
+          100: '#e4f1ff',
+          200: '#c9e4ff',
+          300: '#9fd0ff',
+          400: '#6db6ff',
+          500: '#4295f5',
+          600: '#2d77d6',
+          700: '#265fb0',
+          800: '#254f8f',
+          900: '#244374',
+        },
+        success: {
+          50: '#f2fbf6',
+          100: '#dbf5e5',
+          200: '#b9eacb',
+          300: '#86d7a3',
+          400: '#4fbc78',
+          500: '#2f9d5d',
+          600: '#237f4a',
+          700: '#20653d',
+          800: '#1d5133',
+          900: '#19432b',
+        },
+        warning: {
+          50: '#fff9f2',
+          100: '#ffefdb',
+          200: '#ffd9ae',
+          300: '#ffbe76',
+          400: '#f59d3d',
+          500: '#dd7f1f',
+          600: '#b96518',
+          700: '#945018',
+          800: '#77411a',
+          900: '#623719',
+        },
+        danger: {
+          50: '#fff5f6',
+          100: '#ffe8eb',
+          200: '#ffcfd6',
+          300: '#fdaab7',
+          400: '#f67f93',
+          500: '#ea5f7c',
+          600: '#cc3f62',
+          700: '#ab3151',
+          800: '#8d2d46',
+          900: '#76293d',
+        },
+        ink: {
+          50: '#f8fafc',
+          100: '#f1f5f9',
+          200: '#e2e8f0',
+          300: '#cbd5e1',
+          400: '#94a3b8',
+          500: '#64748b',
+          600: '#475569',
+          700: '#334155',
+          800: '#1f2937',
+          900: '#0f172a',
+        },
+      },
       fontFamily: {
-        sans: ['"Inter"', 'system-ui', 'sans-serif'],
+        sans: ['Inter', 'Roboto', 'system-ui', 'sans-serif'],
+      },
+      boxShadow: {
+        soft: '0 4px 20px rgba(15, 23, 42, 0.05)',
+        card: '0 8px 30px rgba(36, 67, 116, 0.08)',
+        focus: '0 0 0 4px rgba(66, 149, 245, 0.14)',
       },
       keyframes: {
         'fade-in-up': {
@@ -22,6 +100,10 @@ export default {
       animation: {
         'fade-in-up': 'fade-in-up 0.4s ease-out both',
         'in': 'in 0.3s ease-out both',
+      },
+      borderRadius: {
+        xl: '14px',
+        '2xl': '18px',
       },
     },
   },

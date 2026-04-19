@@ -198,6 +198,7 @@ export const Step6Explainability: React.FC = () => {
   const sessionId = useDomainStore((state) => state.sessionId);
   const setCurrentStep = useDomainStore((state) => state.setCurrentStep);
   const completeStep6 = useDomainStore((state) => state.completeStep6);
+  const userMode = useDomainStore((state) => state.userMode);
   const resultsMap = useModelStore((state) => state.results);
   const tasks = useModelStore((state) => state.tasks);
   const bestResultTaskId = useModelStore((state) => state.bestResultTaskId);
@@ -310,6 +311,104 @@ export const Step6Explainability: React.FC = () => {
             Return to Step 5
           </button>
         </div>
+      </div>
+    );
+  }
+
+  if (userMode === 'clinical') {
+    const topFactors = scenario?.local_explanation.top_features?.slice(0, 5) ?? [];
+
+    return (
+      <div className="space-y-6">
+        <div className="ha-card-muted p-6 sm:p-8">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="ha-section-label">Step 6 · Explainability</p>
+              <h2 className="mt-2 font-[var(--font-display)] text-[34px] font-bold tracking-[-0.06em] text-[var(--text)]">
+                Top factors influencing this prediction
+              </h2>
+              <p className="ha-body mt-3 max-w-2xl">
+                This view translates the champion model into plain-language drivers so you can see which features pushed the recommendation higher or lower.
+              </p>
+            </div>
+
+            <div className="rounded-[18px] border border-[var(--border)] bg-white/88 px-5 py-4">
+              <p className="ha-section-label">Champion Model</p>
+              <p className="mt-2 text-sm font-semibold text-[var(--text)]">
+                {runLabels[champion.taskId] ?? MODEL_CATALOG[champion.model].name}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {isLoading || !workbench || !scenario ? (
+          <WorkbenchSkeleton />
+        ) : (
+          <>
+            <div className="ha-card p-6">
+              <div className="space-y-5">
+                {topFactors.map((feature, index) => {
+                  const positive = feature.direction === 'increase' || feature.impact >= 0;
+                  const width = `${Math.min(100, Math.abs(feature.impact) * 100)}%`;
+                  return (
+                    <div key={`${feature.feature}-${index}`} className="space-y-2">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="min-w-0 flex-1"> 
+                          <p className="text-sm font-semibold text-[var(--text)] break-words">{feature.feature}</p> 
+                          <p className="text-sm text-[var(--text2)] break-words"> 
+                            {positive
+                              ? 'This feature increases the predicted risk signal.'
+                              : 'This feature reduces the predicted risk signal.'}
+                          </p>
+                        </div>
+                        <span className={`ha-badge ${positive ? 'bg-teal-100 text-teal-800' : 'bg-orange-100 text-orange-800'}`}>
+                          {feature.impact >= 0 ? '+' : ''}
+                          {feature.impact.toFixed(3)}
+                        </span>
+                      </div>
+                      <div className="h-3 overflow-hidden rounded-[999px] bg-[var(--surface2)]">
+                        <div
+                          className={`h-full rounded-[999px] ${positive ? 'bg-[linear-gradient(90deg,var(--clinical),#14b8a6)]' : 'bg-[linear-gradient(90deg,#f97316,#dc2626)]'}`}
+                          style={{ width }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="ha-card p-6">
+              <p className="ha-section-label">Clinical Takeaway</p>
+              <h3 className="mt-2 text-xl font-bold text-[var(--text)]">What to keep in mind</h3>
+              <p className="mt-3 text-sm leading-8 text-[var(--text2)]">
+                {workbench.summary.selection_rationale}
+              </p>
+              <p className="mt-3 text-sm leading-8 text-[var(--text2)]">
+                Use this explanation as context for review and prioritization, not as a stand-alone clinical decision.
+              </p>
+            </div>
+
+            <div className="ha-card p-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="ha-section-label">Next Step</p>
+                  <p className="mt-2 text-sm text-[var(--text2)]">
+                    Finalize the workflow with the export and safety review step.
+                  </p>
+                </div>
+                <button
+                  id="proceed-to-ethics-btn"
+                  onClick={completeStep6}
+                  className="ha-button-primary inline-flex items-center justify-center gap-3"
+                >
+                  Continue to Final Results
+                  <ArrowRight size={18} />
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     );
   }
@@ -561,7 +660,7 @@ const ChampionJustificationBanner: React.FC<{
 const GlobalFeaturePanel: React.FC<{ globalExplanation: ExplainabilityWorkbench['global_explanation'] }> = ({
   globalExplanation,
 }) => (
-  <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+  <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm min-w-0 overflow-x-auto min-h-[200px]"> 
     <div className="flex items-start gap-3">
       <div className="rounded-2xl bg-indigo-100 p-3 text-indigo-700">
         <BrainCircuit size={24} />

@@ -1,58 +1,63 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import {
+  Activity,
+  CheckCircle2,
+  GitBranch,
+  Search,
+  ShieldAlert,
+  Table,
+  Target,
+} from 'lucide-react';
 import DataHealthTab from './DataHealthTab';
 import FeatureExplorerTab from './FeatureExplorerTab';
 import CorrelationTab from './CorrelationTab';
 import TargetMappingTab from './TargetMappingTab';
 import DataPreviewTab from './DataPreviewTab';
 import MissingDataTab from './MissingDataTab';
-import {
-  Activity,
-  Search,
-  GitBranch,
-  Target,
-  Table,
-  ShieldAlert,
-} from 'lucide-react';
-
 import type { MockEDADataset } from './mockEDAData';
+import { useEDAStore } from '../../store/useEDAStore';
+import { useDomainStore } from '../../store/useDomainStore';
 
 interface SmartEDAProps {
   data: MockEDADataset;
 }
 
-interface Tab {
-  id: string;
-  label: string;
-  icon: React.ReactNode;
-  badge?: number;
-}
+const TABS = [
+  { id: 'preview', label: 'Data Preview', icon: Table },
+  { id: 'health', label: 'Data Health & Alerts', icon: Activity },
+  { id: 'explorer', label: 'Feature Explorer', icon: Search },
+  { id: 'correlation', label: 'Correlations', icon: GitBranch },
+  { id: 'missing', label: 'Missing Data', icon: ShieldAlert },
+  { id: 'target', label: 'Target Mapping', icon: Target },
+] as const;
+
+type TabId = (typeof TABS)[number]['id'];
 
 const SmartEDA: React.FC<SmartEDAProps> = ({ data }) => {
-  const [activeTab, setActiveTab] = useState('preview');
-
+  const [activeTab, setActiveTab] = useState<TabId>('preview');
+  const targetColumn = useEDAStore((state) => state.targetColumn);
+  const userMode = useDomainStore((state) => state.userMode);
   const missingCount = data.missingAnalysis?.length ?? 0;
 
-  const TABS: Tab[] = [
-    { id: 'preview',     label: 'Data Preview',        icon: <Table size={15} /> },
-    { id: 'health',      label: 'Data Health & Alerts', icon: <Activity size={15} /> },
-    { id: 'explorer',    label: 'Feature Explorer',     icon: <Search size={15} /> },
-    { id: 'correlation', label: 'Correlations',         icon: <GitBranch size={15} /> },
-    { id: 'missing',     label: 'Missing Data',         icon: <ShieldAlert size={15} />, badge: missingCount },
-    { id: 'target',      label: 'Target Mapping',       icon: <Target size={15} /> },
-  ];
+  const visibleTabs = useMemo(() => {
+    return userMode === 'clinical' ? TABS.filter((t) => t.id !== 'correlation') : TABS;
+  }, [userMode]);
 
-  const allColumnNames = data.columns.map((c) => c.name);
-
-  const renderTab = () => {
+  const renderActiveTab = useMemo(() => {
     switch (activeTab) {
       case 'preview':
-        return <DataPreviewTab preview={data.preview} />;
+        return <DataPreviewTab preview={data.preview} columns={data.columns} targetColumn={targetColumn} />;
       case 'health':
-        return <DataHealthTab summary={data.summary} alerts={data.alerts} columns={data.columns} />;
+        return <DataHealthTab summary={data.summary} alerts={data.alerts} columns={data.columns} targetColumnName={targetColumn} />;
       case 'explorer':
         return <FeatureExplorerTab columns={data.columns} />;
       case 'correlation':
-        return <CorrelationTab numericColumnNames={data.numericColumnNames} correlationMatrix={data.correlationMatrix} />;
+        return (
+          <CorrelationTab
+            numericColumnNames={data.numericColumnNames}
+            correlationMatrix={data.correlationMatrix}
+          />
+        );
       case 'target':
         return <TargetMappingTab columns={data.columns} totalRows={data.summary.numObservations} />;
       case 'missing':
@@ -60,45 +65,80 @@ const SmartEDA: React.FC<SmartEDAProps> = ({ data }) => {
           <MissingDataTab
             missingAnalysis={data.missingAnalysis ?? []}
             totalRows={data.summary.numObservations}
-            allColumns={allColumnNames}
+            allColumns={data.columns.map((column) => column.name)}
           />
         );
       default:
         return null;
     }
-  };
+  }, [activeTab, data, targetColumn]);
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-      {/* Tab Bar */}
-      <div className="border-b border-slate-200 bg-slate-50 px-2 pt-2 flex gap-1 flex-wrap">
-        {TABS.map((tab) => {
-          const active = tab.id === activeTab;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-lg transition-all whitespace-nowrap shrink-0 border border-b-0 ${
-                active
-                  ? 'bg-white text-indigo-700 border-slate-200 shadow-sm -mb-px z-10'
-                  : 'bg-transparent text-slate-500 border-transparent hover:text-slate-700 hover:bg-white/50'
-              }`}
-            >
-              <span className={active ? 'text-indigo-500' : 'text-slate-400'}>{tab.icon}</span>
-              {tab.label}
-              {tab.badge !== undefined && tab.badge > 0 && (
-                <span className="ml-0.5 bg-amber-400 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none">
-                  {tab.badge}
-                </span>
-              )}
-            </button>
-          );
-        })}
+    <div className="space-y-6">
+      <div className="ha-card-muted p-5 sm:p-6">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <p className="ha-section-label">Dataset Ready</p>
+            <h3 className="mt-2 font-[var(--font-display)] text-[28px] font-bold tracking-[-0.05em] text-[var(--text)]">
+              Exploration workspace
+            </h3>
+            <p className="ha-body mt-3 max-w-2xl">
+              Review the file before moving into preprocessing. The tabs below keep preview data, health diagnostics, missingness, correlations, and target mapping together in one place.
+            </p>
+          </div>
+
+          <div className="rounded-[18px] border border-[var(--success)]/20 bg-white/90 px-5 py-4">
+            <div className="flex items-center gap-3">
+              <div className="grid h-11 w-11 place-items-center rounded-2xl bg-[var(--success-light)] text-[var(--success)]">
+                <CheckCircle2 size={20} />
+              </div>
+              <div>
+                <p className="ha-section-label" style={{ color: 'var(--success)' }}>
+                  File Imported
+                </p>
+                <p className="mt-2 text-sm font-semibold text-[var(--text)]">
+                  {data.summary.numObservations.toLocaleString()} rows · {data.summary.numVariables} columns
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Tab Content */}
-      <div className="p-5 sm:p-6">
-        {renderTab()}
+      <div className="ha-card overflow-hidden">
+        <div className="border-b border-[var(--border)] bg-[var(--surface2)] px-4 py-4 sm:px-6">
+          <div className="flex flex-wrap gap-2">
+            {visibleTabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              const badge = tab.id === 'missing' ? missingCount : undefined;
+
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className="ha-tab-pill inline-flex items-center gap-2"
+                  data-active={isActive}
+                >
+                  <Icon size={15} />
+                  {tab.label}
+                  {badge ? (
+                    <span className={`ha-badge ${isActive ? 'bg-white/18 text-white' : 'bg-amber-100 text-amber-800'}`}>
+                      {badge}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="p-5 sm:p-6">
+          <div key={activeTab} className="ha-animate-in">
+            {renderActiveTab}
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -9,41 +9,41 @@ const PreAnalysisPreview: React.FC = () => {
   if (!rawFile || rawHeaders.length === 0) return null;
 
   return (
-    <div className="bg-white border-2 border-indigo-100 rounded-2xl p-6 shadow-md animate-fade-in-up">
+    <div className="ha-card p-6 sm:p-8 animate-fade-in-up">
       <div className="flex items-start gap-4 mb-6">
-        <div className="p-3 bg-indigo-50 rounded-xl text-indigo-600 shrink-0">
+        <div className="grid h-14 w-14 place-items-center rounded-2xl bg-[var(--surface2)] text-[var(--accent)] shrink-0">
           <Database size={24} />
         </div>
         <div>
-          <h3 className="text-lg font-bold text-slate-900">Data Preview</h3>
-          <p className="text-sm text-slate-600 mt-1 max-w-2xl leading-relaxed">
-            We successfully loaded <strong className="text-slate-800">{rawFile.name}</strong>. 
+          <p className="ha-section-label">Data Preview</p>
+          <h3 className="mt-2 font-[var(--font-display)] text-[24px] font-bold tracking-[-0.04em] text-[var(--text)]">
+            We successfully loaded <strong className="text-[var(--text)]">{rawFile.name}</strong>.
+          </h3>
+          <p className="ha-body mt-2 max-w-2xl">
             Below is a preview of the first {rawPreviewRows.length} rows. Please verify that the data looks correct before proceeding to configuration.
           </p>
         </div>
       </div>
 
-      <div className="mb-6 border border-slate-200 rounded-xl overflow-hidden bg-white">
-        <div className="p-4" style={{ maxHeight: '400px', overflowY: 'auto' }}>
-            <DataPreviewTab preview={{ headers: rawHeaders, rows: rawPreviewRows }} />
-        </div>
+      <div className="mb-6 -mx-2 sm:mx-0">
+        <DataPreviewTab preview={{ headers: rawHeaders, rows: rawPreviewRows }} compact />
       </div>
 
-      <div className="flex items-center justify-between border-t border-slate-100 pt-5">
-        <div className="text-sm text-slate-500">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-[var(--border)] pt-5">
+        <div className="text-sm font-semibold text-[var(--text2)]">
           Showing {rawPreviewRows.length} rows for preview.
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full sm:w-auto items-center gap-3">
           <button
             onClick={() => clearConfig()}
-            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+            className="ha-button-secondary flex-1 sm:flex-none inline-flex items-center justify-center gap-2"
           >
             <X size={16} />
             Cancel
           </button>
           <button
             onClick={() => setPreviewAccepted(true)}
-            className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 shadow-sm active:scale-95 transition"
+            className="ha-button-primary flex-1 sm:flex-none inline-flex items-center justify-center gap-2"
           >
             Next: Configure Columns
             <ArrowRight size={16} />

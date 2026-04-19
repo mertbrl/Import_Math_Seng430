@@ -1,90 +1,69 @@
-import React, { useState } from 'react';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-} from 'recharts';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { ColumnStats } from './mockEDAData';
-import { Search, Hash, Type, ToggleLeft, AlertTriangle, AlertCircle, Tag, Waves } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Hash, Search, Tag, ToggleLeft, Type, Waves } from 'lucide-react';
+import { useDomainStore } from '../../store/useDomainStore';
 
-const typeIcon = (type: string) => {
-  switch (type) {
-    case 'Numeric': return <Hash size={12} className="text-indigo-500" />;
-    case 'Categorical': return <Type size={12} className="text-emerald-500" />;
-    case 'Boolean': return <ToggleLeft size={12} className="text-amber-500" />;
-    default: return null;
-  }
+const CHART_WIDTH = 760;
+const CHART_HEIGHT = 280;
+const PADDING = { top: 24, right: 18, bottom: 48, left: 48 };
+
+const typeMeta: Record<ColumnStats['type'], { label: string; icon: React.ReactNode; tone: string }> = {
+  Numeric: {
+    label: 'Numeric',
+    icon: <Hash size={12} />,
+    tone: 'text-sky-700 bg-sky-100',
+  },
+  Categorical: {
+    label: 'Categorical',
+    icon: <Type size={12} />,
+    tone: 'text-emerald-700 bg-emerald-100',
+  },
+  Boolean: {
+    label: 'Boolean',
+    icon: <ToggleLeft size={12} />,
+    tone: 'text-amber-700 bg-amber-100',
+  },
 };
 
-/** Determine smart indicator badges for a column */
-function getColumnBadges(col: ColumnStats): { label: string; color: string; icon: React.ReactNode }[] {
-  const badges: { label: string; color: string; icon: React.ReactNode }[] = [];
+function getColumnBadges(column: ColumnStats) {
+  const badges: Array<{ label: string; tone: string; icon: React.ReactNode }> = [];
 
-  // High missingness (≥10%)
-  if (col.missingPct >= 10) {
+  if (column.missingPct >= 10) {
     badges.push({
-      label: 'Missing',
-      color: 'text-amber-700 bg-amber-50 border-amber-200',
+      label: `${column.missingPct}% Missing`,
+      tone: 'text-amber-800 bg-amber-100',
       icon: <AlertTriangle size={10} />,
     });
   }
 
-  // Class imbalance for boolean/target columns (>80/20 split)
-  if (col.type === 'Boolean' && col.distribution.length === 2) {
-    const total = col.distribution.reduce((s, d) => s + d.value, 0);
-    const maxPct = Math.max(...col.distribution.map((d) => d.value / total));
-    if (maxPct > 0.8) {
-      badges.push({
-        label: 'Imbalance',
-        color: 'text-red-700 bg-red-50 border-red-200',
-        icon: <AlertCircle size={10} />,
-      });
-    }
-  }
-
-  // High cardinality for categorical columns (>50 distinct)
-  if (col.type === 'Categorical' && col.distinct > 50) {
+  if ((column.outliersCount ?? 0) > 0) {
     badges.push({
-      label: 'High Card.',
-      color: 'text-blue-700 bg-blue-50 border-blue-200',
-      icon: <Tag size={10} />,
-    });
-  }
-
-  // High outliers
-  if ((col.outliersCount ?? 0) > 0) {
-    badges.push({
-      label: `${col.outliersCount} Outliers`,
-      color: 'text-fuchsia-700 bg-fuchsia-50 border-fuchsia-200',
+      label: `${column.outliersCount} Outliers`,
+      tone: 'text-amber-800 bg-amber-100',
       icon: <AlertCircle size={10} />,
     });
   }
 
-  // Highly skewed (> |1|)
-  if (col.skewness && Math.abs(col.skewness) > 1) {
+  if (column.skewness && Math.abs(column.skewness) > 1) {
     badges.push({
       label: 'Skewed',
-      color: 'text-purple-700 bg-purple-50 border-purple-200',
+      tone: 'text-orange-800 bg-orange-100',
       icon: <AlertTriangle size={10} />,
     });
   }
 
-  // Bimodal / Multimodal shape flag
-  if (col.distributionShape === 'Bimodal') {
+  if (column.type === 'Categorical' && column.distinct > 50) {
     badges.push({
-      label: 'Bimodal',
-      color: 'text-violet-700 bg-violet-50 border-violet-200',
-      icon: <Waves size={10} />,
+      label: 'High Card.',
+      tone: 'text-sky-800 bg-sky-100',
+      icon: <Tag size={10} />,
     });
-  } else if (col.distributionShape === 'Multimodal') {
+  }
+
+  if (column.distributionShape === 'Bimodal' || column.distributionShape === 'Multimodal') {
     badges.push({
-      label: 'Multimodal',
-      color: 'text-violet-700 bg-violet-50 border-violet-200',
+      label: column.distributionShape,
+      tone: 'text-violet-800 bg-violet-100',
       icon: <Waves size={10} />,
     });
   }
@@ -92,15 +71,10 @@ function getColumnBadges(col: ColumnStats): { label: string; color: string; icon
   return badges;
 }
 
-const BAR_COLORS = [
-  '#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe',
-  '#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe',
-];
-
-const MiniStat: React.FC<{ label: string; value: string | number }> = ({ label, value }) => (
-  <div className="flex justify-between items-center py-1.5 border-b border-slate-100 last:border-0">
-    <span className="text-xs text-slate-500 font-medium">{label}</span>
-    <span className="text-xs font-bold text-slate-800 font-mono">{value}</span>
+const StatCard: React.FC<{ label: string; value: string | number }> = ({ label, value }) => (
+  <div className="rounded-[16px] border border-[var(--border)] bg-white px-4 py-3 shadow-sm flex-1 min-w-[140px]">
+    <p className="ha-section-label text-ellipsis whitespace-nowrap overflow-hidden">{label}</p> 
+    <p className="mt-2 text-sm font-semibold text-[var(--text)]">{value}</p>
   </div>
 );
 
@@ -119,195 +93,237 @@ const FeatureExplorerTab: React.FC<FeatureExplorerTabProps> = ({
   selectedColumnName,
   onSelectedColumnChange,
   emptySelectionMessage = 'Select a feature to inspect its distribution.',
-  compact = false,
 }) => {
-  const [internalSelectedName, setInternalSelectedName] = useState<string>(columns[0]?.name ?? '');
+  const [internalSelected, setInternalSelected] = useState(columns[0]?.name ?? '');
   const [search, setSearch] = useState('');
-  const activeSelectedName = selectedColumnName ?? internalSelectedName;
-  const selectedCol = columns.find((column) => column.name === activeSelectedName) ?? null;
+  const [hoveredBin, setHoveredBin] = useState<{ x: number; y: number; label: string; value: number } | null>(null);
+  const userMode = useDomainStore((s) => s.userMode);
+  const activeName = selectedColumnName ?? internalSelected;
+  const selectedColumn = columns.find((column) => column.name === activeName) ?? null;
+
+  useEffect(() => {
+    if (selectedColumnName !== undefined) return;
+    if (!columns.length) {
+      setInternalSelected('');
+      return;
+    }
+    if (!columns.some((column) => column.name === internalSelected)) {
+      setInternalSelected(columns[0].name);
+    }
+  }, [columns, internalSelected, selectedColumnName]);
+
+  const filteredColumns = useMemo(
+    () => columns.filter((column) => column.name.toLowerCase().includes(search.toLowerCase())),
+    [columns, search],
+  );
 
   const handleSelectColumn = (columnName: string) => {
     if (selectedColumnName === undefined) {
-      setInternalSelectedName(columnName);
+      setInternalSelected(columnName);
     }
     onSelectedColumnChange?.(columnName);
   };
 
-  React.useEffect(() => {
-    if (selectedColumnName !== undefined) return;
-    if (!columns.length) {
-      setInternalSelectedName('');
-      return;
-    }
-    if (!columns.some((column) => column.name === internalSelectedName)) {
-      setInternalSelectedName(columns[0].name);
-    }
-  }, [columns, internalSelectedName, selectedColumnName]);
+  const chart = useMemo(() => {
+    if (!selectedColumn) return [];
+    const maxValue = Math.max(...selectedColumn.distribution.map((entry) => entry.value), 1);
+    const plotWidth = CHART_WIDTH - PADDING.left - PADDING.right;
+    const plotHeight = CHART_HEIGHT - PADDING.top - PADDING.bottom;
+    const barGap = 12;
+    const count = selectedColumn.distribution.length;
+    const barWidth = Math.max(18, (plotWidth - barGap * (count - 1)) / count);
 
-  const filtered = columns.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase())
-  );
+    return selectedColumn.distribution.map((entry, index) => {
+      const x = PADDING.left + index * (barWidth + barGap);
+      const barHeight = (entry.value / maxValue) * plotHeight;
+      const y = CHART_HEIGHT - PADDING.bottom - barHeight;
+      const opacity = 0.4 + (entry.value / maxValue) * 0.6;
+      return { ...entry, x, y, width: barWidth, height: barHeight, opacity };
+    });
+  }, [selectedColumn]);
+
+  const stats = useMemo(() => {
+    if (!selectedColumn) return [];
+    return [
+      ['Min', selectedColumn.min?.toLocaleString() ?? '—'],
+      ['Max', selectedColumn.max?.toLocaleString() ?? '—'],
+      ['Mean', selectedColumn.mean?.toFixed(2) ?? '—'],
+      ['Std Dev', selectedColumn.stdDev?.toFixed(2) ?? '—'],
+      ['Skewness', selectedColumn.skewness?.toFixed(2) ?? '—'],
+      ['Kurtosis', selectedColumn.kurtosis?.toFixed(2) ?? '—'],
+      ['Outliers', selectedColumn.outliersCount?.toLocaleString() ?? '—'],
+      ['Zeros %', `${selectedColumn.zerosPct ?? 0}%`],
+      ['Negative %', `${selectedColumn.negativePct ?? 0}%`],
+      ['Distinct', selectedColumn.distinct.toLocaleString()],
+      ['Missing', `${selectedColumn.missing} (${selectedColumn.missingPct}%)`],
+      ['Shape', selectedColumn.distributionShape ?? 'Unimodal'],
+    ];
+  }, [selectedColumn]);
 
   return (
-    <div className={`flex flex-col lg:flex-row gap-4 ${compact ? 'min-h-[420px]' : 'min-h-[480px]'}`}>
-      {/* Left Sidebar — Column List */}
-      <div className="w-full lg:w-64 shrink-0 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm flex flex-col">
-        <div className="p-3 border-b border-slate-100">
-          <div className="relative">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+    <div className="grid gap-5 xl:grid-cols-[minmax(280px,0.72fr)_minmax(0,1.28fr)]">
+      <aside className="ha-card overflow-hidden">
+        <div className="border-b border-[var(--border)] px-4 py-4">
+          <label className="relative block">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text3)]" />
             <input
               type="text"
-              placeholder="Search columns..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search columns..."
+              className="w-full rounded-[14px] border border-[var(--border)] bg-[var(--surface2)] py-3 pl-10 pr-4 text-sm outline-none transition focus:border-[var(--accent)]"
             />
-          </div>
+          </label>
         </div>
-        <div className={`flex-1 overflow-y-auto ${compact ? 'max-h-[360px]' : 'max-h-[420px]'}`}>
-          {filtered.map((col) => {
-            const active = col.name === activeSelectedName;
-            const badges = getColumnBadges(col);
-            return (
-              <button
-                key={col.name}
-                onClick={() => handleSelectColumn(col.name)}
-                className={`w-full px-3 py-2.5 text-left text-xs font-medium transition-colors border-b border-slate-50 ${
-                  active
-                    ? 'bg-indigo-50 text-indigo-700 border-l-2 border-l-indigo-500'
-                    : 'text-slate-700 hover:bg-slate-50 border-l-2 border-l-transparent'
-                }`}
-              >
-                <div className="flex w-full flex-col gap-2">
-                  <div className="flex items-start gap-2 min-w-0">
-                    <span className="mt-0.5 shrink-0">{typeIcon(col.type)}</span>
-                    <span className="min-w-0 flex-1 truncate leading-5">{col.name}</span>
+
+        <div className="ha-scrollbar-thin max-h-[620px] overflow-y-auto p-3">
+          <div className="space-y-2">
+            {filteredColumns.map((column) => {
+              const active = column.name === activeName;
+              const badges = getColumnBadges(column);
+              return (
+                <button
+                  key={column.name}
+                  type="button"
+                  onClick={() => handleSelectColumn(column.name)}
+                  className={`w-full rounded-[16px] border-l-[4px] px-4 py-4 text-left transition-all ${
+                    active
+                      ? 'border-[var(--accent)] bg-[var(--accent-soft)] shadow-sm'
+                      : 'border-transparent bg-white hover:bg-[var(--surface2)]'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={`ha-badge ${typeMeta[column.type].tone}`}>{typeMeta[column.type].icon}{typeMeta[column.type].label}</span>
+                      </div>
+                      <p className="mt-3 truncate font-[var(--font-display)] text-[18px] font-bold tracking-[-0.03em] text-[var(--text)]">
+                        {column.name}
+                      </p>
+                    </div>
                   </div>
 
-                  {showBadges && (badges.length > 0 || (col.missingPct > 0 && col.missingPct < 10)) && (
-                    <div className="flex w-full flex-wrap gap-1">
-                      {badges.map((b, i) => (
-                        <span
-                          key={i}
-                          className={`inline-flex max-w-full items-center gap-0.5 rounded border px-1.5 py-0.5 text-[9px] font-bold ${b.color}`}
-                        >
-                          {b.icon} {b.label}
+                  {showBadges && badges.length > 0 ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {badges.map((badge) => (
+                        <span key={`${column.name}-${badge.label}`} className={`ha-badge ${badge.tone}`}>
+                          {badge.icon}
+                          {badge.label}
                         </span>
                       ))}
-                      {col.missingPct > 0 && col.missingPct < 10 && (
-                        <span className="inline-flex items-center rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600">
-                          {col.missingPct}% missing
-                        </span>
-                      )}
                     </div>
-                  )}
-                </div>
-              </button>
-            );
-          })}
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      </aside>
 
-      {/* Right Main Area — Distribution Chart + Stats */}
-      <div className="flex-1 flex flex-col gap-4">
-        {!selectedCol && (
-          <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 px-6 text-center text-sm text-slate-500">
+      <section className="space-y-5">
+        {!selectedColumn ? (
+          <div className="ha-card flex min-h-[380px] items-center justify-center px-6 text-center text-sm text-[var(--text3)]">
             {emptySelectionMessage}
           </div>
-        )}
+        ) : (
+          <>
+            <div className="ha-card p-6">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <p className="ha-section-label">Distribution Profile</p>
+                  <h3 className="mt-2 font-[var(--font-display)] text-[28px] font-bold tracking-[-0.05em] text-[var(--text)]">
+                    {selectedColumn.name}
+                  </h3>
+                </div>
+                <span className={`ha-badge ${typeMeta[selectedColumn.type].tone}`}>
+                  {typeMeta[selectedColumn.type].icon}
+                  {typeMeta[selectedColumn.type].label}
+                </span>
+              </div>
 
-        {/* Chart */}
-        {selectedCol && (
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex-1">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h4 className="text-base font-bold text-slate-900">{selectedCol.name}</h4>
-              <span className="text-[11px] text-slate-500 font-medium">
-                Distribution · {selectedCol.type} · {selectedCol.distribution.length} bins
-              </span>
+              <div className="relative mt-6 overflow-x-auto">
+                <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} className="w-full min-w-[620px]">
+                  <line x1={PADDING.left} y1={CHART_HEIGHT - PADDING.bottom} x2={CHART_WIDTH - PADDING.right} y2={CHART_HEIGHT - PADDING.bottom} stroke="#cbd5e1" />
+                  <line x1={PADDING.left} y1={PADDING.top} x2={PADDING.left} y2={CHART_HEIGHT - PADDING.bottom} stroke="#cbd5e1" />
+
+                  {Array.from({ length: 4 }, (_, index) => {
+                    const y = PADDING.top + ((CHART_HEIGHT - PADDING.top - PADDING.bottom) / 3) * index;
+                    return (
+                      <line
+                        key={index}
+                        x1={PADDING.left}
+                        y1={y}
+                        x2={CHART_WIDTH - PADDING.right}
+                        y2={y}
+                        stroke="#e2e8f0"
+                        strokeDasharray="4 6"
+                      />
+                    );
+                  })}
+
+                  {chart.map((bar) => (
+                    <g key={bar.label}>
+                      <rect
+                        x={bar.x}
+                        y={bar.y}
+                        width={bar.width}
+                        height={bar.height}
+                        rx={8}
+                        fill={`rgba(26, 86, 219, ${bar.opacity})`}
+                        onMouseEnter={() =>
+                          setHoveredBin({
+                            x: bar.x + bar.width / 2,
+                            y: bar.y,
+                            label: bar.label,
+                            value: bar.value,
+                          })
+                        }
+                        onMouseLeave={() => setHoveredBin(null)}
+                      />
+                      <text
+                        x={bar.x + bar.width / 2}
+                        y={CHART_HEIGHT - 18}
+                        textAnchor="middle"
+                        fontSize="11"
+                        fill="#64748b"
+                      >
+                        {bar.label}
+                      </text>
+                    </g>
+                  ))}
+                </svg>
+
+                {hoveredBin ? (
+                  <div
+                    className="pointer-events-none absolute z-10 rounded-[14px] border border-[var(--border)] bg-slate-950 px-3 py-2 text-xs text-white shadow-xl"
+                    style={{ left: hoveredBin.x, top: hoveredBin.y - 18, transform: 'translate(-50%, -100%)' }}
+                  >
+                    <div className="font-semibold">{hoveredBin.label}</div>
+                    <div className="mt-1 text-slate-300">Count: {hoveredBin.value.toLocaleString()}</div>
+                  </div>
+                ) : null}
+              </div>
             </div>
-            <span
-              className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md ${
-                selectedCol.type === 'Numeric'
-                  ? 'bg-indigo-50 text-indigo-600'
-                  : selectedCol.type === 'Categorical'
-                  ? 'bg-emerald-50 text-emerald-600'
-                  : 'bg-amber-50 text-amber-600'
-              }`}
-            >
-              {selectedCol.type}
-            </span>
-          </div>
 
-          <ResponsiveContainer width="100%" height={compact ? 240 : 280}>
-            <BarChart data={selectedCol.distribution} barCategoryGap="15%">
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-              <XAxis
-                dataKey="label"
-                tick={{ fontSize: 11, fill: '#64748b' }}
-                tickLine={false}
-                axisLine={{ stroke: '#e2e8f0' }}
-              />
-              <YAxis
-                tick={{ fontSize: 11, fill: '#64748b' }}
-                tickLine={false}
-                axisLine={false}
-                width={50}
-              />
-              <Tooltip
-                contentStyle={{
-                  background: '#1e293b',
-                  border: 'none',
-                  borderRadius: '0.5rem',
-                  color: '#f8fafc',
-                  fontSize: '12px',
-                  padding: '8px 12px',
-                }}
-                cursor={{ fill: '#f1f5f9' }}
-              />
-              <Bar dataKey="value" radius={[6, 6, 0, 0]} animationDuration={600}>
-                {selectedCol.distribution.map((_, idx) => (
-                  <Cell key={idx} fill={BAR_COLORS[idx % BAR_COLORS.length]} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-        )}
+            {userMode !== 'clinical' && (
+              <div className="ha-card p-6">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="ha-section-label">Column Statistics</p>
+                    <h4 className="mt-2 text-lg font-bold text-[var(--text)]">Quick metrics</h4>
+                  </div>
+                </div>
 
-        {/* Mini-Stats Panel */}
-        {selectedCol && (
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
-            Column Statistics
-          </span>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-0">
-            {selectedCol.type === 'Numeric' ? (
-              <>
-                <MiniStat label="Min" value={selectedCol.min?.toLocaleString() ?? '—'} />
-                <MiniStat label="Max" value={selectedCol.max?.toLocaleString() ?? '—'} />
-                <MiniStat label="Mean" value={selectedCol.mean?.toFixed(2) ?? '—'} />
-                <MiniStat label="Std Dev" value={selectedCol.stdDev?.toFixed(2) ?? '—'} />
-                <MiniStat label="Skewness" value={selectedCol.skewness?.toFixed(2) ?? '—'} />
-                <MiniStat label="Kurtosis" value={selectedCol.kurtosis?.toFixed(2) ?? '—'} />
-                <MiniStat label="Outliers" value={selectedCol.outliersCount === undefined ? '—' : selectedCol.outliersCount.toLocaleString()} />
-                <MiniStat label="Zeros (%)" value={`${selectedCol.zerosPct ?? 0}%`} />
-                <MiniStat label="Negative (%)" value={`${selectedCol.negativePct ?? 0}%`} />
-                <MiniStat label="Distinct" value={selectedCol.distinct.toLocaleString()} />
-                <MiniStat label="Missing" value={`${selectedCol.missing} (${selectedCol.missingPct}%)`} />
-              </>
-            ) : (
-              <>
-                <MiniStat label="Distinct" value={selectedCol.distinct} />
-                <MiniStat label="Missing" value={`${selectedCol.missing} (${selectedCol.missingPct}%)`} />
-                <MiniStat label="Type" value={selectedCol.type} />
-                <MiniStat label="Categories" value={selectedCol.distribution.length} />
-              </>
+                <div className="mt-5 flex flex-wrap gap-4"> 
+                  {stats.map(([label, value]) => (
+                    <StatCard key={label} label={label} value={value} />
+                  ))}
+                </div>
+              </div>
             )}
-          </div>
-        </div>
+          </>
         )}
-      </div>
+      </section>
     </div>
   );
 };

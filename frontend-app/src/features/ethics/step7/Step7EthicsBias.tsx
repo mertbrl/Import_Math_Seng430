@@ -2,20 +2,26 @@ import React, { useEffect, useState } from 'react';
 import {
   AlertCircle,
   AlertTriangle,
+  CalendarDays,
   CheckCircle2,
   CheckSquare,
   Download,
+  FileDown,
   FileText,
   Loader2,
+  Package,
   Scale,
+  Share2,
   ShieldAlert,
   ShieldCheck,
   Square,
+  TableProperties,
 } from 'lucide-react';
 import { useDomainStore } from '../../../store/useDomainStore';
 import { useModelStore } from '../../../store/useModelStore';
 import { MODEL_CATALOG } from '../../modelTuning/modelCatalog';
 import { checkFairness, downloadCertificatePdf } from '../../../services/pipelineApi';
+import { domains } from '../../../config/domainConfig';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -146,7 +152,7 @@ const SubgroupTable: React.FC<{ metrics: SubgroupMetric[]; threshold: number }> 
 
   return (
     <div className="overflow-x-auto rounded-2xl border border-slate-200">
-      <table className="w-full text-sm">
+      <table className="min-w-full text-sm">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-900">
             <th className="px-5 py-3.5 text-left text-[11px] font-black uppercase tracking-[0.15em] text-slate-300">
@@ -283,6 +289,7 @@ const DownloadButton: React.FC<{
 
 export const Step7EthicsBias: React.FC = () => {
   const sessionId = useDomainStore((s) => s.sessionId);
+  const selectedDomainId = useDomainStore((s) => s.selectedDomainId); // RESTORED
   const step5Completed = useDomainStore((s) => s.step5Completed);
   const step6Completed = useDomainStore((s) => s.step6Completed);
   const resultsMap = useModelStore((s) => s.results);
@@ -297,6 +304,7 @@ export const Step7EthicsBias: React.FC = () => {
   const championName = champion
     ? MODEL_CATALOG[champion.model]?.name ?? champion.model
     : 'Champion Model';
+  const currentDomain = domains.find((domain) => domain.id === selectedDomainId) ?? domains[0]; // RESTORED
 
   // Fairness data
   const [fairness, setFairness] = useState<FairnessResult | null>(null);
@@ -465,6 +473,13 @@ export const Step7EthicsBias: React.FC = () => {
     setManualChecked((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  const championMetrics = champion?.test_metrics ?? champion?.metrics ?? {}; // RESTORED
+  const completedDate = new Date().toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
   if (!champion) {
     return (
       <div className="space-y-6 px-4 py-8">
@@ -481,6 +496,85 @@ export const Step7EthicsBias: React.FC = () => {
 
   return (
     <div className="space-y-6 px-4 py-8">
+      <div className="ha-card-muted p-6 sm:p-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex items-start gap-4">
+            <div className="grid h-16 w-16 place-items-center rounded-[20px] bg-white text-[var(--success)] shadow-sm">
+              <CheckCircle2 size={30} />
+            </div>
+            <div>
+              <p className="ha-section-label" style={{ color: 'var(--success)' }}>
+                Pipeline Complete
+              </p>
+              <h1 className="mt-2 font-[var(--font-display)] text-[34px] font-bold tracking-[-0.06em] text-[var(--text)]">
+                {championName} is ready for final review
+              </h1>
+              <p className="mt-3 flex flex-wrap items-center gap-3 text-sm text-[var(--text2)]">
+                <span className="inline-flex items-center gap-2">
+                  <CalendarDays size={15} />
+                  {completedDate}
+                </span>
+                <span>{currentDomain.domainName}</span>
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleDownload}
+            disabled={isDownloading}
+            className={isDownloading ? 'ha-button-locked inline-flex items-center justify-center gap-3' : 'ha-button-primary inline-flex items-center justify-center gap-3'}
+          >
+            {isDownloading ? <Loader2 size={18} className="animate-spin" /> : <FileDown size={18} />}
+            Export Report (PDF)
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-4">
+        <SummaryMetric label="Best Model" value={championName} subtext="Champion run" tone="text-slate-900" />
+        <SummaryMetric label="Test Accuracy" value={pct(championMetrics.accuracy)} subtext="Final evaluation" tone="text-[var(--accent)]" />
+        <SummaryMetric label="AUC-ROC" value={pct(championMetrics.auc)} subtext="Threshold performance" tone="text-[var(--accent)]" />
+        <SummaryMetric
+          label="Clinical Goal"
+          value={fairness?.bias_detected ? 'Review required' : 'Met ✓'}
+          subtext="Safety gate"
+          tone={fairness?.bias_detected ? 'text-rose-700' : 'text-emerald-700'}
+        />
+      </div>
+
+      <div className="flex flex-wrap gap-4">
+        <ExportCard
+          icon={<FileText size={18} />}
+          title="Export Report (PDF)"
+          description="Clinical summary and audit certificate."
+          actionLabel="Download"
+          onClick={handleDownload}
+          disabled={isDownloading}
+        />
+        <ExportCard
+          icon={<Package size={18} />}
+          title="Download Model (.pkl)"
+          description="Serialized model package."
+          actionLabel="Coming soon"
+          disabled
+        />
+        <ExportCard
+          icon={<TableProperties size={18} />}
+          title="Export Predictions"
+          description="CSV with probabilities and outputs."
+          actionLabel="Coming soon"
+          disabled
+        />
+        <ExportCard
+          icon={<Share2 size={18} />}
+          title="Share Pipeline"
+          description="Link-based handoff for review."
+          actionLabel="Coming soon"
+          disabled
+        />
+      </div>
+
       <div className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm">
 
         {/* ── Page header ── */}
@@ -573,7 +667,7 @@ export const Step7EthicsBias: React.FC = () => {
 
           {/* ── Summary stats row ── */}
           {fairness && (
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="flex flex-wrap gap-4">
               <StatCard
                 label="Subgroups Analysed"
                 value={String(fairness.subgroup_metrics.length)}
@@ -607,10 +701,51 @@ const StatCard: React.FC<{
   tone?: string;
   subtext?: string;
 }> = ({ label, value, tone = 'text-slate-900', subtext }) => (
-  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">{label}</p>
-    <p className={`mt-2 text-2xl font-black ${tone}`}>{value}</p>
-    {subtext && <p className="mt-1 text-[11px] font-semibold text-slate-400">{subtext}</p>}
+  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 min-w-[240px] flex-1 min-w-0">
+    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500 break-words">{label}</p>
+    <p className={`mt-2 text-2xl font-black break-words ${tone}`}>{value}</p>
+    {subtext && <p className="mt-1 text-[11px] font-semibold text-slate-400 break-words">{subtext}</p>}
+  </div>
+);
+
+const SummaryMetric: React.FC<{
+  label: string;
+  value: string;
+  subtext?: string;
+  tone?: string;
+}> = ({ label, value, subtext, tone = 'text-slate-900' }) => (
+  <div className="ha-card p-5 min-w-[240px] flex-1 min-w-0">
+    <p className="ha-section-label break-words">{label}</p>
+    <p className={`mt-3 font-[var(--font-display)] text-[30px] font-bold tracking-[-0.05em] break-words ${tone}`}>
+      {value}
+    </p>
+    {subtext ? <p className="mt-2 text-sm text-[var(--text2)] break-words">{subtext}</p> : null}
+  </div>
+);
+
+const ExportCard: React.FC<{
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  actionLabel: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}> = ({ icon, title, description, actionLabel, onClick, disabled = false }) => (
+  <div className="ha-card p-5 min-w-[240px] flex-1 min-w-0">
+    <div className="grid h-11 w-11 place-items-center rounded-2xl bg-[var(--surface2)] text-[var(--accent)]">
+      {icon}
+    </div>
+    <h3 className="mt-4 text-lg font-bold text-[var(--text)] break-words">{title}</h3>
+    <p className="mt-2 text-sm leading-7 text-[var(--text2)] break-words">{description}</p>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={disabled ? 'ha-button-locked mt-5 inline-flex w-full items-center justify-center gap-2' : 'ha-button-secondary mt-5 inline-flex w-full items-center justify-center gap-2'}
+      title={disabled ? 'Not available in the current backend flow.' : undefined}
+    >
+      {actionLabel}
+    </button>
   </div>
 );
 

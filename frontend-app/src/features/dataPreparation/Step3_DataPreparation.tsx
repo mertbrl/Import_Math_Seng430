@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle2, ChevronRight, Download, Loader2 } from 'lucide-react';
+import { CheckCircle2, ChevronRight, Download, Loader2, SlidersHorizontal } from 'lucide-react';
 import { useDataPrepStore } from '../../store/useDataPrepStore';
 import { useDomainStore } from '../../store/useDomainStore';
 import { buildPipelineConfig } from '../../store/pipelineConfig';
@@ -17,10 +17,12 @@ import DimensionalityTab from './tabs/DimensionalityTab';
 import FeatureSelectionTab from './tabs/FeatureSelectionTab';
 import ImbalanceTab from './tabs/ImbalanceTab';
 import PreprocessingReviewTab from './tabs/PreprocessingReviewTab';
+import { ClinicalAutoPrepView } from './ClinicalAutoPrepView';
 
 export const Step3_DataPreparation: React.FC = () => {
   const setCurrentStep = useDomainStore((s) => s.setCurrentStep);
   const sessionId = useDomainStore((s) => s.sessionId);
+  const userMode = useDomainStore((s) => s.userMode);
   const { activeTabId, completedSteps, setActiveTab } = useDataPrepStore();
 
   const [isDownloading, setIsDownloading] = useState(false);
@@ -73,32 +75,59 @@ export const Step3_DataPreparation: React.FC = () => {
     }
   };
 
+  if (userMode === 'clinical') {
+    return <ClinicalAutoPrepView />;
+  }
+
   return (
     <div className="w-full space-y-6">
-      
+      <div className="ha-card overflow-hidden">
+        <div className="border-b border-[var(--border)] bg-[radial-gradient(circle_at_top_left,_rgba(234,88,12,0.12),_transparent_34%),radial-gradient(circle_at_top_right,_rgba(26,86,219,0.12),_transparent_35%),linear-gradient(180deg,_#ffffff,_#f8fafc)] px-7 py-8 sm:px-10">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-3xl">
+              <span className="ha-pill ha-pill-accent">
+                <SlidersHorizontal size={14} />
+                Step 3 · Data Preparation
+              </span>
+              <h2 className="ha-display mt-5">Tune preprocessing with full manual control.</h2>
+              <p className="ha-body mt-4">
+                Configure cleaning, splitting, imputation, outlier handling, encoding, scaling, and feature selection before you move into model training.
+              </p>
+            </div>
+
+            <div className="rounded-[20px] border border-[var(--border)] bg-white/82 px-5 py-4 backdrop-blur-md">
+              <p className="ha-section-label">Advanced Workspace</p>
+              <p className="mt-2 text-sm font-semibold text-[var(--text)]">
+                {completedSteps.length} of {PREP_TABS.length} prep stages reviewed
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Two-Column Workspace */}
       <div className="grid grid-cols-1 gap-6 items-start xl:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[340px_minmax(0,1fr)]">
         
         {/* Left Sidebar (1/4 Width) */}
-        <div className="w-full shrink-0 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col h-[68vh] xl:h-[75vh]">
-          <div className="min-h-[92px] p-4 border-b border-slate-100 bg-slate-50 flex flex-col justify-center">
-            <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+        <div className="ha-card w-full shrink-0 overflow-hidden flex flex-col h-[68vh] xl:h-[75vh]">
+          <div className="min-h-[92px] p-4 border-b border-[var(--border)] bg-[var(--surface2)] flex flex-col justify-center">
+            <h3 className="text-xs font-bold text-[var(--text2)] uppercase tracking-wider mb-1">
               Data Prep Pipeline
             </h3>
             <div className="flex items-center gap-2">
-              <div className="flex-1 bg-slate-200 h-1.5 rounded-full overflow-hidden">
+              <div className="flex-1 bg-[var(--border)] h-1.5 rounded-full overflow-hidden">
                 <div 
-                  className="bg-emerald-500 h-full rounded-full transition-all duration-500" 
+                  className="h-full rounded-full transition-all duration-500 bg-[linear-gradient(90deg,var(--trust),var(--clinical))]" 
                   style={{ width: `${(completedSteps.length / PREP_TABS.length) * 100}%` }}
                 />
               </div>
-              <span className="text-[10px] font-bold text-slate-500 w-8 text-right">
+              <span className="text-[10px] font-bold text-[var(--text3)] w-8 text-right">
                 {completedSteps.length}/{PREP_TABS.length}
               </span>
             </div>
           </div>
           
-          <div className="flex-1 overflow-y-auto p-2 scrollbar-thin scrollbar-thumb-slate-200">
+          <div className="ha-scrollbar-thin flex-1 overflow-y-auto p-2">
             <div className="space-y-1">
               {PREP_TABS.map((tab) => {
                 const isActive = activeTabId === tab.id;
@@ -107,17 +136,22 @@ export const Step3_DataPreparation: React.FC = () => {
                 return (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`w-full text-left px-3 py-3 rounded-xl transition-all flex items-center gap-3 group cursor-pointer
+                    onClick={() => {
+                      if (userMode === 'clinical') return;
+                      setActiveTab(tab.id);
+                    }}
+                    style={isActive ? { borderColor: 'color-mix(in srgb, var(--accent) 16%, transparent)' } : undefined}
+                    className={`w-full text-left px-3 py-3 rounded-[16px] transition-all flex items-center gap-3 group
+                      ${userMode === 'clinical' ? 'cursor-default opacity-80' : 'cursor-pointer'}
                       ${isActive 
-                        ? 'bg-indigo-50 border-indigo-100 shadow-sm' 
-                        : 'hover:bg-slate-50 border-transparent'}
+                        ? 'bg-[var(--accent-soft)] shadow-sm' 
+                        : (userMode !== 'clinical' ? 'hover:bg-[var(--surface2)] border-transparent' : 'border-transparent')}
                       border`}
                   >
                     {/* Status Icon */}
                     <div className={`shrink-0 transition-colors ${
                       isComplete ? 'text-emerald-500' : 
-                      isActive ? 'text-indigo-400' : 'text-slate-300 group-hover:text-slate-400'
+                      isActive ? 'text-[var(--accent)]' : 'text-[var(--text3)] group-hover:text-[var(--text2)]'
                     }`}>
                       <CheckCircle2 size={18} className={isComplete ? "fill-emerald-100" : ""} />
                     </div>
@@ -125,12 +159,12 @@ export const Step3_DataPreparation: React.FC = () => {
                     {/* Text Block */}
                     <div className="flex-1 min-w-0">
                       <p className={`text-sm font-bold truncate transition-colors ${
-                        isActive ? 'text-indigo-900' : 
-                        isComplete ? 'text-slate-700' : 'text-slate-600'
+                        isActive ? 'text-[var(--accent-ink)]' : 
+                        isComplete ? 'text-[var(--text)]' : 'text-[var(--text2)]'
                       }`}>
                         {tab.title}
                       </p>
-                      <p className="text-[10px] text-slate-500 truncate mt-0.5">
+                      <p className="text-[10px] text-[var(--text3)] truncate mt-0.5">
                         {tab.subtitle}
                       </p>
                       <PrepTimingHint tabId={tab.id} compact />
@@ -138,7 +172,7 @@ export const Step3_DataPreparation: React.FC = () => {
 
                     {/* Active Indicator Arrow */}
                     {isActive && (
-                      <ChevronRight size={16} className="text-indigo-400 shrink-0" />
+                      <ChevronRight size={16} className="text-[var(--accent)] shrink-0" />
                     )}
                   </button>
                 );
@@ -147,7 +181,7 @@ export const Step3_DataPreparation: React.FC = () => {
           </div>
         </div>
 
-        <div className="min-w-0 bg-white border border-slate-200 rounded-2xl shadow-sm min-h-[70vh] p-5 lg:p-6 xl:p-8 2xl:p-10">
+        <div className="ha-card min-w-0 min-h-[70vh] p-5 lg:p-6 xl:p-8 2xl:p-10">
           {renderActiveComponent()}
         </div>
 
@@ -155,7 +189,7 @@ export const Step3_DataPreparation: React.FC = () => {
 
       {/* Success Banner with Download Button */}
       {completedSteps.includes('preprocessing_review') && (
-        <div className="bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl p-6 shadow-lg text-white flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between animate-in slide-in-from-bottom-4 duration-500">
+        <div className="rounded-[24px] bg-[linear-gradient(135deg,var(--trust),var(--clinical))] p-6 shadow-lg text-white flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-4">
             <div className="bg-white/20 p-3 rounded-xl backdrop-blur-sm">
               <CheckCircle2 size={32} className="text-white" />
@@ -174,7 +208,7 @@ export const Step3_DataPreparation: React.FC = () => {
             <button
               onClick={handleDownload}
               disabled={isDownloading}
-              className="w-full justify-center lg:w-auto flex items-center gap-2 bg-white text-emerald-700 px-6 py-3 rounded-xl font-bold hover:bg-emerald-50 hover:shadow-md transition-all active:scale-[0.98] cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
+              className="w-full justify-center lg:w-auto flex items-center gap-2 rounded-[999px] bg-white px-6 py-3 font-bold text-[var(--trust)] transition-all hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed"
             >
               {isDownloading ? (
                 <><Loader2 size={18} className="animate-spin" /> Preparing CSV...</>
@@ -184,9 +218,9 @@ export const Step3_DataPreparation: React.FC = () => {
             </button>
             <button
               onClick={() => setCurrentStep(4)}
-              className="w-full justify-center lg:w-auto flex items-center gap-2 bg-emerald-700 text-white px-6 py-3 rounded-xl font-bold hover:bg-emerald-800 hover:shadow-md transition-all active:scale-[0.98] cursor-pointer"
+              className="w-full justify-center lg:w-auto flex items-center gap-2 rounded-[999px] border border-white/30 bg-white/12 px-6 py-3 font-bold text-white transition-all hover:bg-white/18"
             >
-              Proceed to Tuning <ChevronRight size={18} />
+              Proceed to Training <ChevronRight size={18} />
             </button>
           </div>
         </div>

@@ -221,7 +221,7 @@ export const TrainingQueuePanel: React.FC<{
         </div>
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="mt-4 flex flex-wrap gap-3"> 
         {[
           { label: 'Models', value: catalogCount },
           { label: 'Waiting', value: summary.waiting },
@@ -230,8 +230,8 @@ export const TrainingQueuePanel: React.FC<{
           { label: 'Done', value: summary.done },
           { label: 'Stopped/Failed', value: summary.stopped + summary.failed },
         ].map((item) => (
-          <div key={item.label} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{item.label}</p>
+          <div key={item.label} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 flex-1 min-w-[60px] text-center"> 
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 text-ellipsis whitespace-nowrap overflow-hidden">{item.label}</p> 
             <p className="mt-1 text-2xl font-black text-slate-800">{item.value}</p>
           </div>
         ))}

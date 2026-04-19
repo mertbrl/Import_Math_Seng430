@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Activity, AlertCircle, ArrowRight, BarChart3, Gauge, LineChart, Target, Trophy } from 'lucide-react';
+import { Activity, AlertCircle, ArrowRight, BarChart3, Gauge, LineChart, ShieldCheck, Target, Trophy } from 'lucide-react';
 import InfoPopover from '../../../components/common/InfoPopover';
 import { useDomainStore } from '../../../store/useDomainStore';
 import { ModelResult, useModelStore } from '../../../store/useModelStore';
@@ -26,6 +26,7 @@ export const Step5Results: React.FC = () => {
 
   const setCurrentStep = useDomainStore((state) => state.setCurrentStep);
   const completeStep5 = useDomainStore((state) => state.completeStep5);
+  const userMode = useDomainStore((state) => state.userMode);
   const resultsMap = useModelStore((state) => state.results);
   const tasks = useModelStore((state) => state.tasks);
   const bestResultTaskId = useModelStore((state) => state.bestResultTaskId);
@@ -116,6 +117,84 @@ export const Step5Results: React.FC = () => {
   const championLabel = champion ? runLabels[champion.taskId] ?? MODEL_CATALOG[champion.model].name : '';
   const rocCurves = rocResult?.roc_curve?.curves ?? [];
 
+  if (userMode === 'clinical' && champion) {
+    const metrics = champion.test_metrics ?? champion.metrics;
+    const interpretation =
+      (metrics.recall ?? 0) >= 0.85
+        ? 'The model is catching most positive cases and suits a triage-first workflow where missed cases are costly.'
+        : (metrics.precision ?? 0) >= 0.85
+        ? 'The model is conservative and reduces false alarms, which helps when downstream workups are expensive or invasive.'
+        : 'The model offers a balanced screening profile that can support review without leaning too heavily toward either false positives or false negatives.';
+
+    return (
+      <div className="space-y-6">
+        <div className="ha-card-muted p-6 sm:p-8">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex items-start gap-4">
+              <div className="grid h-16 w-16 place-items-center rounded-[20px] bg-white text-[var(--success)] shadow-sm">
+                <Trophy size={30} />
+              </div>
+              <div>
+                <p className="ha-section-label" style={{ color: 'var(--success)' }}>
+                  Winning Model
+                </p>
+                <h2 className="mt-2 font-[var(--font-display)] text-[34px] font-bold tracking-[-0.06em] text-[var(--text)]">
+                  Best Model: {MODEL_CATALOG[champion.model].name}
+                </h2>
+                <p className="mt-2 text-lg font-semibold text-[var(--success)]">
+                  {percent(metrics.accuracy)} Accuracy
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-[18px] border border-[var(--border)] bg-white/88 px-5 py-4">
+              <p className="ha-section-label">Recommended Run</p>
+              <p className="mt-2 text-sm font-semibold text-[var(--text)]">{championLabel}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <DoctorMetric label="Accuracy" value={percent(metrics.accuracy)} />
+          <DoctorMetric label="AUC-ROC" value={percent(metrics.auc)} />
+          <DoctorMetric label="F1 Score" value={percent(metrics.f1_score)} />
+        </div>
+
+        <div className="ha-card p-6">
+          <div className="flex items-start gap-4">
+            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[var(--clinical-light)] text-[var(--clinical)]">
+              <ShieldCheck size={22} />
+            </div>
+            <div>
+              <p className="ha-section-label">What this means for your workflow</p>
+              <h3 className="mt-2 text-xl font-bold text-[var(--text)]">Clinical interpretation</h3>
+              <p className="mt-3 text-sm leading-8 text-[var(--text2)]">{interpretation}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="ha-card p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="ha-section-label">Next Step</p>
+              <p className="mt-2 text-sm text-[var(--text2)]">
+                Move into explainability to see which clinical factors drove the model recommendation.
+              </p>
+            </div>
+            <button
+              id="proceed-to-explainability-btn"
+              onClick={completeStep5}
+              className="ha-button-primary inline-flex items-center justify-center gap-3"
+            >
+              Accept This Model
+              <ArrowRight size={18} />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 px-4 py-8">
       <div className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm">
@@ -148,14 +227,14 @@ export const Step5Results: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                <div className="mt-5 grid grid-cols-2 gap-3">
+                <div className="mt-5 flex flex-wrap gap-2"> 
                   {[
                     { label: 'Accuracy', value: champion.metrics.accuracy, avg: averageMetrics.accuracy },
                     { label: 'F1 Score', value: champion.metrics.f1_score, avg: averageMetrics.f1_score },
                     { label: 'Precision', value: champion.metrics.precision, avg: averageMetrics.precision },
                     { label: 'Recall', value: champion.metrics.recall, avg: averageMetrics.recall },
                   ].map((item) => (
-                    <div key={item.label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div key={item.label} className="flex-1 min-w-[140px] rounded-2xl border border-slate-200 bg-slate-50 p-4"> 
                       <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">{item.label}</p>
                       <p className="mt-2 text-2xl font-black text-slate-900">{percent(item.value)}</p>
                       <p className={`mt-1 text-[11px] font-semibold ${(item.value ?? 0) >= item.avg ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -207,7 +286,7 @@ export const Step5Results: React.FC = () => {
                     <table className="w-full text-left text-sm">
                       <thead className="border-b bg-white text-[11px] uppercase tracking-[0.18em] text-slate-500">
                         <tr>
-                          <th className="px-6 py-4">Rank</th>
+                          <th className="px-6 py-4 sticky left-0 z-10 bg-white shadow-[1px_0_0_0_var(--border)]">Rank</th> 
                           <th className="px-6 py-4">Run</th>
                           <th className="px-6 py-4">Overfit Risk</th>
                           <th className="px-6 py-4">F1</th>
@@ -218,8 +297,10 @@ export const Step5Results: React.FC = () => {
                       </thead>
                       <tbody>
                         {sortedRuns.map((run, index) => (
-                          <tr key={run.taskId} className={`border-b last:border-0 ${run.taskId === champion.taskId ? 'bg-slate-50' : 'hover:bg-slate-50/70'}`}>
-                            <td className="px-6 py-4 font-black text-slate-800">{index === 0 ? '1st' : `#${index + 1}`}</td>
+                          <tr key={run.taskId} className="group border-b last:border-0 hover:bg-slate-50/70">
+                            <td className={`px-6 py-4 font-black text-slate-800 sticky left-0 z-10 shadow-[1px_0_0_0_var(--border)] ${run.taskId === champion.taskId ? 'bg-slate-50' : 'bg-white group-hover:bg-slate-50'}`}> 
+                              {index === 0 ? '1st' : `#${index + 1}`}
+                            </td>
                             <td className="px-6 py-4">
                               <p className="font-bold text-slate-900">{runLabels[run.taskId] ?? run.taskId}</p>
                               <p className="mt-1 text-xs text-slate-500">{MODEL_CATALOG[run.model].family}</p>
@@ -487,6 +568,15 @@ const MetricCard: React.FC<{ label: string; value?: number | null }> = ({ label,
   <div className="rounded-2xl bg-white/75 p-4">
     <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">{label}</p>
     <p className="mt-2 text-2xl font-black text-slate-900">{percent(value)}</p>
+  </div>
+);
+
+const DoctorMetric: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <div className="ha-card p-5">
+    <p className="ha-section-label">{label}</p>
+    <p className="mt-4 font-[var(--font-display)] text-[36px] font-bold tracking-[-0.05em] text-[var(--accent)]">
+      {value}
+    </p>
   </div>
 );
 

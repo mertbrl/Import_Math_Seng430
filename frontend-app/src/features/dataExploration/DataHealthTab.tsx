@@ -1,36 +1,39 @@
 import React, { useMemo } from 'react';
-import type { SummaryStats, Alert } from './mockEDAData';
-import { useEDAStore, detectMultimodality } from '../../store/useEDAStore';
+import type { Alert, SummaryStats } from './mockEDAData';
+import { detectMultimodality } from '../../store/useEDAStore';
 import DataHealthAlerts from './DataHealthAlerts';
 import {
-  BarChart3,
-  Database,
   AlertTriangle,
-  Rows3,
   Columns3,
   Copy,
+  Database,
   Hash,
+  Rows3,
   ToggleLeft,
   Type,
 } from 'lucide-react';
+import { useDomainStore } from '../../store/useDomainStore';
 
-const StatCard: React.FC<{
-  icon: React.ReactNode;
+const MetricCard: React.FC<{
   label: string;
   value: string | number;
-  sub?: string;
-  accent?: string;
-}> = ({ icon, label, value, sub, accent = 'text-indigo-600' }) => (
-  <div className="bg-white border border-slate-200 rounded-xl p-4 flex items-start gap-3 shadow-sm hover:shadow-md transition-shadow">
-    <div className={`p-2 rounded-lg bg-slate-50 border border-slate-100 ${accent}`}>
-      {icon}
+  subtext?: string;
+  icon: React.ReactNode;
+}> = ({ label, value, subtext, icon }) => (
+  <article className="ha-card p-4 flex-1 min-w-[200px]">
+    <div className="flex items-start gap-3">
+      <div className="grid h-11 w-11 place-items-center rounded-2xl bg-[var(--surface2)] text-[var(--accent)]">
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <p className="ha-section-label">{label}</p>
+        <p className="mt-2 font-[var(--font-display)] text-[28px] font-bold tracking-[-0.05em] text-[var(--text)]">
+          {value}
+        </p>
+        {subtext ? <p className="mt-1 text-sm text-[var(--text2)]">{subtext}</p> : null}
+      </div>
     </div>
-    <div className="flex flex-col min-w-0">
-      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</span>
-      <span className="text-xl font-bold text-slate-900 mt-0.5">{value}</span>
-      {sub && <span className="text-xs text-slate-500 mt-0.5">{sub}</span>}
-    </div>
-  </div>
+  </article>
 );
 
 interface DataHealthTabProps {
@@ -41,179 +44,132 @@ interface DataHealthTabProps {
 }
 
 const DataHealthTab: React.FC<DataHealthTabProps> = ({ summary, alerts, columns, targetColumnName }) => {
+  const userMode = useDomainStore((s) => s.userMode);
   const targetColumn =
-    columns.find((column) => column.name === targetColumnName) ??
-    columns[columns.length - 1];
+    columns.find((column) => column.name === targetColumnName) ?? columns[columns.length - 1];
   const targetDist = targetColumn?.distribution ?? [];
-  const totalTargetCount = targetDist.reduce((s, d) => s + d.value, 0);
+  const totalTargetCount = targetDist.reduce((sum, entry) => sum + entry.value, 0);
 
-  // Compute advanced heuristic alerts dynamically on the frontend via useEDAStore
   const enrichedAlerts = useMemo(() => {
-    let newAlerts = [...alerts];
+    const nextAlerts = [...alerts];
 
-    // 1. High Imbalance Detection
     if (targetColumn && targetColumn.type === 'Categorical' && targetDist.length > 0) {
-      const highestClassCount = Math.max(...targetDist.map(d => d.value));
+      const highestClassCount = Math.max(...targetDist.map((entry) => entry.value));
       const majorityPct = highestClassCount / totalTargetCount;
       if (majorityPct >= 0.9) {
-        newAlerts.push({
+        nextAlerts.push({
           severity: 'severe',
           title: 'Extreme Class Imbalance',
-          message: `The target variable '${targetColumn.name}' has a minority class of less than 10%. This will cause standard models to trivially guess the majority class and fail.`,
-          icon: '⚖️'
+          message: `The target variable '${targetColumn.name}' has a minority class below 10%. This will bias standard training unless balancing is introduced.`,
+          icon: 'warning',
         });
       }
     }
 
-    // 2. Multimodal Form Detection
-    const multimodalCols = columns.filter(col => detectMultimodality(col) === 'multimodal');
-    if (multimodalCols.length > 0) {
-      newAlerts.push({
+    const multimodalColumns = columns.filter((column) => detectMultimodality(column) === 'multimodal');
+    if (multimodalColumns.length > 0) {
+      nextAlerts.push({
         severity: 'warning',
         title: 'Multimodal Distributions Detected',
-        message: `${multimodalCols.length} variables (e.g. ${multimodalCols[0].name}) have complex, multi-peaked distributions. Global linear models might struggle to fit this data effectively.`,
-        icon: '📊'
+        message: `${multimodalColumns.length} variables, including ${multimodalColumns[0].name}, have multi-peaked distributions that may benefit from tree-based models or segmentation.`,
+        icon: 'warning',
       });
     }
 
-    return newAlerts;
+    return nextAlerts;
   }, [alerts, columns, targetColumn, targetDist, totalTargetCount]);
 
-  const isClassImbalanceAlert = enrichedAlerts.some((a) => a.title.includes('Class Imbalance'));
+  const typeSegments = [
+    {
+      label: 'Numeric',
+      value: summary.variableTypes.Numeric,
+      color: '#6d28d9',
+      icon: <Hash size={12} />,
+    },
+    {
+      label: 'Categorical',
+      value: summary.variableTypes.Categorical,
+      color: '#0d9488',
+      icon: <Type size={12} />,
+    },
+    {
+      label: 'Boolean',
+      value: summary.variableTypes.Boolean,
+      color: '#ea580c',
+      icon: <ToggleLeft size={12} />,
+    },
+  ];
 
   return (
-    <div className="space-y-6">
-      {/* Executive Summary Grid */}
-      <div>
-        <div className="flex items-center gap-2 mb-4">
-          <BarChart3 size={18} className="text-indigo-600" />
-          <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-            Executive Summary
+    <div className="space-y-8">
+      <section>
+        <div className="mb-5">
+          <p className="ha-section-label">Executive Summary</p>
+          <h3 className="mt-2 font-[var(--font-display)] text-[26px] font-bold tracking-[-0.04em] text-[var(--text)]">
+            Clinical dataset health
           </h3>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <StatCard
-            icon={<Columns3 size={18} />}
-            label="Variables (Columns)"
-            value={summary.numVariables}
-          />
-          <StatCard
-            icon={<Rows3 size={18} />}
-            label="Observations (Rows)"
-            value={summary.numObservations.toLocaleString()}
-          />
-          <StatCard
-            icon={<AlertTriangle size={18} />}
-            label="Missing Cells"
-            value={summary.missingCells.toLocaleString()}
-            sub={`${summary.missingCellsPct}% of all data`}
-            accent="text-amber-600"
-          />
-          <StatCard
-            icon={<Copy size={18} />}
-            label="Duplicate Rows"
-            value={summary.duplicateRows}
-            sub={`${summary.duplicateRowsPct}% of rows`}
-          />
-          <StatCard
-            icon={<Database size={18} />}
-            label="Total Data Source"
-            value="Clean & Extracted"
-            sub="Ready for pipeline"
-          />
+        <div className="flex flex-wrap gap-4">
+          <MetricCard label="Variables" value={summary.numVariables} icon={<Columns3 size={18} />} />
+          <MetricCard label="Observations" value={summary.numObservations.toLocaleString()} icon={<Rows3 size={18} />} />
+          <MetricCard label="Missing Cells" value={summary.missingCells.toLocaleString()} subtext={`${summary.missingCellsPct}% of all cells`} icon={<AlertTriangle size={18} />} />
+          <MetricCard label="Duplicate Rows" value={summary.duplicateRows} subtext={`${summary.duplicateRowsPct}% duplicated`} icon={<Copy size={18} />} />
+          <MetricCard label="Source Status" value="Ready" subtext="Analysis completed" icon={<Database size={18} />} />
+        </div>
+      </section>
+
+      <section className="ha-card p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="ha-section-label">Variable Type Breakdown</p>
+            <h4 className="mt-2 text-lg font-bold text-[var(--text)]">Signal composition</h4>
+          </div>
+          <p className="text-sm text-[var(--text2)]">
+            Numeric-heavy tables usually tolerate scaling and outlier handling well, while categorical breadth shapes encoding choices.
+          </p>
         </div>
 
-        {/* Variable Types Breakdown Mini-Bars */}
-        <div className="mt-4 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-3">
-            Variable Type Breakdown
-          </span>
-          <div className="flex gap-2 h-3 rounded-full overflow-hidden bg-slate-100">
-            <div
-              className="bg-indigo-500 rounded-l-full transition-all"
-              style={{ width: `${(summary.variableTypes.Numeric / summary.numVariables) * 100}%` }}
-              title={`Numeric: ${summary.variableTypes.Numeric}`}
-            />
-            <div
-              className="bg-emerald-500 transition-all"
-              style={{ width: `${(summary.variableTypes.Categorical / summary.numVariables) * 100}%` }}
-              title={`Categorical: ${summary.variableTypes.Categorical}`}
-            />
-            <div
-              className="bg-amber-500 rounded-r-full transition-all"
-              style={{ width: `${(summary.variableTypes.Boolean / summary.numVariables) * 100}%` }}
-              title={`Boolean: ${summary.variableTypes.Boolean}`}
-            />
-          </div>
-          <div className="flex gap-5 mt-2.5 text-xs text-slate-600 font-medium">
-            <span className="flex items-center gap-1.5">
-              <Hash size={12} className="text-indigo-500" /> Numeric: {summary.variableTypes.Numeric}
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Type size={12} className="text-emerald-500" /> Categorical: {summary.variableTypes.Categorical}
-            </span>
-            <span className="flex items-center gap-1.5">
-              <ToggleLeft size={12} className="text-amber-500" /> Boolean: {summary.variableTypes.Boolean}
-            </span>
+        <div className="mt-5 overflow-hidden rounded-[999px] bg-[var(--surface2)]">
+          <div className="flex h-4">
+            {typeSegments.map((segment) => (
+              <div
+                key={segment.label}
+                style={{ width: `${(segment.value / summary.numVariables) * 100}%`, backgroundColor: segment.color }}
+                title={`${segment.label}: ${segment.value}`}
+              />
+            ))}
           </div>
         </div>
-      </div>
 
-      {/* ── Class Imbalance Panel ───────────────────────────────── */}
-      {isClassImbalanceAlert && targetDist.length > 0 && (
-        <div>
-          <div className="flex items-center gap-2 mb-4">
-            <AlertTriangle size={18} className="text-orange-500" />
-            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-              Class Imbalance — Target Distribution
-            </h3>
-          </div>
-          <div className="bg-white border border-orange-200 rounded-xl p-5 shadow-sm space-y-3">
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Target variable <strong className="text-slate-800">{targetColumn.name}</strong> is imbalanced.
-              Consider <strong>SMOTE</strong> or <strong>class-weight balancing</strong> in Step&nbsp;3.
-            </p>
-            <div className="space-y-2.5">
-              {targetDist.map((cls) => {
-                const pct = totalTargetCount > 0 ? Math.round((cls.value / totalTargetCount) * 100) : 0;
-                const filled = Math.round(pct / 10);
-                const bar = '▓'.repeat(filled) + '░'.repeat(10 - filled);
-                const isMajority = cls.value === Math.max(...targetDist.map((d) => d.value));
-                return (
-                  <div key={cls.label} className="flex items-center gap-3">
-                    <span className={`text-[11px] font-bold min-w-[70px] truncate ${isMajority ? 'text-orange-700' : 'text-slate-600'}`}>
-                      Class {cls.label}:
-                    </span>
-                    <div className="flex-1 bg-slate-100 rounded-full h-2.5 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all ${isMajority ? 'bg-orange-400' : 'bg-indigo-400'}`}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                    <span className="text-[10px] font-mono text-slate-500 min-w-[80px] shrink-0">
-                      [{bar}] {pct}%
-                    </span>
-                    <span className="text-[10px] text-slate-400 shrink-0">({cls.value.toLocaleString()})</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+        <div className="mt-4 flex flex-wrap gap-2"> 
+          {typeSegments.map((segment) => (
+            <span
+              key={segment.label}
+              className="ha-pill"
+              style={{
+                borderColor: `${segment.color}25`,
+                color: segment.color,
+                background: `${segment.color}12`,
+              }}
+            >
+              {segment.icon}
+              {segment.label}: {segment.value}
+            </span>
+          ))}
         </div>
+      </section>
+
+      {userMode !== 'clinical' && (
+        <section>
+          <div className="mb-5">
+            <p className="ha-section-label">ML Health Diagnostics</p>
+            <h4 className="mt-2 text-lg font-bold text-[var(--text)]">Warnings and recommendations</h4>
+          </div>
+
+          <DataHealthAlerts alerts={enrichedAlerts} />
+        </section>
       )}
-
-      {/* Enhanced Educational Alerts */}
-      <div>
-        <div className="flex items-center gap-2 mb-4">
-          <AlertTriangle size={18} className="text-amber-600" />
-          <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-            Machine Learning Data Health Diagnostics
-          </h3>
-        </div>
-
-        <DataHealthAlerts alerts={enrichedAlerts} />
-      </div>
     </div>
   );
 };

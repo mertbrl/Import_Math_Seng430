@@ -85,6 +85,7 @@ const OutliersTab: React.FC = () => {
     confirmAndInvalidateLaterSteps
   } = useDataPrepStore();
 
+  const userMode = useDomainStore((s) => s.userMode);
   const ignoredColumns = useEDAStore(s => s.ignoredColumns);
   const sessionId = useDomainStore((s) => s.sessionId);
   const [bulkDetector, setBulkDetector] = useState<OutlierDetector>('iqr');
@@ -209,6 +210,72 @@ const OutliersTab: React.FC = () => {
   const recommendedWinsorizeCount = outlierColumns.filter(
     (col) => getRecommendedPlan(col).treatment.startsWith('cap_')
   ).length;
+
+  if (userMode === 'clinical') {
+    return (
+        <div className="space-y-6 animate-in fade-in duration-300">
+          <div className="border-b border-slate-200 pb-4">
+            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+              <ScanSearch className="text-indigo-600" size={24} />
+              Data Health Check-up: Outliers
+            </h2>
+            <p className="text-sm text-slate-500 mt-1">
+              Checking patient data for extreme statistical anomalies that could skew results.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            {outlierColumns.map((col) => {
+              const plan = getRecommendedPlan(col);
+              return (
+                <div key={col.column} className="p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-indigo-200 transition-colors">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-start gap-3">
+                      <CheckCircle2 size={20} className="text-indigo-500 shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="font-bold text-slate-800 text-sm">Feature: {col.column}</h4>
+                        <p className="text-xs text-slate-600 mt-1 max-w-lg leading-relaxed">
+                          System detected anomalies ({col.outlier_percentage}% of rows). Recommended action is to <span className="font-semibold text-slate-700">{treatmentLabel(plan.treatment).toLowerCase()}</span> using standard statistical adjustments to preserve data integrity.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="group relative shrink-0">
+                      <button className="text-[11px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors">
+                        [ Why? ] Details
+                      </button>
+                      <div className="absolute right-0 sm:right-auto sm:left-1/2 sm:-translate-x-1/2 bottom-full mb-2 w-64 p-3 bg-slate-800 text-slate-50 text-xs rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-20 text-center pointer-events-none">
+                        {col.suggestion_reason ?? 'System optimized based on feature distribution.'}
+                        <div className="absolute top-full left-1/2 -translate-x-1/2 border-t-8 border-t-slate-800 border-l-8 border-l-transparent border-r-8 border-r-transparent"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="pt-6 border-t border-slate-200 flex justify-end">
+            <button
+              onClick={() => {
+                applyRecommendedPlans();
+                const strategies: Record<string, { detector: string; treatment: string }> = {};
+                outlierColumns.forEach((col) => {
+                  strategies[col.column] = getRecommendedPlan(col);
+                });
+
+                if (!confirmAndInvalidateLaterSteps('outliers', 'Applying these system suggestions will remove all accepted work in the later steps. Do you want to continue?')) return;
+                addPipelineAction({ step: 'outliers', action: 'handle_outliers', strategies });
+                toggleStepComplete('outliers', true);
+                setActiveTab('imputation');
+              }}
+              className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 transition-all shadow-md active:scale-[0.98]"
+            >
+              Apply Recommendations & Continue <ChevronRight size={18} />
+            </button>
+          </div>
+        </div>
+    );
+  }
 
   // ─── Active Outlier Workspace ────────────────────────────────────
   return (

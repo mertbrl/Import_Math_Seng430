@@ -6,10 +6,16 @@ import Step5Results from "./features/evaluation/step5/Step5Results.tsx";
 import Step6Explainability from "./features/explainability/step6/Step6Explainability.tsx";
 import { Step7EthicsBias } from "./features/ethics/step7/Step7EthicsBias.tsx";
 import { AppLayout } from "./components/AppLayout.tsx";
+import { ExperienceModeScreen } from "./components/ExperienceModeScreen.tsx";
 import { useDomainStore } from "./store/useDomainStore.ts";
 
 function App() {
   const currentStep = useDomainStore((s) => s.currentStep);
+  const hasChosenMode = useDomainStore((s) => s.hasChosenMode);
+
+  if (!hasChosenMode) {
+    return <ExperienceModeScreen />;
+  }
 
   return (
     <AppLayout>

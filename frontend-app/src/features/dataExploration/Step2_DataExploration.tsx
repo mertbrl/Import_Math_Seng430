@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { AlertCircle, Loader2, UploadCloud } from 'lucide-react';
 import DataLoader from './DataLoader';
 import SmartEDA from './SmartEDA';
 import { useDomainStore } from '../../store/useDomainStore';
@@ -6,14 +7,13 @@ import { useEDAStore } from '../../store/useEDAStore';
 import { domains } from '../../config/domainConfig';
 import { BACKEND_URL_HINT } from '../../config/apiConfig';
 import { checkBackendHealth, exploreDataset } from '../../services/pipelineApi';
-import { Loader2, AlertCircle } from 'lucide-react';
 import ColumnConfigurator from './ColumnConfigurator';
 import PreAnalysisPreview from './PreAnalysisPreview';
 
 export const Step2_DataExploration: React.FC = () => {
-  const selectedDomainId = useDomainStore((s) => s.selectedDomainId);
-  const sessionId = useDomainStore((s) => s.sessionId);
-  const domain = domains.find((d) => d.id === selectedDomainId) || domains[0];
+  const selectedDomainId = useDomainStore((state) => state.selectedDomainId);
+  const sessionId = useDomainStore((state) => state.sessionId);
+  const domain = domains.find((item) => item.id === selectedDomainId) ?? domains[0];
   const { clearConfig, previewAccepted, edaData, setEdaData, prepareForAnalysis } = useEDAStore();
 
   const [isLoading, setIsLoading] = useState(false);
@@ -30,102 +30,87 @@ export const Step2_DataExploration: React.FC = () => {
       setEdaData(data);
     } catch (err: any) {
       const health = await checkBackendHealth();
-      const msg =
+      const message =
         err?.response?.data?.error ||
         (!health.reachable
           ? `Could not reach the FastAPI backend at ${BACKEND_URL_HINT}. Start the backend server and try again.`
           : err?.message) ||
-        'Failed to analyse dataset. Is the backend running?';
-      setError(msg);
+        'Failed to analyze dataset. Is the backend running?';
+      setError(message);
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div
-      className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col"
-      id="step-2"
-    >
-      {/* Component Header */}
-      <div className="bg-slate-50 px-6 sm:px-8 py-6 border-b border-slate-200">
-        <div>
-          <span className="inline-block px-2.5 py-1 bg-indigo-100/80 text-indigo-700 text-[10px] font-bold tracking-widest rounded-full mb-3 border border-indigo-200/50">
-            STEP 2 OF 7
-          </span>
-          <h2 className="text-2xl font-bold font-serif text-slate-900 tracking-tight">
-            Smart Data Exploration &amp; EDA
-          </h2>
-          <p className="text-[14px] text-slate-600 mt-2 max-w-3xl leading-relaxed">
-            Upload or load the dataset for{' '}
-            <strong className="text-slate-800 font-semibold">{domain.domainName}</strong>. We'll
-            generate an intelligent exploratory analysis including data health checks, feature
-            distributions, correlations, and target mapping.
-          </p>
+    <div className="space-y-6" id="step-2">
+      <div className="ha-card overflow-hidden">
+        <div className="border-b border-[var(--border)] bg-[radial-gradient(circle_at_top_left,_rgba(26,86,219,0.14),_transparent_34%),radial-gradient(circle_at_bottom_right,_rgba(13,148,136,0.1),_transparent_28%),linear-gradient(180deg,_#ffffff,_#f8fafc)] px-7 py-8 sm:px-10">
+          <div className="flex flex-wrap gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-3xl flex-1 min-w-[280px]"> 
+              <span className="ha-pill ha-pill-accent">
+                <UploadCloud size={14} />
+                Step 2 · Data Exploration
+              </span>
+              <h2 className="ha-display mt-5">Explore the dataset before you change it.</h2>
+              <p className="ha-body mt-4 w-full break-words min-w-0"> 
+                Upload or load the working file for <strong className="text-[var(--text)]">{domain.domainName}</strong>. This step surfaces preview rows, variable health, missingness, correlations, and target mapping before preprocessing begins.
+              </p>
+            </div>
+
+            <div className="rounded-[20px] border border-[var(--border)] bg-white/82 px-5 py-4 backdrop-blur-md flex-1 min-w-[280px]"> 
+              <p className="ha-section-label">Clinical Focus</p>
+              <p className="mt-2 text-sm font-semibold text-[var(--text)] break-words w-full stretch">{domain.clinicalQuestion}</p>
+            </div>
+          </div>
         </div>
-      </div>
 
-      {/* Body */}
-      <div className="p-6 sm:px-8 sm:py-8 space-y-6">
-        {/* Data Loader */}
-        <DataLoader onFileLoaded={handleFileLoaded} isLoading={isLoading} />
+        <div className="space-y-6 px-7 py-8 sm:px-10 sm:py-10">
+          <DataLoader onFileLoaded={handleFileLoaded} isLoading={isLoading} />
 
-        {/* Pre-Analysis Data Preview (Step 2.1) */}
-        {!previewAccepted && !edaData && (
-          <PreAnalysisPreview />
-        )}
+          {!previewAccepted && !edaData ? <PreAnalysisPreview /> : null}
 
-        {/* Pre-Analysis Column Configurator (Step 2.2) */}
-        {previewAccepted && !edaData && (
-          <ColumnConfigurator
-            onConfirm={handleFileLoaded}
-            onCancel={() => clearConfig()}
-          />
-        )}
+          {previewAccepted && !edaData ? (
+            <ColumnConfigurator onConfirm={handleFileLoaded} onCancel={() => clearConfig()} />
+          ) : null}
 
-        {/* Loading Spinner */}
-        {isLoading && (
-          <div className="flex flex-col items-center justify-center py-16 gap-4 animate-fade-in-up">
-            <div className="relative">
-              <div className="absolute inset-0 bg-indigo-400/20 rounded-full animate-ping" />
-              <div className="relative p-4 bg-white rounded-full border border-indigo-200 shadow-lg">
-                <Loader2 size={32} className="text-indigo-600 animate-spin" />
+          {isLoading ? (
+            <div className="ha-card-muted flex flex-col items-center justify-center gap-4 px-6 py-16 text-center">
+              <div className="grid h-16 w-16 place-items-center rounded-full border border-[var(--border)] bg-white shadow-sm">
+                <Loader2 size={30} className="animate-spin text-[var(--trust)]" />
+              </div>
+              <div>
+                <p className="font-[var(--font-display)] text-[26px] font-bold tracking-[-0.04em] text-[var(--text)]">
+                  Running exploratory analysis
+                </p>
+                <p className="mt-2 text-sm text-[var(--text2)]">
+                  Computing distributions, schema diagnostics, correlations, and target candidates.
+                </p>
               </div>
             </div>
-            <div className="text-center">
-              <p className="text-sm font-bold text-slate-800">Running Exploratory Analysis…</p>
-              <p className="text-xs text-slate-500 mt-1">
-                Computing statistics, distributions, correlations &amp; alerts
-              </p>
-            </div>
-          </div>
-        )}
+          ) : null}
 
-        {/* Error Message */}
-        {error && !isLoading && (
-          <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl p-5 shadow-sm animate-fade-in-up">
-            <div className="p-2 bg-red-100 rounded-lg shrink-0">
-              <AlertCircle size={20} className="text-red-600" />
+          {error && !isLoading ? (
+            <div className="rounded-[20px] border border-[var(--danger)]/20 bg-[var(--danger-light)] px-5 py-5">
+              <div className="flex items-start gap-3">
+                <AlertCircle size={18} className="mt-1 shrink-0 text-[var(--danger)]" />
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-[var(--danger)]">Analysis Failed</p>
+                  <p className="mt-2 text-sm leading-7 text-[var(--text)]">{error}</p>
+                  <p className="mt-3 text-sm text-[var(--text2)]">
+                    Backend endpoint: <code className="ha-code">{BACKEND_URL_HINT}</code>
+                  </p>
+                </div>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-bold text-red-900">Analysis Failed</p>
-              <p className="text-[13px] text-red-700 mt-1 leading-relaxed">{error}</p>
-              <p className="text-xs text-red-500 mt-2">
-                Ensure the FastAPI backend is running at{' '}
-                <code className="bg-red-100 px-1.5 py-0.5 rounded text-red-800 font-mono">
-                  {BACKEND_URL_HINT}
-                </code>
-              </p>
-            </div>
-          </div>
-        )}
+          ) : null}
 
-        {/* EDA Interface — persists across navigation, shown when edaData exists */}
-        {edaData && !isLoading && (
-          <div className="animate-fade-in-up">
-            <SmartEDA data={edaData} />
-          </div>
-        )}
+          {edaData && !isLoading ? (
+            <div className="ha-animate-in">
+              <SmartEDA data={edaData} />
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );

@@ -65,6 +65,7 @@ const ImbalanceTab: React.FC = () => {
   } = useDataPrepStore();
   const targetColumn = useEDAStore((s) => s.targetColumn);
   const sessionId = useDomainStore((s) => s.sessionId);
+  const userMode = useDomainStore((s) => s.userMode);
   const isComplete = completedSteps.includes('imbalance_handling');
   const savedAction = cleaningPipeline.find((action) => action.action === 'handle_imbalance');
 
@@ -192,6 +193,58 @@ const ImbalanceTab: React.FC = () => {
     );
   }
 
+  if (userMode === 'clinical') {
+    return (
+      <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="border-b border-slate-200 pb-4">
+          <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+            <Shuffle className="text-rose-600" size={24} />
+            Data Health Check-up: Subgroup Balance
+          </h2>
+          <p className="text-sm text-slate-500 mt-1">
+            Ensuring the model learns equally well for all patient categories.
+          </p>
+        </div>
+
+        <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-rose-200 transition-colors">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 size={20} className="text-rose-500 shrink-0 mt-0.5" />
+              <div>
+                <h4 className="font-bold text-slate-800 text-sm">Status: {data?.severity === 'balanced' ? 'Healthy Balance' : 'Imbalance Detected'}</h4>
+                <p className="text-xs text-slate-600 mt-1 max-w-lg leading-relaxed">
+                  {recommendationTag === 'smote' && 'System recommends generating synthetic data points to give underrepresented patient profiles an equal voice.'}
+                  {recommendationTag === 'smotenc' && 'System recommends specialized balancing (SMOTENC) due to the high number of categorical data features.'}
+                  {recommendationTag === 'class_weights' && 'Mild imbalance. Applying algorithmic class weights instead of creating synthetic patients.'}
+                  {recommendationTag === 'none' && 'Target distribution is healthy. No synthetic adjustments needed.'}
+                </p>
+              </div>
+            </div>
+            <div className="group relative shrink-0">
+              <button className="text-[11px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors">
+                [ Why? ] Details
+              </button>
+              <div className="absolute right-0 sm:right-auto sm:left-1/2 sm:-translate-x-1/2 bottom-full mb-2 w-64 p-3 bg-slate-800 text-slate-50 text-xs rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-20 text-center pointer-events-none">
+                {data?.ui_message ?? 'The system has validated the distribution.'}
+                <div className="absolute top-full left-1/2 -translate-x-1/2 border-t-8 border-t-slate-800 border-l-8 border-l-transparent border-r-8 border-r-transparent"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="pt-6 border-t border-slate-200 flex justify-end">
+          <button
+            onClick={() => attemptApplyStrategy(recommendationTag)}
+            className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold bg-rose-600 text-white hover:bg-rose-700 transition-all shadow-md active:scale-[0.98]"
+          >
+            Apply Recommendation & Continue <ChevronRight size={18} />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Advanced Workspace ────────────────────────────────────
   return (
     <div className="space-y-6">
       <div className="bg-gradient-to-br from-rose-50 to-pink-50 border border-rose-100 rounded-2xl p-5">

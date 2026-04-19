@@ -1,72 +1,112 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { HelpCircle, RotateCcw, Settings2 } from 'lucide-react';
 import { useDomainStore } from '../store/useDomainStore';
-import { useEDAStore } from '../store/useEDAStore';
-import { useDataPrepStore } from '../store/useDataPrepStore';
 import { domains } from '../config/domainConfig';
-import WarningModal from './common/WarningModal';
+
+const TOTAL_STEPS = 7;
 
 export const TopNavbar: React.FC = () => {
-  const { selectedDomainId, toggleHelp, setDomain } = useDomainStore();
-  const clearEDAConfig = useEDAStore((s) => s.clearConfig);
-  const resetPrep = useDataPrepStore((s) => s.resetPrep);
-  const currentDomain = domains.find(d => d.id === selectedDomainId)?.domainName || "Unknown Domain";
+  const {
+    currentStep,
+    selectedDomainId,
+    userMode,
+    toggleHelp,
+    resetApp,
+    setUserMode,
+  } = useDomainStore();
 
-  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
-
-  const handleGlobalReset = () => {
-    setDomain(domains[0].id); // Go back to first domain and Step 1
-    clearEDAConfig();
-    resetPrep();
-    setIsResetModalOpen(false);
-  };
+  const currentDomain = domains.find((domain) => domain.id === selectedDomainId) ?? domains[0];
+  const progressPercent = Math.round((currentStep / TOTAL_STEPS) * 100);
 
   return (
-    <>
-      <nav className="bg-[#0D2340] text-white px-6 py-3 shadow-lg flex items-center justify-between sticky top-0 z-50">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-teal-400 to-indigo-500 flex items-center justify-center font-serif font-bold text-lg shadow-inner">
-              H
+    <nav className="ha-navbar">
+      <div className="page-wrap-wide flex min-h-[72px] flex-col gap-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 items-center gap-4">
+          <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[linear-gradient(135deg,var(--trust),var(--clinical))] shadow-[0_16px_34px_rgba(26,86,219,0.18)]">
+            <div className="relative flex h-5 w-5 items-center justify-center">
+              <span className="absolute inline-flex h-5 w-5 animate-ping rounded-full bg-white/30" />
+              <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-white" />
             </div>
-            <h1 className="font-semibold text-sm sm:text-base tracking-wide leading-tight whitespace-nowrap">
-              HEALTH-AI · ML Learning Tool
-            </h1>
           </div>
-          <p className="hidden md:block text-xs text-slate-400 font-medium border-l border-slate-700 pl-4">
-            For Healthcare Professionals
-          </p>
+
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="truncate font-[var(--font-display)] text-[22px] font-bold tracking-[-0.05em] text-[var(--text)]">
+                Health AI
+              </h1>
+              <span className="ha-pill">
+                {currentDomain.domainName}
+              </span>
+            </div>
+            <p className="mt-1 text-sm text-[var(--text3)]">
+              {currentDomain.clinicalQuestion}
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/20 bg-white/5 text-xs font-medium text-white/80 transition-colors hover:bg-white/10">
-            <span className="w-1.5 h-1.5 rounded-full bg-teal-400 shadow-[0_0_0_2px_rgba(45,212,191,0.2)]"></span>
-            Domain: <b className="text-white ml-0.5">{currentDomain}</b> <span className="text-[10px] ml-1 opacity-60">▾</span>
+        <div className="hidden items-center gap-4 lg:flex">
+          <div className="ha-navbar-mini-progress">
+            {Array.from({ length: TOTAL_STEPS }, (_, index) => (
+              <span key={index} data-done={index + 1 <= currentStep} />
+            ))}
           </div>
-          
-          <button 
-            onClick={() => setIsResetModalOpen(true)}
-            className="px-3 py-1.5 rounded-lg border border-white/20 bg-white/10 text-white text-xs font-medium hover:bg-white/20 transition-all font-sans"
-          >
-            ↺ Reset
-          </button>
-        
-          <button 
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 lg:justify-end">
+          <div className="flex items-center gap-2 rounded-[999px] border border-[var(--border)] bg-white/80 p-1 backdrop-blur-md">
+            <button
+              type="button"
+              onClick={() => setUserMode('clinical')}
+              className={userMode === 'clinical' ? 'ha-mode-pill' : 'ha-pill border-transparent bg-transparent py-2'}
+            >
+              Doctor Mode
+            </button>
+            <button
+              type="button"
+              onClick={() => setUserMode('data_scientist')}
+              className={userMode === 'data_scientist' ? 'ha-mode-pill' : 'ha-pill border-transparent bg-transparent py-2'}
+            >
+              Data Scientist
+            </button>
+          </div>
+
+          <div className="ha-pill">
+            Step {currentStep} of {TOTAL_STEPS} · {progressPercent}%
+          </div>
+
+          <button
+            type="button"
             onClick={toggleHelp}
-            className="px-3 py-1.5 rounded-lg border border-[#0E9E8E] bg-[#0E9E8E] text-white text-xs font-medium hover:bg-[#0b8a7c] hover:border-[#0b8a7c] transition-all font-sans drop-shadow-sm"
+            className="ha-button-secondary inline-flex h-11 w-11 items-center justify-center p-0"
+            aria-label="Open help"
+            title="Help"
           >
-            ? Help
+            <HelpCircle size={17} />
+          </button>
+
+          <button
+            type="button"
+            onClick={toggleHelp}
+            className="ha-button-secondary inline-flex h-11 w-11 items-center justify-center p-0"
+            aria-label="Open settings"
+            title="Workspace guidance"
+          >
+            <Settings2 size={17} />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              void resetApp();
+            }}
+            className="ha-button-danger inline-flex h-11 w-11 items-center justify-center p-0"
+            aria-label="Reset workflow"
+            title="Reset workflow"
+          >
+            <RotateCcw size={17} />
           </button>
         </div>
-      </nav>
-
-      <WarningModal
-        isOpen={isResetModalOpen}
-        title="Global Reset"
-        message="Are you sure you want to completely reset the project? All your data configurations, EDA progress, and preparation steps will be permanently lost."
-        onConfirm={handleGlobalReset}
-        onCancel={() => setIsResetModalOpen(false)}
-        confirmText="Yes, Proceed"
-      />
-    </>
+      </div>
+    </nav>
   );
 };

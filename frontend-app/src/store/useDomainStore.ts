@@ -11,6 +11,12 @@ function createSessionId(domainId: string, workflowVersion: number): string {
   return `workflow-${domainId}-${workflowVersion}`.replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase();
 }
 
+function getInitialWorkflowState(hasChosenMode: boolean) {
+  return hasChosenMode
+    ? { currentStep: 1, step1Confirmed: false }
+    : { currentStep: 1, step1Confirmed: false };
+}
+
 /**
  * Central gate resolver — single source of truth for step unlock logic.
  * Steps must be completed in strict linear order.
@@ -69,13 +75,17 @@ interface DomainState {
   workflowVersion: number;
   sessionId: string;
   isHelpOpen: boolean;
+  hasChosenMode: boolean;
   currentStep: number;
   step1Confirmed: boolean;
   schemaValid: boolean;
   step5Completed: boolean;
   step6Completed: boolean;
+  userMode: 'clinical' | 'data_scientist';
 
   setDomain: (id: string) => Promise<void>;
+  chooseMode: (mode: 'clinical' | 'data_scientist') => void;
+  setUserMode: (mode: 'clinical' | 'data_scientist') => void;
   resetApp: () => Promise<void>;
   toggleHelp: () => void;
   setCurrentStep: (step: number) => void;
@@ -100,23 +110,24 @@ export const useDomainStore = create<DomainState>((set, get) => ({
   workflowVersion: 1,
   sessionId: createSessionId(DEFAULT_DOMAIN_ID, 1),
   isHelpOpen: false,
+  hasChosenMode: false,
   currentStep: 1,
   step1Confirmed: false,
   schemaValid: false,
   step5Completed: false,
   step6Completed: false,
+  userMode: 'clinical',
 
   setDomain: async (id: string) => {
     if (id === get().selectedDomainId) return;
-    const { sessionId, workflowVersion } = get();
+    const { sessionId, workflowVersion, hasChosenMode } = get();
     clearWorkflowState();
     const nextWorkflowVersion = workflowVersion + 1;
     set({
       selectedDomainId: id,
       workflowVersion: nextWorkflowVersion,
       sessionId: createSessionId(id, nextWorkflowVersion),
-      currentStep: 1,
-      step1Confirmed: false,
+      ...getInitialWorkflowState(hasChosenMode),
       schemaValid: false,
       step5Completed: false,
       step6Completed: false,
@@ -124,9 +135,23 @@ export const useDomainStore = create<DomainState>((set, get) => ({
     void teardownSession(sessionId);
   },
 
+  chooseMode: (mode: 'clinical' | 'data_scientist') =>
+    set({
+      userMode: mode,
+      hasChosenMode: true,
+      currentStep: 1,
+      step1Confirmed: false,
+    }),
+
+  setUserMode: (mode: 'clinical' | 'data_scientist') =>
+    set({
+      userMode: mode,
+      hasChosenMode: true,
+    }),
+
   resetApp: async () => {
-    if (window.confirm('Are you sure you want to reset all progress? This will return you to Step 1.')) {
-      const { sessionId, workflowVersion } = get();
+    if (window.confirm('Are you sure you want to reset all progress? This will restart the workflow from the beginning.')) {
+      const { sessionId, workflowVersion, hasChosenMode } = get();
       clearWorkflowState();
       const nextWorkflowVersion = workflowVersion + 1;
       set({
@@ -134,8 +159,7 @@ export const useDomainStore = create<DomainState>((set, get) => ({
         workflowVersion: nextWorkflowVersion,
         sessionId: createSessionId(DEFAULT_DOMAIN_ID, nextWorkflowVersion),
         isHelpOpen: false,
-        currentStep: 1,
-        step1Confirmed: false,
+        ...getInitialWorkflowState(hasChosenMode),
         schemaValid: false,
         step5Completed: false,
         step6Completed: false,
