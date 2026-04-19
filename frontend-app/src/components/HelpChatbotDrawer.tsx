@@ -1,28 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useDomainStore } from '../store/useDomainStore';
 
-const GLOSSARY_TERMS: Record<string, string> = {
-  "algorithm": "A set of step-by-step instructions a computer follows to find patterns in patient data and make predictions — like a fast, data-driven decision checklist.",
-  "training data": "Historical patient records the model learns from. Similar to a doctor reviewing past cases before seeing new patients.",
-  "test data": "Patients the model has never seen, used to measure how well the AI performs. If a model only works on training data, it has memorised rather than learned.",
-  "features": "The input measurements (columns in your data) used to make predictions — for example, age, blood pressure, creatinine level, smoking status.",
-  "target variable": "The outcome the model is trying to predict — for example, readmission, diagnosis, survival, or disease stage.",
-  "overfitting": "When a model memorises the training cases so precisely that it fails on new patients. Like a student who memorises exam answers but cannot apply the knowledge.",
-  "underfitting": "When a model is too simple to learn anything useful. Like a clinician who gives the same diagnosis regardless of symptoms.",
-  "normalisation": "Adjusting all measurements to the same scale so no single measurement dominates because of its units. Age (0–100) and a troponin level (0–50,000) must be rescaled before they can be compared fairly.",
-  "class imbalance": "When one outcome is much rarer than the other in the training data. A model trained on 95% negative cases may simply predict negative for everyone and appear 95% accurate — but miss all real cases.",
-  "smote": "Synthetic Minority Over-sampling Technique. Creates artificial examples of the rare outcome to balance the training data. Applied to training data only — never to test patients.",
-  "sensitivity": "Of all patients who truly have the condition, what fraction did the model correctly identify? Low sensitivity means the model misses real cases. Critical in any screening application.",
-  "specificity": "Of all patients who truly do not have the condition, what fraction did the model correctly call healthy? Low specificity means too many false alarms.",
-  "precision": "Of all patients the model flagged as positive, what fraction actually were? Low precision means many unnecessary referrals or treatments.",
-  "f1 score": "A single number that balances Sensitivity and Precision. Useful when both false negatives and false positives have real clinical costs.",
-  "auc-roc": "A score from 0.5 (random guessing) to 1.0 (perfect separation) summarising how well the model distinguishes between positive and negative patients. Above 0.8 is considered good.",
-  "confusion matrix": "A 2x2 table showing: correctly identified sick patients, correctly identified healthy patients, healthy patients incorrectly flagged as sick, and sick patients incorrectly called safe.",
-  "feature importance": "A ranking of which patient measurements the model relied on most. Helps confirm whether the AI is using clinically meaningful signals.",
-  "hyperparameter": "A setting chosen before training that controls model behaviour — for example, K in KNN or tree depth in Decision Tree. Not learned from data; set by the user via sliders.",
-  "bias": "When a model performs significantly worse for certain patient subgroups (for example, older patients, women, or ethnic minorities) because they were under-represented in the training data.",
-  "cross-validation": "Splitting the data multiple times and averaging results to get a more reliable performance estimate than a single train/test split."
-};
+import api from '../services/api';
 
 interface Message {
   id: string;
@@ -37,9 +16,10 @@ export const HelpChatbotDrawer: React.FC = () => {
     { 
       id: '1', 
       role: 'ai', 
-      content: 'Hello! I am your HEALTH-AI assistant. You can ask me about ML terms like SMOTE, AUC-ROC, or Overfitting.' 
+      content: 'Hello! I am your HEALTH-AI assistant. You can ask me anything about this model or platform!' 
     }
   ]);
+  const [isLoading, setIsLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom of chat when messages change
@@ -49,7 +29,7 @@ export const HelpChatbotDrawer: React.FC = () => {
     }
   }, [messages, isHelpOpen]);
 
-  const handleSendMessage = (e?: React.FormEvent) => {
+  const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const trimmedInput = inputText.trim();
     if (!trimmedInput) return;
@@ -64,31 +44,39 @@ export const HelpChatbotDrawer: React.FC = () => {
     setMessages((prev) => [...prev, userMsg]);
     setInputText('');
 
-    // 2. Mock AI Logic (Look for keywords in input)
-    setTimeout(() => {
-      const lowerInput = trimmedInput.toLowerCase();
-      let matchedDefinition = '';
-      let matchedKey = '';
+    // Convert history messages format to send to API
+    const history = messages.map(m => ({
+      role: m.role,
+      content: m.content
+    }));
 
-      // Check against glossary keys
-      for (const [key, value] of Object.entries(GLOSSARY_TERMS)) {
-        if (lowerInput.includes(key)) {
-          matchedDefinition = value;
-          matchedKey = key;
-          break;
-        }
-      }
+    setIsLoading(true);
+
+    // Call actual backend endpoint
+    try {
+      const response = await api.post('/chat', {
+        message: trimmedInput,
+        history: history
+      });
 
       const aiMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'ai',
-        content: matchedDefinition 
-          ? `**${matchedKey.toUpperCase()}**: ${matchedDefinition}` 
-          : "I'm currently running in frontend-only mode. Soon, I'll be connected to my Python RAG backend to answer that!"
+        content: response.data?.response || "No response generated."
       };
-
+      
       setMessages((prev) => [...prev, aiMsg]);
-    }, 600); // Simulate network delay
+    } catch (error) {
+      console.error('Chat API Error:', error);
+      const errorMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'ai',
+        content: "Üzgünüm, şu anda yanıt veremiyorum. Lütfen sunucu bağlantısını veya internetinizi kontrol edin."
+      };
+      setMessages((prev) => [...prev, errorMsg]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -162,6 +150,17 @@ export const HelpChatbotDrawer: React.FC = () => {
               </div>
             );
           })}
+          
+          {isLoading && (
+            <div className={`flex w-full justify-start`}>
+              <div className={`relative px-5 py-3 rounded-2xl bg-white border border-slate-200 text-slate-500 rounded-bl-sm flex items-center gap-1.5 shadow-sm`}>
+                <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
+            </div>
+          )}
+          
           <div ref={bottomRef} className="h-1 shrink-0" />
         </div>
 
@@ -181,7 +180,7 @@ export const HelpChatbotDrawer: React.FC = () => {
             />
             <button
               type="submit"
-              disabled={!inputText.trim()}
+              disabled={!inputText.trim() || isLoading}
               className="w-10 h-10 flex items-center justify-center shrink-0 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 transition-colors"
             >
               <span className="text-lg -mt-0.5 ml-0.5">↑</span>

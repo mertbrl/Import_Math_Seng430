@@ -15,3 +15,9 @@ lightgbm>=4.5.0
 catboost>=1.2.7
 shap>=0.46.0
 reportlab>=4.0.0
+
+# --- AI Chatbot Requirements ---
+langchain
+langchain-openai
+langchain-google-genai
+python-dotenv
