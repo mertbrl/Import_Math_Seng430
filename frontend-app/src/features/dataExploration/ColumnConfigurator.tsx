@@ -13,71 +13,53 @@ const ColumnConfigurator: React.FC<ColumnConfiguratorProps> = ({ onConfirm, onCa
   if (!rawFile || rawHeaders.length === 0) return null;
 
   return (
-    <div className="bg-white border-2 border-indigo-100 rounded-2xl p-6 shadow-md animate-fade-in-up">
-      <div className="flex items-start gap-4 mb-6">
-        <div className="p-3 bg-indigo-50 rounded-xl text-indigo-600 shrink-0">
-          <Database size={24} />
+    <div className="ha-step2-config-card animate-fade-in-up">
+      <div className="mb-6 flex items-start gap-4">
+        <div className="ha-step2-config-icon">
+          <Database size={22} />
         </div>
         <div>
-          <h3 className="text-lg font-bold text-slate-900">Pre-Analysis Configuration</h3>
-          <p className="text-sm text-slate-600 mt-1 max-w-2xl leading-relaxed">
-            We detected <strong className="text-slate-800">{rawHeaders.length} columns</strong> in 
-            <strong className="text-slate-800"> {rawFile.name}</strong>. Before running the heavy EDA, 
-            please <span className="font-semibold text-indigo-700">tag any Identifier (ID)</span> or 
-            <span className="font-semibold text-indigo-700"> non-clinical Metadata columns</span>. 
-            These will be explicitly excluded from the correlation mapping to prevent false insights.
+          <h3 className="text-lg font-bold text-[var(--text)]">Pre-Analysis Configuration</h3>
+          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-[var(--text2)]">
+            We detected <strong className="text-[var(--text)]">{rawHeaders.length} columns</strong> in
+            <strong className="text-[var(--text)]"> {rawFile.name}</strong>. Tag any identifier or non-clinical
+            metadata columns to exclude them from correlation mapping.
           </p>
         </div>
       </div>
 
-      {/* Columns Grid */}
-      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 max-h-[300px] overflow-y-auto mb-6">
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+      <div className="ha-step2-config-grid-shell">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
           {rawHeaders.map((header) => {
             const isIgnored = ignoredColumns.includes(header);
             return (
               <button
                 key={header}
                 onClick={() => toggleIgnoreColumn(header)}
-                className={`flex items-center justify-between p-3 rounded-lg border text-left transition-all text-sm font-medium ${
-                  isIgnored 
-                    ? 'bg-slate-200 border-slate-300 text-slate-500 shadow-inner' 
-                    : 'bg-white border-indigo-200 text-slate-800 hover:border-indigo-400 hover:shadow-sm'
-                }`}
+                className={`ha-step2-col-btn ${isIgnored ? 'is-ignored' : ''}`}
               >
-                <span className="truncate pr-2" title={header}>{header}</span>
-                {isIgnored ? (
-                  <EyeOff size={16} className="text-slate-400 shrink-0" />
-                ) : (
-                  <ShieldAlert size={16} className="text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-                )}
+                <span className="truncate pr-2" title={header}>
+                  {header}
+                </span>
+                {isIgnored ? <EyeOff size={16} className="shrink-0" /> : <ShieldAlert size={16} className="shrink-0" />}
               </button>
             );
           })}
         </div>
       </div>
 
-      <div className="flex items-center justify-between border-t border-slate-100 pt-5">
-        <div className="text-sm text-slate-500">
-          <strong className="text-slate-700">{ignoredColumns.length}</strong> columns excluded from ML correlations.
+      <div className="mt-5 flex items-center justify-between border-t border-[var(--border)] pt-5">
+        <div className="text-sm text-[var(--text2)]">
+          <strong className="text-[var(--text)]">{ignoredColumns.length}</strong> columns excluded from ML correlations.
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={onCancel}
-            className="px-5 py-2.5 text-sm font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-50 rounded-lg transition"
-          >
+          <button onClick={onCancel} className="ha-button-secondary px-5 py-2.5 text-sm font-semibold">
             Cancel
           </button>
-          <button
-            onClick={() => setPreviewAccepted(false)}
-            className="px-5 py-2.5 text-sm font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-50 rounded-lg transition"
-          >
+          <button onClick={() => setPreviewAccepted(false)} className="ha-button-secondary px-5 py-2.5 text-sm font-semibold">
             Back
           </button>
-          <button
-            onClick={() => onConfirm(rawFile, ignoredColumns)}
-            className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 shadow-sm active:scale-95 transition"
-          >
+          <button onClick={() => onConfirm(rawFile, ignoredColumns)} className="ha-button-primary inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold">
             <Play size={16} className="fill-current" />
             Run Full EDA
             <ArrowRight size={16} />

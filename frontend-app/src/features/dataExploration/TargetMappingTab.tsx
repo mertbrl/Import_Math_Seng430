@@ -1,31 +1,73 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import type { ColumnStats } from './mockEDAData';
 import { useDomainStore } from '../../store/useDomainStore';
 import { useEDAStore } from '../../store/useEDAStore';
-import { Target, Save, CheckCircle2, ChevronDown, ActivitySquare } from 'lucide-react';
+import { ActivitySquare, CheckCircle2, ChevronDown, Save, Target } from 'lucide-react';
 
 interface TargetMappingTabProps {
   columns: ColumnStats[];
   totalRows: number;
 }
 
-const TargetMappingTab: React.FC<TargetMappingTabProps> = ({ columns, totalRows }) => {
+const PROBLEM_TYPES = [
+  {
+    value: 'binary_classification',
+    label: 'Binary Classification',
+    detail: 'For 0/1, yes/no, positive/negative outcomes.',
+  },
+  {
+    value: 'multi_class_classification',
+    label: 'Multi-class Classification',
+    detail: 'For three or more category outcomes.',
+  },
+  {
+    value: 'regression',
+    label: 'Regression',
+    detail: 'For continuous numeric outcomes.',
+  },
+] as const;
 
+const TYPE_TONES: Record<ColumnStats['type'], string> = {
+  Numeric: 'bg-emerald-100 text-emerald-800',
+  Categorical: 'bg-lime-100 text-lime-800',
+  Boolean: 'bg-amber-100 text-amber-800',
+};
+
+const TargetMappingTab: React.FC<TargetMappingTabProps> = ({ columns, totalRows }) => {
   const setSchemaValid = useDomainStore((s) => s.setSchemaValid);
   const setCurrentStep = useDomainStore((s) => s.setCurrentStep);
   const schemaValid = useDomainStore((s) => s.schemaValid);
+  const persistedTargetColumn = useEDAStore((s) => s.targetColumn);
+  const persistedTask = useEDAStore((s) => s.mlTask);
   const setMlConfig = useEDAStore((s) => s.setMlConfig);
 
-  const [targetColumn, setTargetColumn] = useState('');
-  const [problemType, setProblemType] = useState('binary_classification');
+  const initialProblemType =
+    persistedTask === 'regression'
+      ? 'regression'
+      : persistedTask === 'multiclass'
+        ? 'multi_class_classification'
+        : 'binary_classification';
+
+  const [targetColumn, setTargetColumn] = useState(persistedTargetColumn || '');
+  const [problemType, setProblemType] = useState<
+    'binary_classification' | 'multi_class_classification' | 'regression'
+  >(initialProblemType);
   const [showSuccess, setShowSuccess] = useState(false);
+
+  const selectedColumnMeta = useMemo(
+    () => columns.find((column) => column.name === targetColumn) ?? null,
+    [columns, targetColumn],
+  );
 
   const handleSave = () => {
     if (!targetColumn || !problemType) return;
-    // Derive a simplified mlTask key and persist globally
-    const mlTask = problemType === 'regression' ? 'regression'
-      : problemType === 'multi_class_classification' ? 'multiclass'
-      : 'classification';
+    const mlTask =
+      problemType === 'regression'
+        ? 'regression'
+        : problemType === 'multi_class_classification'
+          ? 'multiclass'
+          : 'classification';
+
     setMlConfig(mlTask, targetColumn, totalRows);
     setSchemaValid(true);
     setCurrentStep(3);
@@ -33,121 +75,153 @@ const TargetMappingTab: React.FC<TargetMappingTabProps> = ({ columns, totalRows 
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="text-center mb-2">
-        <div className="inline-flex items-center gap-2 bg-indigo-50 border border-indigo-100 px-4 py-2 rounded-full mb-3">
-          <Target size={16} className="text-indigo-600" />
-          <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider">
-            Target Configuration
-          </span>
-        </div>
-        <h3 className="text-lg font-bold text-slate-900">
-          Map Your Target &amp; Identifier Columns
-        </h3>
-        <p className="text-sm text-slate-500 mt-1 max-w-lg mx-auto leading-relaxed">
-          Select the problem type and the column your model should predict. These configurations guide
-          how the model optimizes and evaluates success during training.
-        </p>
-      </div>
-
-      {/* Dropdowns */}
-      <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-5">
-        {/* Target Column */}
-        <div>
-          <label className="flex items-center gap-2 text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
-            <Target size={14} className="text-indigo-500" />
-            Select Target Column (What are we predicting?)
-          </label>
-          <div className="relative">
-            <select
-              value={targetColumn}
-              onChange={(e) => {
-                setTargetColumn(e.target.value);
-                setShowSuccess(false);
-              }}
-              className="w-full appearance-none border border-slate-300 rounded-lg px-4 py-3 pr-10 text-sm font-medium text-slate-800 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition cursor-pointer"
-            >
-              <option value="">— Choose a column —</option>
-              {columns.map((c) => (
-                <option key={c.name} value={c.name}>
-                  {c.name} ({c.type})
-                </option>
-              ))}
-            </select>
-            <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+    <div className="mx-auto max-w-4xl space-y-6">
+      <div className="ha-card p-6 sm:p-7">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-2xl">
+            <p className="ha-section-label">Target Configuration</p>
+            <h3 className="mt-2 font-[var(--font-display)] text-[24px] font-bold tracking-[-0.05em] text-[var(--text)]">
+              Define the prediction target before preprocessing
+            </h3>
+            <p className="mt-3 text-sm leading-7 text-[var(--text2)]">
+              Choose the outcome column and the learning objective. This mapping determines how later steps train,
+              validate, and score the model.
+            </p>
           </div>
-        </div>
 
-        {/* Problem Type */}
-        <div>
-          <label className="flex items-center gap-2 text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
-            <ActivitySquare size={14} className="text-emerald-500" />
-            Machine Learning Problem Type
-          </label>
-          <div className="relative">
-            <select
-              value={problemType}
-              onChange={(e) => {
-                setProblemType(e.target.value);
-                setShowSuccess(false);
-              }}
-              className="w-full appearance-none border border-slate-300 rounded-lg px-4 py-3 pr-10 text-sm font-medium text-slate-800 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition cursor-pointer"
-            >
-              <option value="binary_classification">Binary Classification (e.g., Target is 0/1, Yes/No, Benign/Malignant)</option>
-              <option value="multi_class_classification">Multi-class Classification (e.g., Target is Category A/B/C)</option>
-              <option value="regression">Regression (e.g., Target is a continuous number like Blood Pressure)</option>
-            </select>
-            <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-          </div>
-        </div>
-
-        {/* Save Button */}
-        <button
-          onClick={handleSave}
-          disabled={!targetColumn || schemaValid}
-          className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-bold uppercase tracking-wider transition-all shadow-sm
-            ${
-              schemaValid
-                ? 'bg-emerald-600 text-white cursor-default'
-                : targetColumn
-                ? 'bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow-md active:scale-[0.98] cursor-pointer'
-                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-            }`}
-        >
-          {schemaValid ? (
-            <>
-              <CheckCircle2 size={18} />
-              Mapping Saved — Step 3 Unlocked
-            </>
-          ) : (
-            <>
-              <Save size={18} />
-              Save Mapping &amp; Unlock Step 3
-            </>
-          )}
-        </button>
-      </div>
-
-      {/* Success Toast */}
-      {showSuccess && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center gap-3 shadow-sm animate-in">
-          <div className="p-1.5 bg-emerald-100 rounded-lg">
-            <CheckCircle2 size={20} className="text-emerald-600" />
-          </div>
-          <div>
-            <p className="text-sm font-bold text-emerald-900">Target Mapping Saved Successfully</p>
-            <p className="text-xs text-emerald-700 mt-0.5">
-              Target: <strong>{targetColumn}</strong>
-              {' '}· Type: <strong>
-                {problemType === 'binary_classification' ? 'Binary Classification' : 
-                 problemType === 'multi_class_classification' ? 'Multi-class Classification' : 'Regression'}
-              </strong>
-              {' '}— Step 3: Data Preparation is now available.
+          <div className="rounded-[18px] border border-[rgba(190,201,193,0.5)] bg-[linear-gradient(180deg,#ffffff,#f5faf6)] px-5 py-4 shadow-[0_10px_26px_rgba(14,116,82,0.05)]">
+            <p className="ha-section-label">Dataset Scope</p>
+            <p className="mt-2 text-sm font-semibold text-[var(--text)]">
+              {totalRows.toLocaleString()} rows · {columns.length} candidate columns
             </p>
           </div>
         </div>
-      )}
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(280px,0.95fr)]">
+        <div className="ha-card space-y-5 p-6 sm:p-7">
+          <div>
+            <label className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--text2)]">
+              <Target size={14} className="text-[var(--accent)]" />
+              Target Column
+            </label>
+            <div className="relative">
+              <select
+                value={targetColumn}
+                onChange={(e) => {
+                  setTargetColumn(e.target.value);
+                  setShowSuccess(false);
+                }}
+                className="w-full appearance-none rounded-[16px] border border-[rgba(190,201,193,0.7)] bg-[linear-gradient(180deg,#ffffff,#f6faf6)] px-4 py-3.5 pr-11 text-[14px] font-semibold text-[var(--text)] outline-none transition focus:border-[var(--accent)] focus:ring-4 focus:ring-[rgba(0,89,62,0.08)]"
+              >
+                <option value="">Choose the outcome column</option>
+                {columns.map((column) => (
+                  <option key={column.name} value={column.name}>
+                    {column.name} ({column.type})
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={18} className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[var(--text3)]" />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--text2)]">
+              <ActivitySquare size={14} className="text-[var(--accent)]" />
+              ML Problem Type
+            </label>
+            <div className="relative">
+              <select
+                value={problemType}
+                onChange={(e) => {
+                  setProblemType(e.target.value as typeof problemType);
+                  setShowSuccess(false);
+                }}
+                className="w-full appearance-none rounded-[16px] border border-[rgba(190,201,193,0.7)] bg-[linear-gradient(180deg,#ffffff,#f6faf6)] px-4 py-3.5 pr-11 text-[14px] font-semibold text-[var(--text)] outline-none transition focus:border-[var(--accent)] focus:ring-4 focus:ring-[rgba(0,89,62,0.08)]"
+              >
+                {PROBLEM_TYPES.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={18} className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[var(--text3)]" />
+            </div>
+            <p className="mt-3 text-sm text-[var(--text2)]">
+              {PROBLEM_TYPES.find((item) => item.value === problemType)?.detail}
+            </p>
+          </div>
+
+          <button
+            onClick={handleSave}
+            disabled={!targetColumn || schemaValid}
+            className={
+              schemaValid
+                ? 'ha-button-locked inline-flex w-full items-center justify-center gap-2'
+                : targetColumn
+                  ? 'ha-button-primary inline-flex w-full items-center justify-center gap-2'
+                  : 'ha-button-locked inline-flex w-full items-center justify-center gap-2'
+            }
+          >
+            {schemaValid ? (
+              <>
+                <CheckCircle2 size={18} />
+                Mapping Saved
+              </>
+            ) : (
+              <>
+                <Save size={18} />
+                Save Mapping and Continue
+              </>
+            )}
+          </button>
+        </div>
+
+        <div className="ha-card space-y-4 p-6">
+          <p className="ha-section-label">Selection Summary</p>
+
+          <div className="rounded-[16px] border border-[rgba(190,201,193,0.48)] bg-[linear-gradient(180deg,#ffffff,#f6faf6)] p-4">
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--text3)]">Target</p>
+            <p className="mt-2 text-[16px] font-semibold text-[var(--text)]">
+              {selectedColumnMeta?.name || 'No target selected yet'}
+            </p>
+            {selectedColumnMeta ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <span className={`ha-badge ${TYPE_TONES[selectedColumnMeta.type]}`}>{selectedColumnMeta.type}</span>
+                <span className="ha-badge bg-slate-100 text-slate-700">
+                  Distinct: {selectedColumnMeta.distinct}
+                </span>
+                <span className="ha-badge bg-slate-100 text-slate-700">
+                  Missing: {selectedColumnMeta.missingPct}%
+                </span>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="rounded-[16px] border border-[rgba(190,201,193,0.48)] bg-[linear-gradient(180deg,#ffffff,#f6faf6)] p-4">
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--text3)]">Task</p>
+            <p className="mt-2 text-[16px] font-semibold text-[var(--text)]">
+              {PROBLEM_TYPES.find((item) => item.value === problemType)?.label}
+            </p>
+          </div>
+
+          {showSuccess ? (
+            <div className="rounded-[16px] border border-[rgba(14,116,82,0.24)] bg-[linear-gradient(180deg,#edf8f1,#e7f5ec)] p-4 text-sm text-[var(--text)]">
+              <div className="flex items-start gap-3">
+                <div className="grid h-9 w-9 place-items-center rounded-2xl bg-white text-[var(--accent)] shadow-sm">
+                  <CheckCircle2 size={18} />
+                </div>
+                <div>
+                  <p className="font-semibold">Target mapping saved successfully.</p>
+                  <p className="mt-1 text-[13px] leading-6 text-[var(--text2)]">
+                    Step 3 is now unlocked with <strong>{targetColumn}</strong> configured as the prediction target.
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 };

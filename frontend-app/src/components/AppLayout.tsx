@@ -1,13 +1,10 @@
-import React, { useMemo } from 'react';
-import { Check, ChevronLeft, ChevronRight, Clock3, Lock } from 'lucide-react';
+import React from 'react';
+import { Check, ChevronLeft, ChevronRight, Lock } from 'lucide-react';
 import { TopNavbar } from './TopNavbar';
 import { HelpChatbotDrawer } from './HelpChatbotDrawer';
 import { useDomainStore } from '../store/useDomainStore';
 import { useDataPrepStore } from '../store/useDataPrepStore';
-import { useEDAStore } from '../store/useEDAStore';
 import { useModelStore } from '../store/useModelStore';
-import { domains } from '../config/domainConfig';
-import { MODEL_CATALOG } from '../features/modelTuning/modelCatalog';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -44,9 +41,9 @@ function resolveMaxUnlockedStep(
 
 export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const {
-    selectedDomainId,
     currentStep,
     setCurrentStep,
+    confirmStep1,
     step1Confirmed,
     schemaValid,
     step5Completed,
@@ -55,9 +52,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     theme,
   } = useDomainStore();
 
-  const { completedSteps, cleaningPipeline } = useDataPrepStore();
+  const { completedSteps } = useDataPrepStore();
   const resultsMap = useModelStore((state) => state.results);
-  const bestResultTaskId = useModelStore((state) => state.bestResultTaskId);
 
   const prepReviewComplete = completedSteps.includes('preprocessing_review');
   const hasModelResults = Object.keys(resultsMap).length > 0;
@@ -70,92 +66,118 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     step6Completed,
   );
 
+  const continueDisabled =
+    currentStep === TOTAL_STEPS || (currentStep !== 1 && currentStep >= maxUnlockedStep);
+  const isClinicalStep3 = currentStep === 3 && userMode === 'clinical';
+
   return (
-    <div className="app-shell ha-animate-in" data-mode={userMode} data-theme={theme}
-         style={{ height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div
+      className={`app-shell ha-animate-in ${currentStep === 1 ? 'ha-step1-theme' : ''} ${currentStep === 2 ? 'ha-step2-theme' : ''} ${isClinicalStep3 ? 'ha-step3-theme' : ''}`}
+      data-mode={userMode}
+      data-theme={theme}
+      style={{ height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+    >
       <TopNavbar />
       <HelpChatbotDrawer />
 
-      {/* Stepper — sticky, full-width constrained container */}
-      <div style={{ flexShrink: 0 }}>
-        <div className="page-wrap-wide">
-          <section className="ha-stepper-shell" style={{ marginTop: '0.75rem', marginBottom: '0' }}>
-            <div className="ha-stepper">
-              {STEPS.map((step, index) => {
-                const state =
-                  step.id < currentStep
-                    ? 'complete'
-                    : step.id === currentStep
-                    ? 'active'
-                    : step.id <= maxUnlockedStep
-                    ? 'upcoming'
-                    : 'locked';
-
-                return (
-                  <button
-                    key={step.id}
-                    type="button"
-                    onClick={() => setCurrentStep(step.id)}
-                    className="ha-stepper-item"
-                    data-state={state}
-                    disabled={state === 'locked'}
-                    title={state === 'locked' ? 'Complete earlier steps to unlock this stage.' : step.name}
-                  >
-                    {index < STEPS.length - 1 && (
-                      <span
-                         className="ha-stepper-connector"
-                        style={{ ['--fill' as any]: step.id < currentStep ? '100%' : '0%' }}
-                      />
-                    )}
-
-                    <span className="ha-stepper-circle">
-                      {state === 'complete' ? <Check size={16} /> : state === 'locked' ? <Lock size={14} /> : step.id}
-                    </span>
-
-                    <div className="min-w-0">
-                      <div className="ha-stepper-caption">
-                        {state === 'complete' ? 'Completed' : state === 'active' ? 'In Progress' : state === 'locked' ? 'Locked' : 'Upcoming'}
-                      </div>
-                      <div className="ha-stepper-title">{step.name}</div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        </div>
-      </div>
-
-      {/* Scrollable content area */}
       <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
         <div className="page-wrap-wide">
+          <div className="ha-stepper-wrap">
+            <section className="ha-stepper-shell">
+              <div className="ha-stepper">
+                {STEPS.map((step, index) => {
+                  const state =
+                    step.id < currentStep
+                      ? 'complete'
+                      : step.id === currentStep
+                        ? 'active'
+                        : step.id <= maxUnlockedStep
+                          ? 'upcoming'
+                          : 'locked';
+
+                  return (
+                    <button
+                      key={step.id}
+                      type="button"
+                      onClick={() => setCurrentStep(step.id)}
+                      className="ha-stepper-item"
+                      data-state={state}
+                      disabled={state === 'locked'}
+                      title={state === 'locked' ? 'Complete earlier steps to unlock this stage.' : step.name}
+                    >
+                      {index < STEPS.length - 1 && (
+                        <span
+                          className="ha-stepper-connector"
+                          style={{ ['--fill' as any]: step.id < currentStep ? '100%' : '0%' }}
+                        />
+                      )}
+
+                      <span className="ha-stepper-circle">
+                        {state === 'complete' ? <Check size={16} /> : state === 'locked' ? <Lock size={14} /> : step.id}
+                      </span>
+
+                      <div className="min-w-0">
+                        <div className="ha-stepper-caption">
+                          {state === 'complete'
+                            ? 'Completed'
+                            : state === 'active'
+                              ? 'In Progress'
+                              : state === 'locked'
+                                ? 'Locked'
+                                : 'Upcoming'}
+                        </div>
+                        <div className="ha-stepper-title">{step.name}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          </div>
+
           <div className="ha-content-grid">
             <main className="min-w-0">
               <div className="ha-animate-in">{children}</div>
 
-              <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <button
-                  type="button"
-                  onClick={() => setCurrentStep(currentStep - 1)}
-                  disabled={currentStep === 1}
-                  className={currentStep === 1 ? 'ha-button-locked inline-flex items-center justify-center gap-2' : 'ha-button-secondary inline-flex items-center justify-center gap-2'}
-                  title={currentStep === 1 ? 'Already at the first step.' : undefined}
-                >
-                  <ChevronLeft size={16} />
-                  Back
-                </button>
+              {!isClinicalStep3 && (
+                <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(currentStep - 1)}
+                    disabled={currentStep === 1}
+                    className={
+                      currentStep === 1
+                        ? 'ha-button-locked inline-flex items-center justify-center gap-2'
+                        : 'ha-button-secondary inline-flex items-center justify-center gap-2'
+                    }
+                    title={currentStep === 1 ? 'Already at the first step.' : undefined}
+                  >
+                    <ChevronLeft size={16} />
+                    Back
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => setCurrentStep(currentStep + 1)}
-                  disabled={currentStep >= maxUnlockedStep || currentStep === TOTAL_STEPS}
-                  className={currentStep >= maxUnlockedStep || currentStep === TOTAL_STEPS ? 'ha-button-locked inline-flex items-center justify-center gap-2' : 'ha-button-primary inline-flex items-center justify-center gap-2'}
-                  title={currentStep >= maxUnlockedStep && currentStep !== TOTAL_STEPS ? 'Finish this step to continue.' : undefined}
-                >
-                  Continue
-                  <ChevronRight size={16} />
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (currentStep === 1 && !step1Confirmed) {
+                        confirmStep1();
+                        return;
+                      }
+                      setCurrentStep(currentStep + 1);
+                    }}
+                    disabled={continueDisabled}
+                    className={
+                      continueDisabled
+                        ? 'ha-button-locked inline-flex items-center justify-center gap-2'
+                        : 'ha-button-primary inline-flex items-center justify-center gap-2'
+                    }
+                    title={continueDisabled && currentStep !== TOTAL_STEPS ? 'Finish this step to continue.' : undefined}
+                  >
+                    Continue
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              )}
             </main>
           </div>
         </div>

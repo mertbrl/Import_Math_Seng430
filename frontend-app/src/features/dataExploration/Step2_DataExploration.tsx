@@ -42,42 +42,49 @@ export const Step2_DataExploration: React.FC = () => {
     }
   };
 
+  const showWorkbench = !previewAccepted && !edaData && !isLoading;
+
   return (
-    <div className="space-y-6" id="step-2">
-      <div className="ha-card overflow-hidden">
-        <div className="border-b border-[var(--border)] bg-[radial-gradient(circle_at_top_left,_rgba(26,86,219,0.14),_transparent_34%),radial-gradient(circle_at_bottom_right,_rgba(13,148,136,0.1),_transparent_28%),linear-gradient(180deg,_#ffffff,_#f8fafc)] px-7 py-8 sm:px-10">
+    <div className="ha-step2-shell space-y-6" id="step-2">
+      <div className="ha-card overflow-hidden border-[rgba(190,201,193,0.38)] bg-white/85 shadow-[0_14px_40px_rgba(14,116,82,0.06)]">
+        <div className="border-b border-[rgba(190,201,193,0.42)] bg-[linear-gradient(180deg,#f8fbf8,#f2f7f3)] px-7 py-8 sm:px-10">
           <div className="flex flex-wrap gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-3xl flex-1 min-w-[280px]"> 
+            <div className="max-w-3xl min-w-[280px] flex-1">
               <span className="ha-pill ha-pill-accent">
                 <UploadCloud size={14} />
-                Step 2 · Data Exploration
+                Step 2 - Data Exploration
               </span>
-              <h2 className="ha-display mt-5">Explore the dataset before you change it.</h2>
-              <p className="ha-body mt-4 w-full break-words min-w-0"> 
-                Upload or load the working file for <strong className="text-[var(--text)]">{domain.domainName}</strong>. This step surfaces preview rows, variable health, missingness, correlations, and target mapping before preprocessing begins.
+              <h2 className="ha-display mt-5">Explore the dataset before you transform it.</h2>
+              <p className="ha-body mt-4 min-w-0 w-full break-words">
+                Upload or load the working file for <strong className="text-[var(--text)]">{domain.domainName}</strong>. This
+                step surfaces data preview, quality signals, missingness, correlation structure, and target mapping
+                before preprocessing.
               </p>
             </div>
 
-            <div className="rounded-[20px] border border-[var(--border)] bg-white/82 px-5 py-4 backdrop-blur-md flex-1 min-w-[280px]"> 
+            <div className="min-w-[280px] flex-1 rounded-[16px] border border-[rgba(190,201,193,0.45)] bg-white/88 px-5 py-4 backdrop-blur-md">
               <p className="ha-section-label">Clinical Focus</p>
-              <p className="mt-2 text-sm font-semibold text-[var(--text)] break-words w-full stretch">{domain.clinicalQuestion}</p>
+              <p className="mt-2 w-full break-words text-[15px] font-semibold leading-7 text-[var(--text)]">{domain.clinicalQuestion}</p>
             </div>
           </div>
         </div>
 
         <div className="space-y-6 px-7 py-8 sm:px-10 sm:py-10">
-          <DataLoader onFileLoaded={handleFileLoaded} isLoading={isLoading} />
+          {showWorkbench ? (
+            <div className="ha-step2-workbench">
+              <DataLoader onFileLoaded={handleFileLoaded} isLoading={isLoading} />
+              <PreAnalysisPreview />
+            </div>
+          ) : null}
 
-          {!previewAccepted && !edaData ? <PreAnalysisPreview /> : null}
-
-          {previewAccepted && !edaData ? (
+          {previewAccepted && !edaData && !isLoading ? (
             <ColumnConfigurator onConfirm={handleFileLoaded} onCancel={() => clearConfig()} />
           ) : null}
 
           {isLoading ? (
             <div className="ha-card-muted flex flex-col items-center justify-center gap-4 px-6 py-16 text-center">
               <div className="grid h-16 w-16 place-items-center rounded-full border border-[var(--border)] bg-white shadow-sm">
-                <Loader2 size={30} className="animate-spin text-[var(--trust)]" />
+                <Loader2 size={30} className="animate-spin text-[var(--primary-container)]" />
               </div>
               <div>
                 <p className="font-[var(--font-display)] text-[26px] font-bold tracking-[-0.04em] text-[var(--text)]">

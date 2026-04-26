@@ -2,16 +2,7 @@ import React, { useMemo } from 'react';
 import type { Alert, SummaryStats } from './mockEDAData';
 import { detectMultimodality } from '../../store/useEDAStore';
 import DataHealthAlerts from './DataHealthAlerts';
-import {
-  AlertTriangle,
-  Columns3,
-  Copy,
-  Database,
-  Hash,
-  Rows3,
-  ToggleLeft,
-  Type,
-} from 'lucide-react';
+import { AlertTriangle, Columns3, Copy, Database, Hash, Rows3, ToggleLeft, Type } from 'lucide-react';
 import { useDomainStore } from '../../store/useDomainStore';
 
 const MetricCard: React.FC<{
@@ -20,17 +11,17 @@ const MetricCard: React.FC<{
   subtext?: string;
   icon: React.ReactNode;
 }> = ({ label, value, subtext, icon }) => (
-  <article className="ha-card p-4 flex-1 min-w-[200px]">
+  <article className="rounded-[18px] border border-[rgba(190,201,193,0.42)] bg-[linear-gradient(180deg,#ffffff,#f7faf7)] px-4 py-4 shadow-[0_10px_26px_rgba(14,116,82,0.05)]">
     <div className="flex items-start gap-3">
-      <div className="grid h-11 w-11 place-items-center rounded-2xl bg-[var(--surface2)] text-[var(--accent)]">
+      <div className="grid h-10 w-10 place-items-center rounded-2xl bg-[var(--surface2)] text-[var(--accent)]">
         {icon}
       </div>
       <div className="min-w-0">
         <p className="ha-section-label">{label}</p>
-        <p className="mt-2 font-[var(--font-display)] text-[28px] font-bold tracking-[-0.05em] text-[var(--text)]">
+        <p className="mt-2 font-[var(--font-display)] text-[24px] font-bold tracking-[-0.05em] text-[var(--text)]">
           {value}
         </p>
-        {subtext ? <p className="mt-1 text-sm text-[var(--text2)]">{subtext}</p> : null}
+        {subtext ? <p className="mt-1 text-[13px] leading-6 text-[var(--text2)]">{subtext}</p> : null}
       </div>
     </div>
   </article>
@@ -80,24 +71,9 @@ const DataHealthTab: React.FC<DataHealthTabProps> = ({ summary, alerts, columns,
   }, [alerts, columns, targetColumn, targetDist, totalTargetCount]);
 
   const typeSegments = [
-    {
-      label: 'Numeric',
-      value: summary.variableTypes.Numeric,
-      color: '#6d28d9',
-      icon: <Hash size={12} />,
-    },
-    {
-      label: 'Categorical',
-      value: summary.variableTypes.Categorical,
-      color: '#0d9488',
-      icon: <Type size={12} />,
-    },
-    {
-      label: 'Boolean',
-      value: summary.variableTypes.Boolean,
-      color: '#ea580c',
-      icon: <ToggleLeft size={12} />,
-    },
+    { label: 'Numeric', value: summary.variableTypes.Numeric, color: '#00593e', icon: <Hash size={12} /> },
+    { label: 'Categorical', value: summary.variableTypes.Categorical, color: '#4b7e67', icon: <Type size={12} /> },
+    { label: 'Boolean', value: summary.variableTypes.Boolean, color: '#c27122', icon: <ToggleLeft size={12} /> },
   ];
 
   return (
@@ -105,12 +81,12 @@ const DataHealthTab: React.FC<DataHealthTabProps> = ({ summary, alerts, columns,
       <section>
         <div className="mb-5">
           <p className="ha-section-label">Executive Summary</p>
-          <h3 className="mt-2 font-[var(--font-display)] text-[26px] font-bold tracking-[-0.04em] text-[var(--text)]">
+          <h3 className="mt-2 font-[var(--font-display)] text-[24px] font-bold tracking-[-0.04em] text-[var(--text)]">
             Clinical dataset health
           </h3>
         </div>
 
-        <div className="flex flex-wrap gap-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <MetricCard label="Variables" value={summary.numVariables} icon={<Columns3 size={18} />} />
           <MetricCard label="Observations" value={summary.numObservations.toLocaleString()} icon={<Rows3 size={18} />} />
           <MetricCard label="Missing Cells" value={summary.missingCells.toLocaleString()} subtext={`${summary.missingCellsPct}% of all cells`} icon={<AlertTriangle size={18} />} />
@@ -123,15 +99,15 @@ const DataHealthTab: React.FC<DataHealthTabProps> = ({ summary, alerts, columns,
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="ha-section-label">Variable Type Breakdown</p>
-            <h4 className="mt-2 text-lg font-bold text-[var(--text)]">Signal composition</h4>
+            <h4 className="mt-2 text-[17px] font-bold text-[var(--text)]">Signal composition</h4>
           </div>
-          <p className="text-sm text-[var(--text2)]">
+          <p className="max-w-xl text-sm leading-7 text-[var(--text2)]">
             Numeric-heavy tables usually tolerate scaling and outlier handling well, while categorical breadth shapes encoding choices.
           </p>
         </div>
 
         <div className="mt-5 overflow-hidden rounded-[999px] bg-[var(--surface2)]">
-          <div className="flex h-4">
+          <div className="flex h-3">
             {typeSegments.map((segment) => (
               <div
                 key={segment.label}
@@ -142,7 +118,7 @@ const DataHealthTab: React.FC<DataHealthTabProps> = ({ summary, alerts, columns,
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-2"> 
+        <div className="mt-4 flex flex-wrap gap-2">
           {typeSegments.map((segment) => (
             <span
               key={segment.label}
@@ -164,7 +140,7 @@ const DataHealthTab: React.FC<DataHealthTabProps> = ({ summary, alerts, columns,
         <section>
           <div className="mb-5">
             <p className="ha-section-label">ML Health Diagnostics</p>
-            <h4 className="mt-2 text-lg font-bold text-[var(--text)]">Warnings and recommendations</h4>
+            <h4 className="mt-2 text-[17px] font-bold text-[var(--text)]">Warnings and recommendations</h4>
           </div>
 
           <DataHealthAlerts alerts={enrichedAlerts} />

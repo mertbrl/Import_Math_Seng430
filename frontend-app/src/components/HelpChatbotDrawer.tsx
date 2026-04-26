@@ -21,7 +21,7 @@ export const HelpChatbotDrawer: React.FC = () => {
     { 
       id: '1', 
       role: 'ai', 
-      content: 'Merhaba! Ben HEALTH-AI asistanınızım. Makine öğrenmesi ve modeller hakkında sorularınızı sorabilirsiniz.' 
+      content: 'Hello! I am your HEALTH-AI assistant. Feel free to ask questions about machine learning and clinical models.' 
     }
   ]);
   const chatScrollRef = useRef<HTMLDivElement>(null);
@@ -142,7 +142,7 @@ export const HelpChatbotDrawer: React.FC = () => {
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'ai',
-        content: 'Üzgünüm, şu an sunucuya bağlanamıyorum veya bir hata oluştu.'
+        content: 'Sorry, I cannot reach the server right now, or an error occurred.'
       };
       setMessages((prev) => [...prev, errorMsg]);
     }

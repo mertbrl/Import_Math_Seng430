@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, Lightbulb, BookOpen, Target } from 'lucide-react';
+import { AlertTriangle, BookOpen, Lightbulb, Target } from 'lucide-react';
 import type { Alert } from './mockEDAData';
 
 interface DataHealthAlertsProps {
@@ -7,87 +7,77 @@ interface DataHealthAlertsProps {
 }
 
 const DataHealthAlerts: React.FC<DataHealthAlertsProps> = ({ alerts }) => {
-  // Map severity to specific styling and icons
   const getAlertStyle = (severity: string) => {
     switch (severity) {
       case 'severe':
         return {
-          bg: 'bg-red-50',
-          border: 'border-red-200',
-          titleColor: 'text-red-900',
-          iconColor: 'text-red-600',
-          badgeBg: 'bg-red-100/50 text-red-700',
-          icon: <AlertTriangle size={22} className="text-red-600" />
+          shell: 'border-[rgba(186,26,26,0.24)] bg-[linear-gradient(180deg,#fff5f3,#fffafb)]',
+          title: 'text-red-900',
+          badge: 'bg-red-100 text-red-700',
+          icon: <AlertTriangle size={20} className="text-red-600" />,
         };
       case 'warning':
         return {
-          bg: 'bg-amber-50',
-          border: 'border-amber-200',
-          titleColor: 'text-amber-900',
-          iconColor: 'text-amber-600',
-          badgeBg: 'bg-amber-100/50 text-amber-700',
-          icon: <AlertTriangle size={22} className="text-amber-600" />
+          shell: 'border-[rgba(194,113,34,0.24)] bg-[linear-gradient(180deg,#fff9ef,#fffdf9)]',
+          title: 'text-amber-900',
+          badge: 'bg-amber-100 text-amber-700',
+          icon: <AlertTriangle size={20} className="text-amber-600" />,
         };
-      case 'info':
       default:
         return {
-          bg: 'bg-indigo-50',
-          border: 'border-indigo-200',
-          titleColor: 'text-indigo-900',
-          iconColor: 'text-indigo-600',
-          badgeBg: 'bg-indigo-100/50 text-indigo-700',
-          icon: <Lightbulb size={22} className="text-indigo-600" />
+          shell: 'border-[rgba(0,89,62,0.18)] bg-[linear-gradient(180deg,#eef8f2,#fbfefc)]',
+          title: 'text-[var(--text)]',
+          badge: 'bg-emerald-100 text-emerald-700',
+          icon: <Lightbulb size={20} className="text-[var(--accent)]" />,
         };
     }
   };
 
-  // Static knowledge base mapped to alert titles
   const getEducationalContent = (title: string) => {
     if (title.includes('Imbalance')) {
       return {
-        what: "A dataset has a highly disproportionate ratio of observations in each class. For example, 90% Healthy and 10% Ill.",
-        why: "Standard ML models try to maximize overall accuracy. If 90% of patients are healthy, the model can achieve 90% accuracy simply by guessing 'Healthy' every time, completely failing to detect the minority class.",
-        action: "In Step 3 (Data Preparation), you must explicitly address this. We recommend selecting SMOTE (Synthetic Minority Over-sampling Technique) or enabling Class Weights to force the model to pay attention to the minority group."
+        what: 'A dataset has a highly disproportionate class ratio, such as 90% healthy and 10% event-positive cases.',
+        why: 'A standard model may optimize overall accuracy by overpredicting the majority class and ignoring clinically important minority outcomes.',
+        action: 'In Step 3, enable SMOTE or class weighting so training pays attention to the minority class.',
       };
     }
     if (title.includes('Skewness')) {
       return {
-        what: "The data distribution is not symmetrical. It has a 'long tail' stretching either to the left or right, separating the mean from the median.",
-        why: "Many algorithms (like Logistic Regression and Neural Networks) assume data is normally distributed (bell-shaped). Extreme skewness can reduce their predictive accuracy on the 'tail' values.",
-        action: "In Step 3, apply a Logarithmic (Log) or Power (Box-Cox) transformation to normalize this variable into a more Gaussian-like shape."
+        what: 'The feature distribution is asymmetric and pulled toward one tail rather than centered around a balanced bell shape.',
+        why: 'Several algorithms behave better when numeric variables are closer to a normalized distribution, especially for stable coefficient learning.',
+        action: 'In Step 3, apply log or power transformation if the skew materially affects downstream performance.',
       };
     }
     if (title.includes('Multimodal')) {
       return {
-        what: "The data distribution has multiple distinct 'peaks'. For instance, patients might cluster into two clear age groups (young adults and seniors), rather than following a single bell curve.",
-        why: "A single global model might struggle to learn a rule that fits both populations simultaneously.",
-        action: "Consider segmenting the data and training a separate model for each peak, or ensure you are using robust algorithms like Random Forests that handle complex splits naturally."
+        what: 'The feature shows multiple peaks, which often indicates mixed subpopulations within the same variable.',
+        why: 'A single global rule may struggle to represent separate patient patterns cleanly, especially when peaks reflect different cohorts.',
+        action: 'Prefer robust nonlinear models or consider segment-based modeling if this variable strongly shapes outcomes.',
       };
     }
     if (title.includes('Missing')) {
       return {
-        what: "Cells in the dataset row/column have no value recorded (NaN or Null).",
-        why: "Most ML algorithms (except certain tree-based ones) cannot mathematically process empty values and will fail during training.",
-        action: "In Step 3, choose an Imputation strategy. For small amounts of missing data, 'Median Imputation' is safe. If >30% is missing, consider dropping the column entirely."
+        what: 'Some observations contain empty values in one or more columns.',
+        why: 'Missing values can bias estimates, reduce sample efficiency, or break algorithms that do not accept incomplete numeric inputs.',
+        action: 'Use imputation or remove the feature if missingness is too high to preserve reliable signal.',
       };
     }
-    // Default fallback
     return {
-      what: "A statistical anomaly detected in the dataset profile.",
-      why: "It may skew the algorithm's mathematical approximations, leading to biased predictions or poor generalization to unseen data.",
-      action: "Review this variable in the Feature Explorer and decide if it needs transformation or should be dropped."
+      what: 'A statistical anomaly was detected during the scan.',
+      why: 'If ignored, it may distort training behavior, weaken generalization, or reduce trust in model outputs.',
+      action: 'Review the variable in Feature Explorer and decide whether to transform, keep, or exclude it.',
     };
   };
 
   if (alerts.length === 0) {
     return (
-      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-6 text-center shadow-sm">
-        <div className="mx-auto w-12 h-12 bg-white rounded-full flex items-center justify-center border border-emerald-100 shadow-sm mb-3">
-          <BookOpen size={24} className="text-emerald-500" />
+      <div className="rounded-[20px] border border-[rgba(14,116,82,0.18)] bg-[linear-gradient(180deg,#eef8f2,#fbfefc)] p-6 text-center shadow-[0_10px_26px_rgba(14,116,82,0.04)]">
+        <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full border border-[rgba(14,116,82,0.12)] bg-white shadow-sm">
+          <BookOpen size={22} className="text-[var(--accent)]" />
         </div>
-        <h4 className="text-base font-bold text-emerald-900 mb-1">Data Looks Healthy</h4>
-        <p className="text-sm text-emerald-700 max-w-md mx-auto">
-          No severe statistical anomalies or imbalances were detected in the preliminary scan.
+        <h4 className="text-[16px] font-bold text-[var(--text)]">Data looks healthy</h4>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-7 text-[var(--text2)]">
+          No severe statistical anomalies or major dataset risks were detected in the preliminary scan.
         </p>
       </div>
     );
@@ -95,61 +85,51 @@ const DataHealthAlerts: React.FC<DataHealthAlertsProps> = ({ alerts }) => {
 
   return (
     <div className="space-y-4">
-      {alerts.map((alert, i) => {
+      {alerts.map((alert, index) => {
         const style = getAlertStyle(alert.severity);
         const edu = getEducationalContent(alert.title);
 
         return (
-          <div key={i} className={`flex flex-col border ${style.border} ${style.bg} rounded-xl shadow-sm overflow-hidden`}>
-            {/* Header / Summary Block */}
-            <div className="flex items-start gap-4 p-5 border-b border-indigo-900/5">
-              <div className="p-2.5 bg-white rounded-lg border border-slate-100 shadow-sm shrink-0">
+          <div
+            key={index}
+            className={`overflow-hidden rounded-[20px] border shadow-[0_10px_28px_rgba(14,116,82,0.05)] ${style.shell}`}
+          >
+            <div className="flex items-start gap-4 border-b border-[rgba(190,201,193,0.3)] px-5 py-5">
+              <div className="grid h-11 w-11 place-items-center rounded-2xl border border-[rgba(190,201,193,0.34)] bg-white shadow-sm">
                 {style.icon}
               </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-3 mb-1.5">
-                  <h4 className={`text-base font-bold ${style.titleColor}`}>
-                    {alert.title}
-                  </h4>
-                  <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${style.badgeBg}`}>
-                    {alert.severity}
-                  </span>
+              <div className="min-w-0 flex-1">
+                <div className="mb-1.5 flex flex-wrap items-center gap-3">
+                  <h4 className={`text-[16px] font-bold ${style.title}`}>{alert.title}</h4>
+                  <span className={`ha-badge ${style.badge}`}>{alert.severity}</span>
                 </div>
-                <p className="text-sm text-slate-700 font-medium leading-relaxed">
-                  {alert.message}
-                </p>
+                <p className="text-sm leading-7 text-[var(--text2)]">{alert.message}</p>
               </div>
             </div>
 
-            {/* Educational ML Expansion */}
-            <div className="bg-white/60 p-5 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-white border text-center md:text-left border-slate-200/60 rounded-lg p-4 shadow-sm hover:shadow transition-shadow">
-                  <h5 className="flex items-center justify-center md:justify-start gap-2 text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
-                    <BookOpen size={14} className="text-indigo-400" />
-                    What is it?
-                  </h5>
-                  <p className="text-[13px] text-slate-700 leading-relaxed">{edu.what}</p>
-                </div>
-                
-                <div className="bg-white border text-center md:text-left border-slate-200/60 rounded-lg p-4 shadow-sm hover:shadow transition-shadow">
-                  <h5 className="flex items-center justify-center md:justify-start gap-2 text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
-                    <AlertTriangle size={14} className="text-rose-400" />
-                    Why is it a problem?
-                  </h5>
-                  <p className="text-[13px] text-slate-700 leading-relaxed">{edu.why}</p>
-                </div>
+            <div className="grid gap-4 bg-white/72 px-5 py-5 md:grid-cols-2">
+              <div className="rounded-[16px] border border-[rgba(190,201,193,0.36)] bg-white p-4">
+                <h5 className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--text3)]">
+                  <BookOpen size={14} className="text-[var(--accent)]" />
+                  What it means
+                </h5>
+                <p className="text-[13px] leading-6 text-[var(--text2)]">{edu.what}</p>
               </div>
 
-              {/* Actionable Step 3 Recommendation */}
-              <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100 rounded-lg p-4 shadow-sm">
-                <h5 className="flex items-center gap-2 text-[12px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5">
-                  <Target size={16} className="text-indigo-500" />
+              <div className="rounded-[16px] border border-[rgba(190,201,193,0.36)] bg-white p-4">
+                <h5 className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--text3)]">
+                  <AlertTriangle size={14} className="text-amber-500" />
+                  Why it matters
+                </h5>
+                <p className="text-[13px] leading-6 text-[var(--text2)]">{edu.why}</p>
+              </div>
+
+              <div className="rounded-[16px] border border-[rgba(0,89,62,0.16)] bg-[linear-gradient(180deg,#eef8f2,#fbfefc)] p-4 md:col-span-2">
+                <h5 className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--accent)]">
+                  <Target size={14} />
                   Recommendation for Step 3
                 </h5>
-                <p className="text-sm text-indigo-800 font-medium leading-relaxed">
-                  {edu.action}
-                </p>
+                <p className="text-sm leading-7 text-[var(--text)]">{edu.action}</p>
               </div>
             </div>
           </div>

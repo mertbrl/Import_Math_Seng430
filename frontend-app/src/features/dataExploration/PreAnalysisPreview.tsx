@@ -1,52 +1,55 @@
 import React from 'react';
 import { useEDAStore } from '../../store/useEDAStore';
-import { Database, ArrowRight, X } from 'lucide-react';
+import { ArrowRight, Search, SlidersHorizontal, Table, X } from 'lucide-react';
 import DataPreviewTab from './DataPreviewTab';
 
 const PreAnalysisPreview: React.FC = () => {
   const { rawFile, rawHeaders, rawPreviewRows, setPreviewAccepted, clearConfig } = useEDAStore();
 
-  if (!rawFile || rawHeaders.length === 0) return null;
+  const hasPreview = !!rawFile && rawHeaders.length > 0;
 
   return (
-    <div className="ha-card p-6 sm:p-8 animate-fade-in-up">
-      <div className="flex items-start gap-4 mb-6">
-        <div className="grid h-14 w-14 place-items-center rounded-2xl bg-[var(--surface2)] text-[var(--accent)] shrink-0">
-          <Database size={24} />
-        </div>
+    <div className="ha-step2-preview-panel animate-fade-in-up">
+      <div className="ha-step2-preview-head">
         <div>
-          <p className="ha-section-label">Data Preview</p>
-          <h3 className="mt-2 font-[var(--font-display)] text-[24px] font-bold tracking-[-0.04em] text-[var(--text)]">
-            We successfully loaded <strong className="text-[var(--text)]">{rawFile.name}</strong>.
-          </h3>
-          <p className="ha-body mt-2 max-w-2xl">
-            Below is a preview of the first {rawPreviewRows.length} rows. Please verify that the data looks correct before proceeding to configuration.
-          </p>
+          <p className="ha-step2-panel-label">Data Preview</p>
+          <h3>{hasPreview ? `Preview of ${rawFile.name}` : 'Data table preview'}</h3>
+        </div>
+        <div className="ha-step2-preview-actions" aria-hidden="true">
+          <button type="button">
+            <SlidersHorizontal size={14} />
+          </button>
+          <button type="button">
+            <Search size={14} />
+          </button>
         </div>
       </div>
 
-      <div className="mb-6 -mx-2 sm:mx-0">
-        <DataPreviewTab preview={{ headers: rawHeaders, rows: rawPreviewRows }} compact />
+      <div className="ha-step2-preview-content">
+        {hasPreview ? (
+          <DataPreviewTab preview={{ headers: rawHeaders, rows: rawPreviewRows }} compact />
+        ) : (
+          <div className="ha-step2-preview-empty">
+            <Table size={26} />
+            <p>Upload a dataset to display preview rows.</p>
+          </div>
+        )}
       </div>
 
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-[var(--border)] pt-5">
-        <div className="text-sm font-semibold text-[var(--text2)]">
-          Showing {rawPreviewRows.length} rows for preview.
-        </div>
-        <div className="flex w-full sm:w-auto items-center gap-3">
-          <button
-            onClick={() => clearConfig()}
-            className="ha-button-secondary flex-1 sm:flex-none inline-flex items-center justify-center gap-2"
-          >
-            <X size={16} />
+      <div className="ha-step2-preview-footer">
+        <span>{hasPreview ? `Showing ${rawPreviewRows.length} rows for pre-check.` : 'No dataset selected yet.'}</span>
+        <div className="flex items-center gap-3">
+          <button onClick={() => clearConfig()} className="ha-button-secondary inline-flex items-center justify-center gap-2">
+            <X size={15} />
             Cancel
           </button>
           <button
             onClick={() => setPreviewAccepted(true)}
-            className="ha-button-primary flex-1 sm:flex-none inline-flex items-center justify-center gap-2"
+            disabled={!hasPreview}
+            className={hasPreview ? 'ha-button-primary inline-flex items-center justify-center gap-2' : 'ha-button-locked inline-flex items-center justify-center gap-2'}
           >
             Next: Configure Columns
-            <ArrowRight size={16} />
+            <ArrowRight size={15} />
           </button>
         </div>
       </div>

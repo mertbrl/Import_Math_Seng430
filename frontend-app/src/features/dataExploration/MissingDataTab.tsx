@@ -1,35 +1,33 @@
 import React from 'react';
-import { ShieldAlert, CheckCircle, Info, AlertTriangle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Info, ShieldAlert } from 'lucide-react';
 import type { MissingColumnAnalysis } from './mockEDAData';
-
-interface MissingDataTabProps {
-  missingAnalysis: MissingColumnAnalysis[];
-  totalRows: number;
-}
 
 const MECHANISM_META = {
   MCAR: {
     label: 'MCAR',
     full: 'Missing Completely At Random',
-    color: 'bg-emerald-50 border-emerald-200 text-emerald-800',
+    shell: 'border-[rgba(14,116,82,0.18)] bg-[linear-gradient(180deg,#eef8f2,#fbfefc)]',
     badge: 'bg-emerald-100 text-emerald-700',
+    bar: 'bg-emerald-500',
     icon: <CheckCircle size={14} className="text-emerald-600" />,
   },
   MAR: {
     label: 'MAR',
     full: 'Missing At Random',
-    color: 'bg-amber-50 border-amber-200 text-amber-800',
+    shell: 'border-[rgba(194,113,34,0.18)] bg-[linear-gradient(180deg,#fff9ef,#fffdf9)]',
     badge: 'bg-amber-100 text-amber-700',
+    bar: 'bg-amber-500',
     icon: <Info size={14} className="text-amber-500" />,
   },
   MNAR: {
     label: 'MNAR',
     full: 'Missing Not At Random',
-    color: 'bg-red-50 border-red-200 text-red-800',
+    shell: 'border-[rgba(186,26,26,0.18)] bg-[linear-gradient(180deg,#fff5f3,#fffafb)]',
     badge: 'bg-red-100 text-red-700',
+    bar: 'bg-red-500',
     icon: <AlertTriangle size={14} className="text-red-500" />,
   },
-};
+} as const;
 
 interface MissingDataTabProps {
   missingAnalysis: MissingColumnAnalysis[];
@@ -37,21 +35,17 @@ interface MissingDataTabProps {
   allColumns: string[];
 }
 
-const MissingDataTab: React.FC<MissingDataTabProps> = ({
-  missingAnalysis,
-  totalRows,
-  allColumns,
-}) => {
+const MissingDataTab: React.FC<MissingDataTabProps> = ({ missingAnalysis, totalRows, allColumns }) => {
   if (missingAnalysis.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
-        <CheckCircle size={44} className="text-emerald-400" />
-        <div className="text-center">
-          <p className="text-sm font-bold text-slate-700">No Missing Data</p>
-          <p className="text-xs text-slate-500 mt-1">
-            Every cell in this dataset has a value — no imputation required.
-          </p>
+      <div className="rounded-[20px] border border-[rgba(14,116,82,0.18)] bg-[linear-gradient(180deg,#eef8f2,#fbfefc)] py-20 text-center shadow-[0_10px_26px_rgba(14,116,82,0.04)]">
+        <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full border border-[rgba(14,116,82,0.14)] bg-white shadow-sm">
+          <CheckCircle size={22} className="text-[var(--accent)]" />
         </div>
+        <p className="text-[16px] font-bold text-[var(--text)]">No missing data detected</p>
+        <p className="mt-2 text-sm leading-7 text-[var(--text2)]">
+          Every cell in this dataset has a value. No imputation is required.
+        </p>
       </div>
     );
   }
@@ -60,95 +54,86 @@ const MissingDataTab: React.FC<MissingDataTabProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-2">
-        <ShieldAlert size={18} className="text-amber-600" />
-        <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-          Missing Value &amp; Mechanism Analysis
-        </h3>
-        <span className="ml-2 text-[11px] bg-amber-50 text-amber-600 border border-amber-200 rounded-full px-2.5 py-0.5 font-semibold">
-          {missingAnalysis.length} column{missingAnalysis.length > 1 ? 's' : ''} affected
-        </span>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="grid h-10 w-10 place-items-center rounded-2xl bg-[var(--surface2)] text-[var(--accent)]">
+          <ShieldAlert size={18} />
+        </div>
+        <div>
+          <p className="ha-section-label">Missing Value Analysis</p>
+          <h3 className="mt-1 text-[18px] font-bold text-[var(--text)]">
+            {missingAnalysis.length} affected column{missingAnalysis.length > 1 ? 's' : ''}
+          </h3>
+        </div>
       </div>
 
-      {/* Mechanism legend */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-        {Object.entries(MECHANISM_META).map(([key, m]) => (
-          <div
-            key={key}
-            className={`flex items-start gap-2 p-3 rounded-xl border ${m.color}`}
-          >
-            {m.icon}
-            <div>
-              <span className="font-bold">{m.label}</span> — {m.full}
+      <div className="grid gap-3 sm:grid-cols-3">
+        {Object.entries(MECHANISM_META).map(([key, meta]) => (
+          <div key={key} className={`rounded-[18px] border p-4 shadow-sm ${meta.shell}`}>
+            <div className="flex items-start gap-2.5">
+              {meta.icon}
+              <div>
+                <p className="text-[12px] font-bold tracking-[0.02em] text-[var(--text)]">{meta.label}</p>
+                <p className="mt-1 text-[12px] leading-5 text-[var(--text2)]">{meta.full}</p>
+              </div>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Per-column cards */}
       <div className="space-y-4">
-        {missingAnalysis.map((col) => {
-          const meta = MECHANISM_META[col.mechanism] ?? MECHANISM_META.MCAR;
-          const barWidth = Math.min(100, col.missingPct);
+        {missingAnalysis.map((column) => {
+          const meta = MECHANISM_META[column.mechanism] ?? MECHANISM_META.MCAR;
+          const barWidth = Math.min(100, column.missingPct);
 
           return (
             <div
-              key={col.column}
-              className={`rounded-xl border p-4 space-y-3 ${meta.color} bg-white border-slate-200`}
+              key={column.column}
+              className={`rounded-[20px] border bg-white p-5 shadow-[0_10px_26px_rgba(14,116,82,0.05)] ${meta.shell}`}
             >
-              {/* Top row */}
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-sm text-slate-800">{col.column}</span>
-                  <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono font-semibold">
-                    {col.type}
-                  </span>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${meta.badge}`}>
-                    {meta.label}
-                  </span>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[15px] font-bold text-[var(--text)]">{column.column}</span>
+                    <span className="ha-badge bg-slate-100 text-slate-700">{column.type}</span>
+                    <span className={`ha-badge ${meta.badge}`}>{meta.label}</span>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-[var(--text2)]">{column.mechanismDetail}</p>
                 </div>
-                <span className="text-xs font-semibold text-slate-600">
-                  {col.missingCount.toLocaleString()} missing ({col.missingPct}%)
-                </span>
+
+                <div className="rounded-[14px] border border-[rgba(190,201,193,0.42)] bg-white/80 px-4 py-3 text-right">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--text3)]">Missing</p>
+                  <p className="mt-1 text-[15px] font-semibold text-[var(--text)]">
+                    {column.missingCount.toLocaleString()} ({column.missingPct}%)
+                  </p>
+                </div>
               </div>
 
-              {/* Progress bar */}
-              <div>
-                <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${
-                      col.mechanism === 'MCAR'
-                        ? 'bg-emerald-400'
-                        : col.mechanism === 'MAR'
-                        ? 'bg-amber-400'
-                        : 'bg-red-400'
-                    }`}
-                    style={{ width: `${barWidth}%` }}
-                  />
+              <div className="mt-4">
+                <div className="h-2.5 w-full overflow-hidden rounded-full bg-[var(--surface2)]">
+                  <div className={`h-full rounded-full ${meta.bar}`} style={{ width: `${barWidth}%` }} />
                 </div>
-                <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+                <div className="mt-1 flex justify-between text-[10px] text-[var(--text3)]">
                   <span>0%</span>
                   <span>50%</span>
                   <span>100%</span>
                 </div>
               </div>
 
-              {/* Mechanism detail */}
-              <p className="text-xs text-slate-600 leading-relaxed">
-                {col.mechanismDetail}
-              </p>
-
-              {/* Recommendation */}
-              <div className="text-[11px] bg-white/80 border border-slate-200 rounded-lg px-3 py-2 text-slate-600">
-                {col.mechanism === 'MCAR' && (
-                  <><strong>Recommendation:</strong> Safe to apply <strong>mean/median imputation</strong> or drop rows — missing data is random and unbiased.</>
+              <div className="mt-4 rounded-[16px] border border-[rgba(190,201,193,0.34)] bg-white/72 px-4 py-3 text-[13px] leading-6 text-[var(--text2)]">
+                {column.mechanism === 'MCAR' && (
+                  <>
+                    <strong className="text-[var(--text)]">Recommendation:</strong> Mean or median imputation is usually safe here because the missing pattern appears random.
+                  </>
                 )}
-                {col.mechanism === 'MAR' && (
-                  <><strong>Recommendation:</strong> Use <strong>multiple imputation</strong> or model-based imputation (e.g., MICE) — missingness is related to other observed features.</>
+                {column.mechanism === 'MAR' && (
+                  <>
+                    <strong className="text-[var(--text)]">Recommendation:</strong> Use stronger imputation logic such as model-based or multiple imputation because missingness is associated with other observed variables.
+                  </>
                 )}
-                {col.mechanism === 'MNAR' && (
-                  <><strong>Recommendation:</strong> <strong>Do not impute blindly</strong> — missingness is informative. Consider adding a binary indicator feature for this column.</>
+                {column.mechanism === 'MNAR' && (
+                  <>
+                    <strong className="text-[var(--text)]">Recommendation:</strong> Do not impute blindly. Missingness may carry signal, so consider using an explicit missing-indicator feature.
+                  </>
                 )}
               </div>
             </div>
@@ -156,64 +141,60 @@ const MissingDataTab: React.FC<MissingDataTabProps> = ({
         })}
       </div>
 
-      {/* Missingness matrix */}
-      <div className="rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-        <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200 flex items-center gap-2">
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-            Missingness Pattern Matrix
-          </span>
-          <span className="text-[10px] text-slate-400">(first 50 rows)</span>
+      <div className="overflow-hidden rounded-[20px] border border-[rgba(190,201,193,0.42)] bg-white shadow-[0_10px_26px_rgba(14,116,82,0.04)]">
+        <div className="border-b border-[rgba(190,201,193,0.42)] bg-[linear-gradient(180deg,#f7faf7,#f1f5f1)] px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="ha-section-label">Missingness Pattern Matrix</span>
+            <span className="text-[10px] text-[var(--text3)]">(first 50 rows)</span>
+          </div>
         </div>
-        <div className="p-4 overflow-x-auto">
-          {/* Header row */}
-          <div className="flex gap-px mb-1">
+
+        <div className="overflow-x-auto p-4">
+          <div className="mb-1 flex gap-px">
             <div className="w-8 shrink-0" />
-            {allColumns.map((col) => (
+            {allColumns.map((column) => (
               <div
-                key={col}
-                className={`flex-1 text-center text-[8px] font-bold uppercase tracking-wide rotate-0 pb-1 truncate ${
-                  missingColNames.has(col) ? 'text-amber-600' : 'text-slate-400'
+                key={column}
+                className={`flex-1 truncate pb-1 text-center text-[8px] font-bold uppercase tracking-wide ${
+                  missingColNames.has(column) ? 'text-amber-700' : 'text-[var(--text3)]'
                 }`}
-                title={col}
+                title={column}
               >
-                {col.length > 5 ? col.slice(0, 5) + '…' : col}
+                {column.length > 5 ? `${column.slice(0, 5)}…` : column}
               </div>
             ))}
           </div>
 
-          {/* Rows: each row = one observation index */}
           {Array.from({ length: Math.min(50, totalRows) }, (_, rowIdx) => (
-            <div key={rowIdx} className="flex gap-px mb-px">
-              {rowIdx % 10 === 0 && (
-                <div className="w-8 shrink-0 text-[8px] text-slate-300 font-mono leading-3 text-right pr-1 pt-0.5">
+            <div key={rowIdx} className="mb-px flex gap-px">
+              {rowIdx % 10 === 0 ? (
+                <div className="w-8 shrink-0 pr-1 pt-0.5 text-right font-mono text-[8px] leading-3 text-[var(--text3)]">
                   {rowIdx}
                 </div>
+              ) : (
+                <div className="w-8 shrink-0" />
               )}
-              {rowIdx % 10 !== 0 && <div className="w-8 shrink-0" />}
-              {allColumns.map((col) => {
-                const analysis = missingAnalysis.find((m) => m.column === col);
+              {allColumns.map((column) => {
+                const analysis = missingAnalysis.find((item) => item.column === column);
                 const isMissing = analysis?.missingRows.includes(rowIdx) ?? false;
                 return (
                   <div
-                    key={col}
-                    className={`flex-1 h-2.5 rounded-[1px] transition-colors ${
-                      isMissing ? 'bg-amber-400' : 'bg-indigo-200'
-                    }`}
-                    title={isMissing ? `${col}: MISSING (row ${rowIdx + 1})` : `${col}: present`}
+                    key={`${column}-${rowIdx}`}
+                    className={`h-2.5 flex-1 rounded-[2px] ${isMissing ? 'bg-amber-400' : 'bg-emerald-100'}`}
+                    title={isMissing ? `${column}: missing (row ${rowIdx + 1})` : `${column}: present`}
                   />
                 );
               })}
             </div>
           ))}
 
-          {/* Legend */}
-          <div className="flex items-center gap-5 mt-3 text-[10px] text-slate-500">
+          <div className="mt-3 flex items-center gap-5 text-[10px] text-[var(--text3)]">
             <span className="flex items-center gap-1.5">
-              <span className="w-3 h-2.5 rounded-[1px] bg-indigo-200 inline-block" />
+              <span className="inline-block h-2.5 w-3 rounded-[2px] bg-emerald-100" />
               Present value
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-3 h-2.5 rounded-[1px] bg-amber-400 inline-block" />
+              <span className="inline-block h-2.5 w-3 rounded-[2px] bg-amber-400" />
               Missing value
             </span>
           </div>

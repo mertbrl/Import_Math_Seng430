@@ -1,147 +1,163 @@
-import React, { useMemo, useState } from 'react';
-import { ArrowRight, ClipboardList, ShieldCheck, Stethoscope } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, CheckCircle2, ChevronDown, HeartPulse, Search, ShieldCheck, Sparkles, XCircle } from 'lucide-react';
 import { useDomainStore } from '../store/useDomainStore';
 import { domains } from '../config/domainConfig';
 
 export const Step1_ClinicalContext: React.FC = () => {
   const selectedDomainId = useDomainStore((state) => state.selectedDomainId);
-  const userMode = useDomainStore((state) => state.userMode);
-  const confirmStep1 = useDomainStore((state) => state.confirmStep1);
   const setDomain = useDomainStore((state) => state.setDomain);
   const domain = domains.find((item) => item.id === selectedDomainId) ?? domains[0];
 
-  const [objective, setObjective] = useState(domain.clinicalQuestion);
+  const [isDomainOpen, setIsDomainOpen] = useState(false);
+  const [domainQuery, setDomainQuery] = useState('');
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
 
-  const focusBullets = useMemo(
-    () => [
-      {
-        title: 'Clinical question',
-        text: domain.clinicalQuestion,
-      },
-      {
-        title: 'Why it matters',
-        text: domain.whyThisMatters,
-      },
-      {
-        title: 'Target variable',
-        text: domain.targetVariable,
-      },
-    ],
-    [domain],
-  );
+  useEffect(() => {
+    if (!isDomainOpen) return;
+    const onClickAway = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDomainOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onClickAway);
+    return () => document.removeEventListener('mousedown', onClickAway);
+  }, [isDomainOpen]);
+
+  const filteredDomains = useMemo(() => {
+    const query = domainQuery.trim().toLowerCase();
+    if (!query) return domains;
+    return domains.filter((item) => item.domainName.toLowerCase().includes(query) || item.clinicalQuestion.toLowerCase().includes(query));
+  }, [domainQuery]);
+
+  const targetText = domain.targetVariable.includes('(')
+    ? domain.targetVariable.split('(')[0].trim()
+    : domain.targetVariable;
 
   return (
-    <div className="ha-card overflow-hidden" id="step-1" data-testid="step1-container">
-      <div className="border-b border-[var(--border)] bg-[radial-gradient(circle_at_top_left,_rgba(26,86,219,0.14),_transparent_34%),radial-gradient(circle_at_top_right,_rgba(13,148,136,0.12),_transparent_35%),linear-gradient(180deg,_#ffffff,_#f8fafc)] px-7 py-8 sm:px-10 sm:py-10">
-        <div className="flex flex-wrap gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl flex-1 min-w-[280px]"> 
-            <span className="ha-pill ha-pill-accent">
-              <Stethoscope size={14} />
-              Step 1 · Clinical Context & Problem Definition
-            </span>
-            <h2 className="ha-display mt-5">Frame the clinical problem before the model touches the data.</h2>
-            <p className="ha-body mt-4 max-w-2xl break-words min-w-0"> 
-              Start with a clear clinical objective, a known safety boundary, and the right domain framing. Everything downstream becomes easier to interpret once the question is sharp.
-            </p>
+    <section className="ha-step1-shell" id="step-1" data-testid="step1-container">
+      <div className="w-full">
+        <h2 className="ha-step1-title">Frame the clinical problem before the model touches the data.</h2>
+        <p className="ha-step1-intro">
+          Start with a clear clinical objective, a known safety boundary, and the right domain framing. Everything
+          downstream becomes easier to interpret once the question is sharp.
+        </p>
+
+        <div className="ha-step1-domain-picker mt-8" ref={dropdownRef}>
+          <div className="ha-step1-domain-icon">
+            <HeartPulse size={18} />
           </div>
 
-          <div className="rounded-[20px] border border-[var(--border)] bg-white/80 px-5 py-4 backdrop-blur-md flex-1 min-w-[280px]">
-            <p className="ha-section-label">Current Domain</p>
-            <div className="relative mt-2">
-              <select
-                id="global-domain-select"
-                value={selectedDomainId}
-                onChange={(event) => {
-                  setObjective(domains.find((item) => item.id === event.target.value)?.clinicalQuestion ?? objective);
-                  void setDomain(event.target.value);
-                }}
-                className="w-full appearance-none rounded-[16px] border border-[var(--border)] bg-[var(--surface2)] px-5 py-3 pr-12 font-[var(--font-display)] text-[22px] font-bold tracking-[-0.04em] text-[var(--text)] outline-none cursor-pointer transition-all hover:bg-[var(--accent-soft)] hover:text-[var(--accent)] hover:border-[var(--accent)] focus:border-[var(--accent)] focus:bg-white focus:text-[var(--accent)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_20%,transparent)]"
-              >
-                {domains.map((item) => (
-                  <option key={item.id} value={item.id} className="text-base font-sans font-medium text-[var(--text)]">
-                    {item.domainName}
-                  </option>
-                ))}
-              </select>
-              <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 group-hover:text-[var(--accent)]">
-                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          <div className="ha-step1-domain-copy">
+            <p>Domain Selection</p>
+            <span data-testid="step1-domain">{domain.domainName}</span>
+          </div>
+
+          <div className="ha-step1-domain-select-wrap">
+            <button
+              type="button"
+              className="ha-step1-domain-trigger"
+              onClick={() => setIsDomainOpen((current) => !current)}
+              aria-expanded={isDomainOpen}
+              aria-controls="step1-domain-list"
+            >
+              Change
+              <ChevronDown size={16} />
+            </button>
+
+            {isDomainOpen && (
+              <div id="step1-domain-list" className="ha-step1-domain-menu" role="listbox">
+                <div className="ha-step1-domain-search">
+                  <Search size={14} />
+                  <input
+                    type="text"
+                    value={domainQuery}
+                    onChange={(event) => setDomainQuery(event.target.value)}
+                    placeholder="Search domain..."
+                  />
+                </div>
+
+                <div className="ha-step1-domain-options">
+                  {filteredDomains.map((item) => (
+                    <button
+                      type="button"
+                      key={item.id}
+                      role="option"
+                      aria-selected={item.id === selectedDomainId}
+                      data-active={item.id === selectedDomainId}
+                      onClick={() => {
+                        void setDomain(item.id);
+                        setIsDomainOpen(false);
+                        setDomainQuery('');
+                      }}
+                    >
+                      <strong>{item.domainName}</strong>
+                      <span>{item.clinicalQuestion}</span>
+                    </button>
+                  ))}
+
+                  {filteredDomains.length === 0 && (
+                    <div className="ha-step1-domain-empty">No matching domain found.</div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
 
-      <div className="grid gap-8 px-7 py-8 sm:px-10 sm:py-10 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
-        <section className="space-y-6">
-            <>
-              <div className="ha-card-muted p-6">
-                <p className="ha-section-label">Core Clinical Question</p>
-                <h3 className="mt-3 font-[var(--font-display)] text-[28px] font-bold tracking-[-0.05em] text-[var(--text)] break-words min-w-0"> 
-                  {domain.clinicalQuestion}
-                </h3>
-                <p className="ha-body mt-4">{domain.whyThisMatters}</p>
-              </div>
+      <div className="ha-step1-grid">
+        <article className="ha-step1-card ha-step1-card-question">
+          <p className="ha-step1-label">Core Clinical Question</p>
+          <h3 className="ha-step1-question" data-testid="step1-question">
+            {domain.clinicalQuestion}.
+          </h3>
+          <p className="ha-step1-copy">
+            Defining this outcome clearly isolates the temporal window and target population required for feature
+            engineering.
+          </p>
+          <p className="ha-step1-note">
+            This framing anchors the full workflow so feature engineering, validation, and explainability all map to
+            the same clinical objective.
+          </p>
+        </article>
 
-              <div className="flex flex-wrap gap-4"> 
-                {focusBullets.map((item) => (
-                  <article key={item.title} className="ha-card p-5 flex-1 min-w-[200px]"> 
-                    <p className="ha-section-label">{item.title}</p>
-                    <p className="mt-3 text-sm font-semibold leading-7 text-[var(--text)] break-words min-w-0"> 
-                      {item.title === 'Target variable' ? <span className="ha-code">{item.text}</span> : item.text}
-                    </p>
-                  </article>
-                ))}
-              </div>
-            </>
-        </section>
-
-        <section className="flex flex-wrap gap-4"> 
-          <div className="ha-card p-6 flex-1 min-w-[220px]"> 
-            <div className="flex items-start gap-4">
-              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[var(--trust-light)] text-[var(--trust)] shrink-0"> 
-                <ClipboardList size={22} />
-              </div>
-              <div className="min-w-0 flex-1"> 
-                <p className="ha-section-label text-ellipsis whitespace-nowrap overflow-hidden">Scope Summary</p> 
-                <p className="mt-3 text-sm leading-7 text-[var(--text2)] break-words"> 
-                  The workflow will use <strong className="text-[var(--text)]">{domain.dataSource}</strong> to answer a clinically framed question around <strong className="text-[var(--text)]">{domain.targetVariable}</strong>.
-                </p>
-              </div>
-            </div>
+        <article className="ha-step1-card ha-step1-card-target">
+          <p className="ha-step1-label">Target Variable</p>
+          <div className="ha-step1-target-row">
+            <span className="ha-step1-target-icon">
+              <AlertTriangle size={18} />
+            </span>
+            <strong>{targetText.toUpperCase()}</strong>
           </div>
+          <span className="ha-step1-badge">Binary Classification</span>
+        </article>
 
-          <div className="rounded-[20px] border border-[var(--warning)]/18 bg-[var(--warning-light)] p-6 flex-1 min-w-[220px]"> 
-            <div className="flex items-start gap-4">
-              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white text-[var(--warning)] shrink-0"> 
-                <ShieldCheck size={22} />
-              </div>
-              <div className="min-w-0 flex-1"> 
-                <p className="ha-section-label text-ellipsis whitespace-nowrap overflow-hidden" style={{ color: 'var(--warning)' }}> 
-                  Safety Boundary
-                </p>
-                <p className="mt-3 text-sm leading-7 text-[var(--text)] break-words"> 
-                  Model outputs support review and prioritization. They do not replace diagnosis, treatment planning, or clinician oversight.
-                </p>
-              </div>
-            </div>
+        <article className="ha-step1-card">
+          <p className="ha-step1-label">Why It Matters</p>
+          <div className="ha-step1-why-row">
+            <Sparkles size={18} />
+            <p>{domain.whyThisMatters}</p>
           </div>
+        </article>
 
-          <div className="ha-card p-6 flex-1 min-w-[220px]"> 
-            <p className="ha-section-label text-ellipsis whitespace-nowrap overflow-hidden">Next Step</p> 
-            <p className="ha-body mt-3 break-words min-w-0"> 
-              Continue into data exploration to upload the working dataset, inspect variable health, map the target, and validate that the pipeline can safely proceed.
-            </p>
-
-            <button
-              onClick={confirmStep1}
-              className="ha-button-primary mt-6 inline-flex w-full items-center justify-center gap-3"
-            >
-              Proceed to Data Exploration
-              <ArrowRight size={18} />
-            </button>
-          </div>
-        </section>
+        <article className="ha-step1-card ha-step1-card-safety">
+          <p className="ha-step1-label">Scope &amp; Safety Boundary</p>
+          <ul className="ha-step1-safety-list">
+            <li>
+              <CheckCircle2 size={15} />
+              <span>Primary dataset: {domain.dataSource}.</span>
+            </li>
+            <li>
+              <ShieldCheck size={15} />
+              <span>Focuses on {domain.domainName.toLowerCase()} decision support workflow.</span>
+            </li>
+            <li>
+              <XCircle size={15} />
+              <span>Outputs support clinician review and do not replace medical diagnosis.</span>
+            </li>
+          </ul>
+        </article>
       </div>
-    </div>
+    </section>
   );
 };

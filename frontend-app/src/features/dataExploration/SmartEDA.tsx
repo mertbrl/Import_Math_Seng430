@@ -1,13 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import {
-  Activity,
-  CheckCircle2,
-  GitBranch,
-  Search,
-  ShieldAlert,
-  Table,
-  Target,
-} from 'lucide-react';
+import { Activity, GitBranch, Search, ShieldAlert, Table, Target } from 'lucide-react';
 import DataHealthTab from './DataHealthTab';
 import FeatureExplorerTab from './FeatureExplorerTab';
 import CorrelationTab from './CorrelationTab';
@@ -75,36 +67,6 @@ const SmartEDA: React.FC<SmartEDAProps> = ({ data }) => {
 
   return (
     <div className="space-y-6">
-      <div className="ha-card-muted p-5 sm:p-6">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <p className="ha-section-label">Dataset Ready</p>
-            <h3 className="mt-2 font-[var(--font-display)] text-[28px] font-bold tracking-[-0.05em] text-[var(--text)]">
-              Exploration workspace
-            </h3>
-            <p className="ha-body mt-3 max-w-2xl">
-              Review the file before moving into preprocessing. The tabs below keep preview data, health diagnostics, missingness, correlations, and target mapping together in one place.
-            </p>
-          </div>
-
-          <div className="rounded-[18px] border border-[var(--success)]/20 bg-white/90 px-5 py-4">
-            <div className="flex items-center gap-3">
-              <div className="grid h-11 w-11 place-items-center rounded-2xl bg-[var(--success-light)] text-[var(--success)]">
-                <CheckCircle2 size={20} />
-              </div>
-              <div>
-                <p className="ha-section-label" style={{ color: 'var(--success)' }}>
-                  File Imported
-                </p>
-                <p className="mt-2 text-sm font-semibold text-[var(--text)]">
-                  {data.summary.numObservations.toLocaleString()} rows · {data.summary.numVariables} columns
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div className="ha-card overflow-hidden">
         <div className="border-b border-[var(--border)] bg-[var(--surface2)] px-4 py-4 sm:px-6">
           <div className="flex flex-wrap gap-2">

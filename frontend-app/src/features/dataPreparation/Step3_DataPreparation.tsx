@@ -82,7 +82,7 @@ export const Step3_DataPreparation: React.FC = () => {
   return (
     <div className="w-full space-y-6">
       <div className="ha-card overflow-hidden">
-        <div className="border-b border-[var(--border)] bg-[radial-gradient(circle_at_top_left,_rgba(234,88,12,0.12),_transparent_34%),radial-gradient(circle_at_top_right,_rgba(26,86,219,0.12),_transparent_35%),linear-gradient(180deg,_#ffffff,_#f8fafc)] px-7 py-8 sm:px-10">
+        <div className="mx-4 mb-4 mt-4 rounded-[28px] border border-[rgba(190,201,193,0.4)] bg-[radial-gradient(circle_at_top_left,_rgba(195,236,215,0.5),_transparent_34%),radial-gradient(circle_at_top_right,_rgba(156,245,202,0.42),_transparent_35%),linear-gradient(180deg,_#fcfefd,_#eef7f1)] px-7 py-8 shadow-[0_18px_42px_rgba(0,89,62,0.06)] sm:px-10">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl">
               <span className="ha-pill ha-pill-accent">
