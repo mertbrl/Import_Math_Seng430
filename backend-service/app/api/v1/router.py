@@ -7,6 +7,7 @@ from app.api.v1.endpoints import (
     health,
     insights,
     model,
+    chat,
 )
 
 api_router = APIRouter()
@@ -16,3 +17,4 @@ api_router.include_router(model.router)
 api_router.include_router(insights.router)
 api_router.include_router(certificate.router)
 api_router.include_router(audit_report.router)
+api_router.include_router(chat.router)

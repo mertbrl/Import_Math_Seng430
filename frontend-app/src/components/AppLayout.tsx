@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Check, ChevronLeft, ChevronRight, Clock3, Lock } from 'lucide-react';
 import { TopNavbar } from './TopNavbar';
+import { HelpChatbotDrawer } from './HelpChatbotDrawer';
 import { useDomainStore } from '../store/useDomainStore';
 import { useDataPrepStore } from '../store/useDataPrepStore';
 import { useEDAStore } from '../store/useEDAStore';
@@ -51,6 +52,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     step5Completed,
     step6Completed,
     userMode,
+    theme,
   } = useDomainStore();
 
   const { completedSteps, cleaningPipeline } = useDataPrepStore();
@@ -69,9 +71,10 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   );
 
   return (
-    <div className="app-shell ha-animate-in" data-mode={userMode}
+    <div className="app-shell ha-animate-in" data-mode={userMode} data-theme={theme}
          style={{ height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <TopNavbar />
+      <HelpChatbotDrawer />
 
       {/* Stepper — sticky, full-width constrained container */}
       <div style={{ flexShrink: 0 }}>

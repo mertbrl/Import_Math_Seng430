@@ -98,6 +98,7 @@ const ImbalanceTab: React.FC = () => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json: ImbalanceData = await res.json();
       setData(json);
+      useDataPrepStore.getState().setTabSuggestions('imbalance_handling', json);
 
       if (savedAction?.strategy) {
         setStrategy(savedAction.strategy);

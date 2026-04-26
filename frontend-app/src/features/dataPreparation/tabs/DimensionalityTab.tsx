@@ -45,6 +45,7 @@ const DimensionalityTab: React.FC = () => {
       const cols: VIFColumn[] = data.columns ?? [];
       setColumns(cols);
       setDropPlan(data.iterative_drop_order ?? []);
+      useDataPrepStore.getState().setTabSuggestions('dimensionality_reduction', data);
     } catch (e) {
       setError(`Failed to fetch VIF data: ${e}`);
     } finally {

@@ -36,6 +36,7 @@ const TransformationTab: React.FC = () => {
       });
       const data = await res.json();
       setColumns(data.columns ?? []);
+      useDataPrepStore.getState().setTabSuggestions('transformation', data.columns);
       // Set default strategies from recommendation
       const initStrategies: Record<string, string> = {};
       (data.columns ?? []).forEach((col: TransformColumn) => {

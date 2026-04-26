@@ -1,28 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useDomainStore } from '../store/useDomainStore';
-
-const GLOSSARY_TERMS: Record<string, string> = {
-  "algorithm": "A set of step-by-step instructions a computer follows to find patterns in patient data and make predictions — like a fast, data-driven decision checklist.",
-  "training data": "Historical patient records the model learns from. Similar to a doctor reviewing past cases before seeing new patients.",
-  "test data": "Patients the model has never seen, used to measure how well the AI performs. If a model only works on training data, it has memorised rather than learned.",
-  "features": "The input measurements (columns in your data) used to make predictions — for example, age, blood pressure, creatinine level, smoking status.",
-  "target variable": "The outcome the model is trying to predict — for example, readmission, diagnosis, survival, or disease stage.",
-  "overfitting": "When a model memorises the training cases so precisely that it fails on new patients. Like a student who memorises exam answers but cannot apply the knowledge.",
-  "underfitting": "When a model is too simple to learn anything useful. Like a clinician who gives the same diagnosis regardless of symptoms.",
-  "normalisation": "Adjusting all measurements to the same scale so no single measurement dominates because of its units. Age (0–100) and a troponin level (0–50,000) must be rescaled before they can be compared fairly.",
-  "class imbalance": "When one outcome is much rarer than the other in the training data. A model trained on 95% negative cases may simply predict negative for everyone and appear 95% accurate — but miss all real cases.",
-  "smote": "Synthetic Minority Over-sampling Technique. Creates artificial examples of the rare outcome to balance the training data. Applied to training data only — never to test patients.",
-  "sensitivity": "Of all patients who truly have the condition, what fraction did the model correctly identify? Low sensitivity means the model misses real cases. Critical in any screening application.",
-  "specificity": "Of all patients who truly do not have the condition, what fraction did the model correctly call healthy? Low specificity means too many false alarms.",
-  "precision": "Of all patients the model flagged as positive, what fraction actually were? Low precision means many unnecessary referrals or treatments.",
-  "f1 score": "A single number that balances Sensitivity and Precision. Useful when both false negatives and false positives have real clinical costs.",
-  "auc-roc": "A score from 0.5 (random guessing) to 1.0 (perfect separation) summarising how well the model distinguishes between positive and negative patients. Above 0.8 is considered good.",
-  "confusion matrix": "A 2x2 table showing: correctly identified sick patients, correctly identified healthy patients, healthy patients incorrectly flagged as sick, and sick patients incorrectly called safe.",
-  "feature importance": "A ranking of which patient measurements the model relied on most. Helps confirm whether the AI is using clinically meaningful signals.",
-  "hyperparameter": "A setting chosen before training that controls model behaviour — for example, K in KNN or tree depth in Decision Tree. Not learned from data; set by the user via sliders.",
-  "bias": "When a model performs significantly worse for certain patient subgroups (for example, older patients, women, or ethnic minorities) because they were under-represented in the training data.",
-  "cross-validation": "Splitting the data multiple times and averaging results to get a more reliable performance estimate than a single train/test split."
-};
+import { useEDAStore } from '../store/useEDAStore';
+import { useDataPrepStore } from '../store/useDataPrepStore';
+import { useModelStore } from '../store/useModelStore';
+import { buildApiUrl } from '../config/apiConfig';
 
 interface Message {
   id: string;
@@ -31,25 +12,32 @@ interface Message {
 }
 
 export const HelpChatbotDrawer: React.FC = () => {
-  const { isHelpOpen, toggleHelp } = useDomainStore();
+  const { isHelpOpen, toggleHelp, userMode, selectedDomainId, currentStep } = useDomainStore();
+  const edaStore = useEDAStore();
+  const prepStore = useDataPrepStore();
+  const modelStore = useModelStore();
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState<Message[]>([
     { 
       id: '1', 
       role: 'ai', 
-      content: 'Hello! I am your HEALTH-AI assistant. You can ask me about ML terms like SMOTE, AUC-ROC, or Overfitting.' 
+      content: 'Merhaba! Ben HEALTH-AI asistanınızım. Makine öğrenmesi ve modeller hakkında sorularınızı sorabilirsiniz.' 
     }
   ]);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom of chat when messages change
   useEffect(() => {
-    if (bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (isHelpOpen && chatScrollRef.current) {
+      requestAnimationFrame(() => {
+        if (chatScrollRef.current) {
+          chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+        }
+      });
     }
   }, [messages, isHelpOpen]);
 
-  const handleSendMessage = (e?: React.FormEvent) => {
+  const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const trimmedInput = inputText.trim();
     if (!trimmedInput) return;
@@ -64,31 +52,100 @@ export const HelpChatbotDrawer: React.FC = () => {
     setMessages((prev) => [...prev, userMsg]);
     setInputText('');
 
-    // 2. Mock AI Logic (Look for keywords in input)
-    setTimeout(() => {
-      const lowerInput = trimmedInput.toLowerCase();
-      let matchedDefinition = '';
-      let matchedKey = '';
+    // Prepare history
+    const historyPayload = messages.map(m => ({
+      role: m.role,
+      content: m.content
+    }));
 
-      // Check against glossary keys
-      for (const [key, value] of Object.entries(GLOSSARY_TERMS)) {
-        if (lowerInput.includes(key)) {
-          matchedDefinition = value;
-          matchedKey = key;
-          break;
+    const contextPayload = {
+      global: {
+        userMode,
+        domain: selectedDomainId,
+        currentStep
+      },
+      eda: {
+        mlTask: edaStore.mlTask,
+        targetColumn: edaStore.targetColumn,
+        totalRows: edaStore.totalRows,
+        ignoredColumns: edaStore.ignoredColumns,
+        columnsSummary: edaStore.edaData?.columns?.map(c => ({
+          name: c.name,
+          type: c.type,
+          missing_percentage: c.missing_percentage,
+          unique_values: c.unique_values
+        }))
+      },
+      dataPrep: {
+        activeTab: prepStore.activeTabId,
+        cleaningPipeline: prepStore.cleaningPipeline,
+        previewShape: prepStore.previewShape,
+        missingColumns: prepStore.missingColumns,
+        outlierColumns: prepStore.outlierColumns,
+        evaluatedSystemSuggestions: {
+          imputation: prepStore.missingColumns?.map(col => ({
+            column: col.column,
+            missing_percentage: col.missing_percentage,
+            systemSuggests: col.missing_percentage < 5 ? 'drop_rows' : col.missing_percentage > 30 ? 'drop_column' : 'knn'
+          })),
+          outliers: prepStore.outlierColumns?.map(col => ({
+            column: col.column,
+            outlier_percentage: col.outlier_percentage,
+            systemSuggests: {
+              detector: (col as any).recommended_detector ?? (col as any).recommendation ?? 'iqr',
+              treatment: (col as any).recommended_treatment ?? 'cap_1_99',
+              reason: (col as any).suggestion_reason
+            }
+          })),
+          activeTabSuggestions: prepStore.tabSuggestions[prepStore.activeTabId] ?? null
+        },
+        systemHeuristics: {
+          imputation: "If missing < 5% -> Drop Rows. If 5-30% -> KNN Imputer. If > 30% -> Drop Column.",
+          general: "Always fit imputers/scalers on Training set only to prevent data leakage."
         }
+      },
+      modeling: {
+        phase: modelStore.phase,
+        bestResultTaskId: modelStore.bestResultTaskId,
+        bestMetrics: modelStore.bestResultTaskId ? modelStore.results[modelStore.bestResultTaskId]?.test_metrics || modelStore.results[modelStore.bestResultTaskId]?.metrics : null
+      }
+    };
+
+    try {
+      const response = await fetch(buildApiUrl('/chat'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: trimmedInput,
+          history: historyPayload,
+          context: contextPayload
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('API Error');
       }
 
+      const data = await response.json();
+      
       const aiMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'ai',
-        content: matchedDefinition 
-          ? `**${matchedKey.toUpperCase()}**: ${matchedDefinition}` 
-          : "I'm currently running in frontend-only mode. Soon, I'll be connected to my Python RAG backend to answer that!"
+        content: data.response
       };
-
       setMessages((prev) => [...prev, aiMsg]);
-    }, 600); // Simulate network delay
+      
+    } catch (error) {
+      console.error("Chat error:", error);
+      const errorMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'ai',
+        content: 'Üzgünüm, şu an sunucuya bağlanamıyorum veya bir hata oluştu.'
+      };
+      setMessages((prev) => [...prev, errorMsg]);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -139,7 +196,7 @@ export const HelpChatbotDrawer: React.FC = () => {
         </div>
 
         {/* Chat Area */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 flex flex-col gap-4 scrollbar-hide">
+        <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 sm:p-5 flex flex-col gap-4 scrollbar-hide">
           {messages.map((msg) => {
             const isUser = msg.role === 'user';
             return (
@@ -162,7 +219,6 @@ export const HelpChatbotDrawer: React.FC = () => {
               </div>
             );
           })}
-          <div ref={bottomRef} className="h-1 shrink-0" />
         </div>
 
         {/* Input Area */}

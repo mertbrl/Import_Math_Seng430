@@ -82,10 +82,12 @@ interface DomainState {
   step5Completed: boolean;
   step6Completed: boolean;
   userMode: 'clinical' | 'data_scientist';
+  theme: 'light' | 'dark';
 
   setDomain: (id: string) => Promise<void>;
   chooseMode: (mode: 'clinical' | 'data_scientist') => void;
   setUserMode: (mode: 'clinical' | 'data_scientist') => void;
+  setTheme: (theme: 'light' | 'dark') => void;
   resetApp: () => Promise<void>;
   toggleHelp: () => void;
   setCurrentStep: (step: number) => void;
@@ -117,6 +119,7 @@ export const useDomainStore = create<DomainState>((set, get) => ({
   step5Completed: false,
   step6Completed: false,
   userMode: 'clinical',
+  theme: 'light',
 
   setDomain: async (id: string) => {
     if (id === get().selectedDomainId) return;
@@ -148,6 +151,8 @@ export const useDomainStore = create<DomainState>((set, get) => ({
       userMode: mode,
       hasChosenMode: true,
     }),
+
+  setTheme: (theme: 'light' | 'dark') => set({ theme }),
 
   resetApp: async () => {
     if (window.confirm('Are you sure you want to reset all progress? This will restart the workflow from the beginning.')) {

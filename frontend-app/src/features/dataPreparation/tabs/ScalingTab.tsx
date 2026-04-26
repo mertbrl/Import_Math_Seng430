@@ -38,6 +38,7 @@ const ScalingTab: React.FC = () => {
       const data = await res.json();
       const cols = data.columns ?? [];
       setColumns(cols);
+      useDataPrepStore.getState().setTabSuggestions('scaling', cols);
       const init: Record<string, string> = {};
       cols.forEach((c: ScalingColumn) => { init[c.column] = c.recommendation; });
       setStrategies(init);

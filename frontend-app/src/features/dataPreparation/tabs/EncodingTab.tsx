@@ -47,6 +47,7 @@ const EncodingTab: React.FC = () => {
       const data = await res.json();
       const cols = data.columns ?? [];
       setColumns(cols);
+      useDataPrepStore.getState().setTabSuggestions('encoding', cols);
       const init: Record<string, string> = {};
       cols.forEach((c: EncodingColumn) => { init[c.column] = c.recommendation; });
       setStrategies(init);

@@ -58,6 +58,10 @@ interface DataPrepState {
   outlierStrategies: Record<string, OutlierStrategyPlan>;
   setOutlierStrategy: (column: string, strategy: Partial<OutlierStrategyPlan>) => void;
 
+  // Local tab suggestions bridged to global store for Chatbot context
+  tabSuggestions: Record<string, any>;
+  setTabSuggestions: (tabId: string, suggestions: any) => void;
+
   // Step 09 - Feature Selection (Before SMOTE)
   featureImportances: FeatureImportanceStat[];
   featureImportancesCacheKey: string | null;
@@ -110,6 +114,14 @@ export const useDataPrepStore = create<DataPrepState>((set, get) => ({
   isOutlierLoading: false,
   outlierError: null,
   outlierStrategies: {},
+  
+  tabSuggestions: {},
+  setTabSuggestions: (tabId, suggestions) => set((state) => ({
+    tabSuggestions: {
+      ...state.tabSuggestions,
+      [tabId]: suggestions
+    }
+  })),
 
   setOutlierStrategy: (column: string, strategy: Partial<OutlierStrategyPlan>) => set((state) => ({
     outlierStrategies: {

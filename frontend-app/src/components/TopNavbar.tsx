@@ -1,5 +1,5 @@
-import React from 'react';
-import { HelpCircle, RotateCcw, Settings2 } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { HelpCircle, RotateCcw, SunMoon, Sun, Moon } from 'lucide-react';
 import { useDomainStore } from '../store/useDomainStore';
 import { domains } from '../config/domainConfig';
 
@@ -10,13 +10,28 @@ export const TopNavbar: React.FC = () => {
     currentStep,
     selectedDomainId,
     userMode,
+    theme,
     toggleHelp,
     resetApp,
     setUserMode,
+    setTheme,
   } = useDomainStore();
+
+  const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
+  const themeMenuRef = useRef<HTMLDivElement>(null);
 
   const currentDomain = domains.find((domain) => domain.id === selectedDomainId) ?? domains[0];
   const progressPercent = Math.round((currentStep / TOTAL_STEPS) * 100);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (themeMenuRef.current && !themeMenuRef.current.contains(event.target as Node)) {
+        setIsThemeMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   return (
     <nav className="ha-navbar">
@@ -84,15 +99,40 @@ export const TopNavbar: React.FC = () => {
             <HelpCircle size={17} />
           </button>
 
-          <button
-            type="button"
-            onClick={toggleHelp}
-            className="ha-button-secondary inline-flex h-11 w-11 items-center justify-center p-0"
-            aria-label="Open settings"
-            title="Workspace guidance"
-          >
-            <Settings2 size={17} />
-          </button>
+          <div className="relative" ref={themeMenuRef}>
+            <button
+              type="button"
+              onClick={() => setIsThemeMenuOpen(!isThemeMenuOpen)}
+              className="ha-button-secondary inline-flex h-11 w-11 items-center justify-center p-0"
+              aria-label="Theme settings"
+              title="Theme Settings"
+            >
+              <SunMoon size={17} />
+            </button>
+
+            {isThemeMenuOpen && (
+              <div className="absolute right-0 top-full mt-2 flex w-32 flex-col gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 shadow-xl backdrop-blur-md animate-in fade-in slide-in-from-top-2">
+                <button
+                  onClick={() => {
+                    setTheme('light');
+                    setIsThemeMenuOpen(false);
+                  }}
+                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${theme === 'light' ? 'bg-[var(--accent-soft)] text-[var(--accent-ink)]' : 'text-[var(--text2)] hover:bg-[var(--surface2)]'}`}
+                >
+                  <Sun size={14} /> Light
+                </button>
+                <button
+                  onClick={() => {
+                    setTheme('dark');
+                    setIsThemeMenuOpen(false);
+                  }}
+                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${theme === 'dark' ? 'bg-[var(--accent-soft)] text-[var(--accent-ink)]' : 'text-[var(--text2)] hover:bg-[var(--surface2)]'}`}
+                >
+                  <Moon size={14} /> Dark
+                </button>
+              </div>
+            )}
+          </div>
 
           <button
             type="button"
