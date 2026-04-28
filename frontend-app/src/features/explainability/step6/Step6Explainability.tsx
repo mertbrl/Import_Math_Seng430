@@ -532,13 +532,13 @@ export const Step6Explainability: React.FC = () => {
   if (userMode === 'clinical') {
     return (
       <div className="space-y-6 px-4 py-8">
-        <div className="overflow-hidden rounded-[32px] border border-[#d7e5de] bg-[#edf3ef] shadow-sm">
-          <div className="border-b border-[#d7e5de] bg-[#edf3ef] px-8 py-8">
+        <div className="ha-step6-shell overflow-hidden rounded-[32px] border border-[#d7e5de] bg-[#edf3ef] shadow-sm">
+          <div className="ha-step6-hero border-b border-[#d7e5de] bg-[#edf3ef] px-8 py-8">
             <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
               <div>
                 <p className="text-[11px] font-black uppercase tracking-[0.22em] font-mono text-slate-500">Step 6</p>
-                <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Clinical Review Summary</h1>
-                <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600">
+                <h1 className="ha-step6-hero-title mt-2 text-3xl font-black tracking-tight text-slate-900">Clinical Review Summary</h1>
+                <p className="ha-step6-hero-copy mt-3 max-w-3xl text-sm leading-relaxed text-slate-600">
                   Review the recommended system version, the main patient findings, and how the decision changes when key findings are adjusted.
                 </p>
               </div>
@@ -947,15 +947,15 @@ export const Step6Explainability: React.FC = () => {
 
   return (
     <div className="space-y-6 px-4 py-8">
-      <div className="overflow-hidden rounded-[32px] border border-[#d7e5de] bg-[#edf3ef] shadow-sm">
+      <div className="ha-step6-shell overflow-hidden rounded-[32px] border border-[#d7e5de] bg-[#edf3ef] shadow-sm">
 
         {/* ── Page header ── */}
-        <div className="border-b border-[#d7e5de] bg-[#edf3ef] px-8 py-8">
+        <div className="ha-step6-hero border-b border-[#d7e5de] bg-[#edf3ef] px-8 py-8">
           <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
             <div>
               <p className="text-[11px] font-black uppercase tracking-[0.22em] font-mono text-slate-500">Step 6</p>
-              <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Model Explainability</h1>
-              <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600">
+              <h1 className="ha-step6-hero-title mt-2 text-3xl font-black tracking-tight text-slate-900">Model Explainability</h1>
+              <p className="ha-step6-hero-copy mt-3 max-w-3xl text-sm leading-relaxed text-slate-600">
                 Inspect why the champion model won, which features drive the global pattern, and how a single record shifts when you change its values.
               </p>
             </div>
@@ -1085,7 +1085,7 @@ const ChampionJustificationBanner: React.FC<{
     <div className="grid gap-6 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
       {/* Left: champion identity + rationale */}
       <div
-        className={`rounded-[28px] border p-6 shadow-sm ${
+        className={`ha-step6-justification-card rounded-[28px] border p-6 shadow-sm ${
         clinicalMode ? 'border-[#d7e5de] bg-[#f7fbf8]' : 'border-[#d7e5de] bg-[#f7fbf8]'
         }`}
       >
@@ -1126,7 +1126,7 @@ const ChampionJustificationBanner: React.FC<{
       </div>
 
       {/* Right: current view metrics */}
-      <div className={`rounded-[28px] border p-6 shadow-sm ${
+      <div className={`ha-step6-current-card rounded-[28px] border p-6 shadow-sm ${
         clinicalMode ? 'border-[#d7e5de] bg-[#f7fbf8]' : 'border-[#d7e5de] bg-[#f7fbf8]'
       }`}>
         <div className="flex items-center gap-3">
@@ -1179,7 +1179,7 @@ const GlobalFeaturePanel: React.FC<{ globalExplanation: ExplainabilityWorkbench[
   globalExplanation: ExplainabilityWorkbench['global_explanation'];
   clinicalMode?: boolean;
 }) => (
-  <div className={`rounded-[28px] border p-6 shadow-sm min-w-0 overflow-x-auto min-h-[200px] ${
+  <div className={`ha-step6-global-panel rounded-[28px] border p-6 shadow-sm min-w-0 overflow-x-auto min-h-[200px] ${
     clinicalMode ? 'border-emerald-100 bg-[#f7fbf8]' : 'border-emerald-100 bg-[#f7fbf8]'
   }`}>
     <div className="flex items-start gap-3">
@@ -1190,10 +1190,10 @@ const GlobalFeaturePanel: React.FC<{ globalExplanation: ExplainabilityWorkbench[
         <p className={`text-[11px] font-black uppercase tracking-[0.18em] ${clinicalMode ? 'font-mono text-[#5f766b]' : 'font-mono text-[#5f766b]'}`}>
           {clinicalMode ? 'Clinical Factors' : 'Global Explainability'}
         </p>
-        <h3 className="text-lg font-black tracking-tight text-slate-900">
+        <h3 className="ha-step6-panel-title text-lg font-black tracking-tight text-slate-900">
           {clinicalMode ? 'Most relevant patient findings' : 'Most influential features'}
         </h3>
-        <p className={`mt-1 text-sm ${clinicalMode ? 'text-slate-600' : 'text-slate-500'}`}>
+        <p className={`ha-step6-panel-copy mt-1 text-sm ${clinicalMode ? 'text-slate-600' : 'text-slate-500'}`}>
           {clinicalMode
             ? 'These findings had the strongest influence across similar reviewed patients.'
             : `Source: ${globalExplanation.source}. Hover any bar to see feature distribution details.`}
@@ -1256,7 +1256,7 @@ const LocalExplainabilityPanel: React.FC<{
   isSimulating,
   clinicalMode,
 }) => (
-  <div className={`rounded-[28px] border p-6 shadow-sm ${
+  <div className={`ha-step6-local-panel rounded-[28px] border p-6 shadow-sm ${
     clinicalMode ? 'border-emerald-100 bg-[#f8fbf9]' : 'border-emerald-100 bg-[#f8fbf9]'
   }`}>
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -1268,10 +1268,10 @@ const LocalExplainabilityPanel: React.FC<{
           <p className={`text-[11px] font-black uppercase tracking-[0.18em] ${clinicalMode ? 'font-mono text-[#5f766b]' : 'font-mono text-[#5f766b]'}`}>
             {clinicalMode ? 'Patient Review' : 'What-If Simulator'}
           </p>
-          <h3 className="text-lg font-black tracking-tight text-slate-900">
+          <h3 className="ha-step6-panel-title text-lg font-black tracking-tight text-slate-900">
             {clinicalMode ? 'Patient-specific decision summary' : 'Local explanation & live prediction shift'}
           </h3>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="ha-step6-panel-copy mt-1 text-sm text-slate-500">
             {clinicalMode
               ? 'Adjust the three strongest clinical factors to see whether the patient-level estimate moves.'
               : `Mode: ${simulatorMode}. Slider changes debounce before firing the inference API.`}
@@ -1281,7 +1281,7 @@ const LocalExplainabilityPanel: React.FC<{
 
       {/* Rich record dropdown */}
       <div className="min-w-[260px] xl:min-w-[320px]">
-        <label className="mb-2 block text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">
+        <label className="ha-step6-field-label mb-2 block text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">
           {clinicalMode ? 'Patient' : 'Select a Test Patient'}
         </label>
         <select
@@ -1303,10 +1303,10 @@ const LocalExplainabilityPanel: React.FC<{
           if (!sel) return null;
           return (
             <div className="mt-2 flex items-center gap-2">
-              <span className={`rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide ${confidenceBadgeClass(sel.confidence_band)}`}>
+              <span className={`ha-step6-confidence-pill rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide ${confidenceBadgeClass(sel.confidence_band)}`}>
                 {clinicalMode ? `${sel.confidence_band} review confidence` : `${sel.confidence_band} confidence`}
               </span>
-              <span className="text-xs text-slate-500">
+              <span className="ha-step6-predicted-copy text-xs text-slate-500">
                 {clinicalMode ? 'Suggested class' : 'Predicted'}: <strong>{decodeClinicalClassLabel(sel.predicted_label).full}</strong> ({(sel.predicted_probability * 100).toFixed(1)}%)
               </span>
             </div>
@@ -1330,9 +1330,9 @@ const LocalExplainabilityPanel: React.FC<{
               </span>
             </p>
           </div>
-          <div className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-3 text-right">
-            <p className="text-[10px] font-black uppercase tracking-[0.14em] font-mono text-emerald-700">Review Confidence</p>
-            <p className="text-2xl font-black text-emerald-700">{formatPercent(scenario.prediction.target_probability)}</p>
+          <div className="ha-step6-review-confidence rounded-full border border-emerald-200 bg-emerald-50 px-4 py-3 text-right">
+            <p className="ha-step6-review-confidence-label text-[10px] font-black uppercase tracking-[0.14em] font-mono text-emerald-700">Review Confidence</p>
+            <p className="ha-step6-review-confidence-value text-2xl font-black text-emerald-700">{formatPercent(scenario.prediction.target_probability)}</p>
           </div>
         </div>
       </div>
@@ -1372,13 +1372,13 @@ const LocalExplainabilityPanel: React.FC<{
         </div>
       )}
       <div className="mb-3 flex items-center gap-3">
-        <h4 className="text-sm font-black text-slate-800">{clinicalMode ? 'Patient-specific drivers' : 'Feature Impacts'}</h4>
+        <h4 className="ha-step6-impact-title text-sm font-black text-slate-800">{clinicalMode ? 'Patient-specific drivers' : 'Feature Impacts'}</h4>
         <div className="flex items-center gap-3 text-xs font-semibold text-slate-500">
           <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-rose-500" /> {clinicalMode ? 'Raises concern' : 'Increases risk'}</span>
           <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> {clinicalMode ? 'Lowers concern' : 'Decreases risk'}</span>
         </div>
       </div>
-      <div className={`h-[300px] rounded-2xl border p-3 ${clinicalMode ? 'border-emerald-100 bg-[#f3f8f5]' : 'border-emerald-100 bg-[#f3f8f5]'}`}>
+      <div className={`ha-step6-impact-chart h-[300px] rounded-2xl border p-3 ${clinicalMode ? 'border-emerald-100 bg-[#f3f8f5]' : 'border-emerald-100 bg-[#f3f8f5]'}`}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={[...getDisplayedImpactFeatures(scenario, controlFeatures, clinicalMode)]
@@ -1429,7 +1429,7 @@ const LocalExplainabilityPanel: React.FC<{
             }`}>
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-md bg-indigo-100 text-[10px] font-black text-indigo-700">
+                  <span className="ha-step6-slider-index flex h-5 w-5 items-center justify-center rounded-md bg-indigo-100 text-[10px] font-black text-indigo-700">
                     #{idx + 1}
                   </span>
                   <div>
@@ -1439,7 +1439,7 @@ const LocalExplainabilityPanel: React.FC<{
                 </div>
                 <div className="flex items-center gap-2">
                   {impact && (
-                    <span className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold ${isRisky ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                    <span className={`ha-step6-slider-delta flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold ${isRisky ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
                       {isRisky ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
                       {clinicalMode ? (isRisky ? 'Raises concern' : 'Lowers concern') : `${isRisky ? '+' : ''}${(impact.impact * 100).toFixed(2)}%`}
                     </span>

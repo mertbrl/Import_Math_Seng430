@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { domains } from '../config/domainConfig';
 import { useEDAStore } from './useEDAStore';
 import { useDataPrepStore } from './useDataPrepStore';
@@ -35,7 +36,10 @@ function resolveMaxUnlockedStep(
 
   if (useDataPrepStore.getState().completedSteps.includes('preprocessing_review')) maxStep = 4;
 
-  if (Object.keys(useModelStore.getState().results).length > 0) maxStep = 5;
+  const modelStore = useModelStore.getState();
+  const hasTrainingActivity =
+    Object.keys(modelStore.tasks).length > 0 || Object.keys(modelStore.results).length > 0;
+  if (hasTrainingActivity) maxStep = 5;
 
   if (step5Completed) maxStep = 6;
 
@@ -91,6 +95,7 @@ interface DomainState {
   setUserMode: (mode: 'clinical' | 'data_scientist') => void;
   setTheme: (theme: 'light' | 'dark') => void;
   resetApp: () => Promise<void>;
+  goToLanding: () => void;
   toggleHelp: () => void;
   setTutorialActive: (active: boolean) => void;
   setCurrentStep: (step: number) => void;
@@ -110,7 +115,9 @@ interface DomainState {
   invalidateFromStep: (fromStep: number) => void;
 }
 
-export const useDomainStore = create<DomainState>((set, get) => ({
+export const useDomainStore = create<DomainState>()(
+  persist(
+    (set, get) => ({
   selectedDomainId: DEFAULT_DOMAIN_ID,
   workflowVersion: 1,
   sessionId: createSessionId(DEFAULT_DOMAIN_ID, 1),
@@ -179,6 +186,13 @@ export const useDomainStore = create<DomainState>((set, get) => ({
     }
   },
 
+  goToLanding: () =>
+    set({
+      hasChosenMode: false,
+      isHelpOpen: false,
+      isTutorialActive: false,
+    }),
+
   toggleHelp: () => {
     // Never open the chatbot while a tutorial is active — prevents accidental opens
     // triggered by scrollIntoView / keyboard events when the tutorial spotlights the AI button.
@@ -226,4 +240,22 @@ export const useDomainStore = create<DomainState>((set, get) => ({
       return;
     }
   },
-}));
+    }),
+    {
+      name: 'ha-domain-store',
+      partialize: (state) => ({
+        selectedDomainId: state.selectedDomainId,
+        workflowVersion: state.workflowVersion,
+        sessionId: state.sessionId,
+        hasChosenMode: state.hasChosenMode,
+        currentStep: state.currentStep,
+        step1Confirmed: state.step1Confirmed,
+        schemaValid: state.schemaValid,
+        step5Completed: state.step5Completed,
+        step6Completed: state.step6Completed,
+        userMode: state.userMode,
+        theme: state.theme,
+      }),
+    },
+  ),
+);

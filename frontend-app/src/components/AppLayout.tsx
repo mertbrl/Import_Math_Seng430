@@ -26,14 +26,14 @@ function resolveMaxUnlockedStep(
   step1Confirmed: boolean,
   schemaValid: boolean,
   prepReviewComplete: boolean,
-  hasModelResults: boolean,
+  hasTrainingActivity: boolean,
   step5Completed: boolean,
   step6Completed: boolean,
 ) {
   if (!step1Confirmed) return 1;
   if (!schemaValid) return 2;
   if (!prepReviewComplete) return 3;
-  if (!hasModelResults) return 4;
+  if (!hasTrainingActivity) return 4;
   if (!step5Completed) return 5;
   if (!step6Completed) return 6;
   return 7;
@@ -55,15 +55,16 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   } = useDomainStore();
 
   const { completedSteps } = useDataPrepStore();
+  const tasksMap = useModelStore((state) => state.tasks);
   const resultsMap = useModelStore((state) => state.results);
 
   const prepReviewComplete = completedSteps.includes('preprocessing_review');
-  const hasModelResults = Object.keys(resultsMap).length > 0;
+  const hasTrainingActivity = Object.keys(tasksMap).length > 0 || Object.keys(resultsMap).length > 0;
   const maxUnlockedStep = resolveMaxUnlockedStep(
     step1Confirmed,
     schemaValid,
     prepReviewComplete,
-    hasModelResults,
+    hasTrainingActivity,
     step5Completed,
     step6Completed,
   );
@@ -71,11 +72,11 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const canContinueByCompletingStep = currentStep === 5 || currentStep === 6;
   const continueDisabled =
     currentStep === TOTAL_STEPS || (!canContinueByCompletingStep && currentStep !== 1 && currentStep >= maxUnlockedStep);
-  const isClinicalStep3 = currentStep === 3 && userMode === 'clinical';
+  const isStep3 = currentStep === 3;
 
   return (
     <div
-      className={`app-shell ha-animate-in ${currentStep === 1 ? 'ha-step1-theme' : ''} ${currentStep === 2 ? 'ha-step2-theme' : ''} ${isClinicalStep3 ? 'ha-step3-theme' : ''} ${currentStep === 4 ? 'ha-step4-theme' : ''}`}
+      className={`app-shell ha-animate-in ${currentStep === 1 ? 'ha-step1-theme' : ''} ${currentStep === 2 ? 'ha-step2-theme' : ''} ${isStep3 ? 'ha-step3-theme' : ''} ${currentStep === 4 ? 'ha-step4-theme' : ''} ${currentStep === 5 ? 'ha-step5-theme' : ''} ${currentStep === 6 ? 'ha-step6-theme' : ''} ${currentStep === 7 ? 'ha-step7-theme' : ''}`}
       data-mode={userMode}
       data-theme={theme}
       style={{ height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
@@ -120,7 +121,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                       </span>
 
                       <div className="min-w-0">
-                        <div className="ha-stepper-caption">
+                        <div className={`ha-stepper-caption ha-stepper-caption-${state}`}>
                           {state === 'complete'
                             ? 'Completed'
                             : state === 'active'
@@ -129,7 +130,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                                 ? 'Locked'
                                 : 'Upcoming'}
                         </div>
-                        <div className="ha-stepper-title">{step.name}</div>
+                        <div className={`ha-stepper-title ha-stepper-title-${state}`}>{step.name}</div>
                       </div>
                     </button>
                   );
@@ -142,7 +143,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             <main className="min-w-0">
               <div className="ha-animate-in">{children}</div>
 
-              {!isClinicalStep3 && (
+              {!isStep3 && currentStep !== 7 && (
                 <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <button
                     type="button"

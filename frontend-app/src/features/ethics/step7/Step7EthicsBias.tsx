@@ -2,20 +2,14 @@ import React, { useEffect, useState } from 'react';
 import {
   AlertCircle,
   AlertTriangle,
-  CalendarDays,
-  CheckCircle2,
   CheckSquare,
   Download,
-  FileDown,
   FileText,
   Loader2,
-  Package,
   Scale,
-  Share2,
   ShieldAlert,
   ShieldCheck,
   Square,
-  TableProperties,
 } from 'lucide-react';
 import { useDomainStore } from '../../../store/useDomainStore';
 import { useModelStore } from '../../../store/useModelStore';
@@ -79,7 +73,7 @@ const BiasStatusBanner: React.FC<{ fairness: FairnessResult }> = ({ fairness }) 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-3">
               <p className="text-[11px] font-black uppercase tracking-[0.2em] text-rose-600">Fairness Status</p>
-              <span className="rounded-full border border-rose-300 bg-rose-100 px-3 py-0.5 text-xs font-black text-rose-700">
+              <span className="ha-step7-bias-pill rounded-full border border-rose-300 bg-rose-100 px-3 py-0.5 text-xs font-black text-rose-700">
                 ⚠ BIAS DETECTED
               </span>
             </div>
@@ -228,7 +222,7 @@ const ComplianceChecklist: React.FC<{
             key={item.id}
             onClick={() => !item.autoChecked && onToggle(item.id)}
             disabled={item.autoChecked}
-            className={`w-full flex items-start gap-4 rounded-2xl border px-4 py-3.5 text-left transition-all ${
+            className={`ha-step7-checklist-item w-full flex items-start gap-4 rounded-2xl border px-4 py-3.5 text-left transition-all ${
               checked
                 ? 'border-emerald-200 bg-emerald-50'
                 : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-slate-100'
@@ -245,12 +239,12 @@ const ComplianceChecklist: React.FC<{
               <span className={`text-sm font-bold ${checked ? 'text-emerald-900' : 'text-slate-700'}`}>
                 {item.label}
                 {item.autoChecked && (
-                  <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-700 uppercase tracking-wide">
+                  <span className="ha-step7-auto-pill ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-700 uppercase tracking-wide">
                     Auto
                   </span>
                 )}
               </span>
-              <p className="mt-0.5 text-xs leading-relaxed text-slate-500">{item.description}</p>
+              <p className="ha-step7-checklist-desc mt-0.5 text-xs leading-relaxed text-slate-500">{item.description}</p>
             </div>
           </button>
         );
@@ -289,7 +283,7 @@ const DownloadButton: React.FC<{
 
 export const Step7EthicsBias: React.FC = () => {
   const sessionId = useDomainStore((s) => s.sessionId);
-  const selectedDomainId = useDomainStore((s) => s.selectedDomainId); // RESTORED
+  const selectedDomainId = useDomainStore((s) => s.selectedDomainId);
   const step5Completed = useDomainStore((s) => s.step5Completed);
   const step6Completed = useDomainStore((s) => s.step6Completed);
   const resultsMap = useModelStore((s) => s.results);
@@ -304,7 +298,7 @@ export const Step7EthicsBias: React.FC = () => {
   const championName = champion
     ? getModelCatalogEntry(champion.model, champion.problem_type ?? 'classification')?.name ?? champion.model
     : 'Champion Model';
-  const currentDomain = domains.find((domain) => domain.id === selectedDomainId) ?? domains[0]; // RESTORED
+  const currentDomain = domains.find((domain) => domain.id === selectedDomainId) ?? domains[0];
 
   // Fairness data
   const [fairness, setFairness] = useState<FairnessResult | null>(null);
@@ -473,13 +467,6 @@ export const Step7EthicsBias: React.FC = () => {
     setManualChecked((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const championMetrics = champion?.test_metrics ?? champion?.metrics ?? {}; // RESTORED
-  const completedDate = new Date().toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
-
   if (!champion) {
     return (
       <div className="space-y-6 px-4 py-8">
@@ -496,96 +483,17 @@ export const Step7EthicsBias: React.FC = () => {
 
   return (
     <div className="space-y-6 px-4 py-8">
-      <div className="ha-card-muted p-6 sm:p-8">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex items-start gap-4">
-            <div className="grid h-16 w-16 place-items-center rounded-[20px] bg-white text-[var(--success)] shadow-sm">
-              <CheckCircle2 size={30} />
-            </div>
-            <div>
-              <p className="ha-section-label" style={{ color: 'var(--success)' }}>
-                Pipeline Complete
-              </p>
-              <h1 className="mt-2 font-[var(--font-display)] text-[34px] font-bold tracking-[-0.06em] text-[var(--text)]">
-                {championName} is ready for final review
-              </h1>
-              <p className="mt-3 flex flex-wrap items-center gap-3 text-sm text-[var(--text2)]">
-                <span className="inline-flex items-center gap-2">
-                  <CalendarDays size={15} />
-                  {completedDate}
-                </span>
-                <span>{currentDomain.domainName}</span>
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleDownload}
-            disabled={isDownloading}
-            className={isDownloading ? 'ha-button-locked inline-flex items-center justify-center gap-3' : 'ha-button-primary inline-flex items-center justify-center gap-3'}
-          >
-            {isDownloading ? <Loader2 size={18} className="animate-spin" /> : <FileDown size={18} />}
-            Export Report (PDF)
-          </button>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-4">
-        <SummaryMetric label="Best Model" value={championName} subtext="Champion run" tone="text-slate-900" />
-        <SummaryMetric label="Test Accuracy" value={pct(championMetrics.accuracy)} subtext="Final evaluation" tone="text-[var(--accent)]" />
-        <SummaryMetric label="AUC-ROC" value={pct(championMetrics.auc)} subtext="Threshold performance" tone="text-[var(--accent)]" />
-        <SummaryMetric
-          label="Clinical Goal"
-          value={fairness?.bias_detected ? 'Review required' : 'Met ✓'}
-          subtext="Safety gate"
-          tone={fairness?.bias_detected ? 'text-rose-700' : 'text-emerald-700'}
-        />
-      </div>
-
-      <div className="flex flex-wrap gap-4">
-        <ExportCard
-          icon={<FileText size={18} />}
-          title="Export Report (PDF)"
-          description="Clinical summary and audit certificate."
-          actionLabel="Download"
-          onClick={handleDownload}
-          disabled={isDownloading}
-        />
-        <ExportCard
-          icon={<Package size={18} />}
-          title="Download Model (.pkl)"
-          description="Serialized model package."
-          actionLabel="Coming soon"
-          disabled
-        />
-        <ExportCard
-          icon={<TableProperties size={18} />}
-          title="Export Predictions"
-          description="CSV with probabilities and outputs."
-          actionLabel="Coming soon"
-          disabled
-        />
-        <ExportCard
-          icon={<Share2 size={18} />}
-          title="Share Pipeline"
-          description="Link-based handoff for review."
-          actionLabel="Coming soon"
-          disabled
-        />
-      </div>
-
       <div className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm">
 
         {/* ── Page header ── */}
-        <div className="border-b border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(139,92,246,0.12),_transparent_35%),radial-gradient(circle_at_top_right,_rgba(239,68,68,0.1),_transparent_40%),linear-gradient(180deg,_#ffffff,_#f8fafc)] px-8 py-8">
+        <div className="ha-step7-hero border-b border-emerald-200 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.16),_transparent_38%),radial-gradient(circle_at_top_right,_rgba(34,197,94,0.12),_transparent_42%),linear-gradient(180deg,_#f6fef9,_#ecfdf3)] px-8 py-8">
           <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
             <div>
-              <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Step 7</p>
-              <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Ethics &amp; Bias Dashboard</h1>
-              <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600">
+              <p className="ha-step7-hero-kicker text-[11px] font-black uppercase tracking-[0.22em] text-emerald-700">Step 7</p>
+              <h1 className="ha-step7-hero-title mt-2 text-3xl font-black tracking-tight text-emerald-900">Ethics &amp; Bias Dashboard</h1>
+              <p className="ha-step7-hero-copy mt-3 max-w-3xl text-sm leading-relaxed text-emerald-800/80">
                 Subgroup performance analysis, bias detection, and EU AI Act compliance assessment for{' '}
-                <strong>{championName}</strong>.
+                <strong>{championName}</strong> in <strong>{currentDomain.domainName}</strong>.
               </p>
             </div>
             <DownloadButton onClick={handleDownload} isDownloading={isDownloading} size="lg" />
@@ -705,47 +613,6 @@ const StatCard: React.FC<{
     <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500 break-words">{label}</p>
     <p className={`mt-2 text-2xl font-black break-words ${tone}`}>{value}</p>
     {subtext && <p className="mt-1 text-[11px] font-semibold text-slate-400 break-words">{subtext}</p>}
-  </div>
-);
-
-const SummaryMetric: React.FC<{
-  label: string;
-  value: string;
-  subtext?: string;
-  tone?: string;
-}> = ({ label, value, subtext, tone = 'text-slate-900' }) => (
-  <div className="ha-card p-5 min-w-[240px] flex-1 min-w-0">
-    <p className="ha-section-label break-words">{label}</p>
-    <p className={`mt-3 font-[var(--font-display)] text-[30px] font-bold tracking-[-0.05em] break-words ${tone}`}>
-      {value}
-    </p>
-    {subtext ? <p className="mt-2 text-sm text-[var(--text2)] break-words">{subtext}</p> : null}
-  </div>
-);
-
-const ExportCard: React.FC<{
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  actionLabel: string;
-  onClick?: () => void;
-  disabled?: boolean;
-}> = ({ icon, title, description, actionLabel, onClick, disabled = false }) => (
-  <div className="ha-card p-5 min-w-[240px] flex-1 min-w-0">
-    <div className="grid h-11 w-11 place-items-center rounded-2xl bg-[var(--surface2)] text-[var(--accent)]">
-      {icon}
-    </div>
-    <h3 className="mt-4 text-lg font-bold text-[var(--text)] break-words">{title}</h3>
-    <p className="mt-2 text-sm leading-7 text-[var(--text2)] break-words">{description}</p>
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={disabled ? 'ha-button-locked mt-5 inline-flex w-full items-center justify-center gap-2' : 'ha-button-secondary mt-5 inline-flex w-full items-center justify-center gap-2'}
-      title={disabled ? 'Not available in the current backend flow.' : undefined}
-    >
-      {actionLabel}
-    </button>
   </div>
 );
 

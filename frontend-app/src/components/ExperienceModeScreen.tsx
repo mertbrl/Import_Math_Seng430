@@ -16,7 +16,7 @@ import { TutorialOverlay, TutorialStep } from './TutorialOverlay';
 const MODE_OPTIONS = [
   {
     mode: 'clinical' as const,
-    title: 'Doctor Mode',
+    title: 'Basic Mode',
     description: 'Streamlined interfaces delivering actionable diagnostic support and risk stratification.',
     tag: 'Guided Flow',
     icon: Stethoscope,
@@ -25,7 +25,7 @@ const MODE_OPTIONS = [
   },
   {
     mode: 'data_scientist' as const,
-    title: 'Data Scientist',
+    title: 'Pro Mode',
     description: 'Full access to tensor data and custom pipeline configurations for rigorous algorithm development.',
     tag: 'Full Control',
     icon: Microscope,
@@ -104,7 +104,7 @@ const LANDING_TUTORIAL_STEPS: TutorialStep[] = [
   {
     eyebrow: 'Welcome — Step 1 of 3',
     title: 'Choose your working style first.',
-    body: 'Doctor Mode keeps the workflow guided and clinical. Data Scientist mode exposes more technical controls. Select the card that matches your role — you can switch modes anytime from the top bar inside the workflow.',
+    body: 'Basic Mode keeps the workflow guided and clinical. Pro Mode exposes more technical controls. Select the card that matches your role — you can switch modes anytime from the top bar inside the workflow.',
     targetSelector: '[data-tutorial="mode-selection"]',
     placement: 'right',
   },

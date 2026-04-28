@@ -406,12 +406,12 @@ export const Step5Results: React.FC = () => {
   return (
     <div className="space-y-6 px-4 py-8">
       <div className="ha-card overflow-hidden p-0">
-        <div className="border-b border-[var(--border)] bg-[radial-gradient(circle_at_top_left,_rgba(var(--accent-rgb),0.08),_transparent_35%),radial-gradient(circle_at_top_right,_rgba(var(--accent-rgb),0.14),_transparent_40%),linear-gradient(180deg,_#ffffff,_#f8fafc)] px-8 py-8">
+        <div className="ha-step5-hero border-b border-[var(--border)] bg-[radial-gradient(circle_at_top_left,_rgba(var(--accent-rgb),0.08),_transparent_35%),radial-gradient(circle_at_top_right,_rgba(var(--accent-rgb),0.14),_transparent_40%),linear-gradient(180deg,_#ffffff,_#f8fafc)] px-8 py-8">
           <div className={`grid gap-6 ${activeTab === 'overview' ? 'xl:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.9fr)]' : ''}`}>
             <div>
-              <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Step 5</p>
-              <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Results & Evaluation</h1>
-              <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600">
+              <p className="ha-step5-hero-kicker text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Step 5</p>
+              <h1 className="ha-step5-hero-title mt-2 text-3xl font-black tracking-tight text-slate-900">Results & Evaluation</h1>
+              <p className="ha-step5-hero-copy mt-3 max-w-3xl text-sm leading-relaxed text-slate-600">
                 Compare finished runs, inspect real diagnostics, and check whether the best score is also the most trustworthy one.
               </p>
               {usesHeldOutTest && (
@@ -742,24 +742,28 @@ const DoctorConfusionPanel: React.FC<{ result: ModelResult }> = ({ result }) => 
       value: summary.tp,
       description: 'The patient truly had the condition and the model correctly flagged it.',
       tone: 'border-emerald-200 bg-emerald-50',
+      toneClass: 'ha-step5-confusion-cell-tp',
     },
     {
       title: 'Real patient, predicted negative',
       value: summary.fn,
       description: 'The patient had the condition but the model missed it.',
       tone: 'border-rose-200 bg-rose-50',
+      toneClass: 'ha-step5-confusion-cell-fn',
     },
     {
       title: 'Healthy patient, predicted positive',
       value: summary.fp,
       description: 'The patient did not have the condition but the model raised an alert.',
       tone: 'border-amber-200 bg-amber-50',
+      toneClass: 'ha-step5-confusion-cell-fp',
     },
     {
       title: 'Healthy patient, predicted negative',
       value: summary.tn,
       description: 'The patient did not have the condition and the model stayed negative.',
       tone: 'border-sky-200 bg-sky-50',
+      toneClass: 'ha-step5-confusion-cell-tn',
     },
   ];
 
@@ -780,10 +784,10 @@ const DoctorConfusionPanel: React.FC<{ result: ModelResult }> = ({ result }) => 
 
       <div className="mt-5 grid gap-4 md:grid-cols-2">
         {cells.map((cell) => (
-          <div key={cell.title} className={`rounded-2xl border p-5 ${cell.tone}`}>
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">{cell.title}</p>
-            <p className="mt-3 font-[var(--font-display)] text-[36px] font-bold tracking-[-0.05em] text-[var(--text)]">{cell.value}</p>
-            <p className="mt-3 text-sm leading-7 text-slate-700">{cell.description}</p>
+          <div key={cell.title} className={`ha-step5-confusion-cell rounded-2xl border p-5 ${cell.tone} ${cell.toneClass}`}>
+            <p className="ha-step5-confusion-label text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">{cell.title}</p>
+            <p className="ha-step5-confusion-value mt-3 font-[var(--font-display)] text-[36px] font-bold tracking-[-0.05em] text-[var(--text)]">{cell.value}</p>
+            <p className="ha-step5-confusion-copy mt-3 text-sm leading-7 text-slate-700">{cell.description}</p>
           </div>
         ))}
       </div>

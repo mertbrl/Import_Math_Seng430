@@ -92,10 +92,10 @@ const DataHealthAlerts: React.FC<DataHealthAlertsProps> = ({ alerts }) => {
         return (
           <div
             key={index}
-            className={`overflow-hidden rounded-[20px] border shadow-[0_10px_28px_rgba(14,116,82,0.05)] ${style.shell}`}
+            className={`ha-health-alert-card overflow-hidden rounded-[20px] border shadow-[0_10px_28px_rgba(14,116,82,0.05)] ${style.shell}`}
           >
-            <div className="flex items-start gap-4 border-b border-[rgba(190,201,193,0.3)] px-5 py-5">
-              <div className="grid h-11 w-11 place-items-center rounded-2xl border border-[rgba(190,201,193,0.34)] bg-white shadow-sm">
+            <div className="ha-health-alert-head flex items-start gap-4 border-b border-[rgba(190,201,193,0.3)] px-5 py-5">
+              <div className="ha-health-alert-icon grid h-11 w-11 place-items-center rounded-2xl border border-[rgba(190,201,193,0.34)] bg-white shadow-sm">
                 {style.icon}
               </div>
               <div className="min-w-0 flex-1">
@@ -103,12 +103,12 @@ const DataHealthAlerts: React.FC<DataHealthAlertsProps> = ({ alerts }) => {
                   <h4 className={`text-[16px] font-bold ${style.title}`}>{alert.title}</h4>
                   <span className={`ha-badge ${style.badge}`}>{alert.severity}</span>
                 </div>
-                <p className="text-sm leading-7 text-[var(--text2)]">{alert.message}</p>
+                <p className="ha-health-alert-message text-sm leading-7 text-[var(--text2)]">{alert.message}</p>
               </div>
             </div>
 
-            <div className="grid gap-4 bg-white/72 px-5 py-5 md:grid-cols-2">
-              <div className="rounded-[16px] border border-[rgba(190,201,193,0.36)] bg-white p-4">
+            <div className="ha-health-alert-body grid gap-4 bg-white/72 px-5 py-5 md:grid-cols-2">
+              <div className="ha-health-alert-panel rounded-[16px] border border-[rgba(190,201,193,0.36)] bg-white p-4">
                 <h5 className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--text3)]">
                   <BookOpen size={14} className="text-[var(--accent)]" />
                   What it means
@@ -116,7 +116,7 @@ const DataHealthAlerts: React.FC<DataHealthAlertsProps> = ({ alerts }) => {
                 <p className="text-[13px] leading-6 text-[var(--text2)]">{edu.what}</p>
               </div>
 
-              <div className="rounded-[16px] border border-[rgba(190,201,193,0.36)] bg-white p-4">
+              <div className="ha-health-alert-panel rounded-[16px] border border-[rgba(190,201,193,0.36)] bg-white p-4">
                 <h5 className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--text3)]">
                   <AlertTriangle size={14} className="text-amber-500" />
                   Why it matters
@@ -124,7 +124,7 @@ const DataHealthAlerts: React.FC<DataHealthAlertsProps> = ({ alerts }) => {
                 <p className="text-[13px] leading-6 text-[var(--text2)]">{edu.why}</p>
               </div>
 
-              <div className="rounded-[16px] border border-[rgba(0,89,62,0.16)] bg-[linear-gradient(180deg,#eef8f2,#fbfefc)] p-4 md:col-span-2">
+              <div className="ha-health-alert-recommendation rounded-[16px] border border-[rgba(0,89,62,0.16)] bg-[linear-gradient(180deg,#eef8f2,#fbfefc)] p-4 md:col-span-2">
                 <h5 className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--accent)]">
                   <Target size={14} />
                   Recommendation for Step 3

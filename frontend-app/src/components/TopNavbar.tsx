@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { HelpCircle, RotateCcw, SunMoon, Sun, Moon } from 'lucide-react';
+import { House, RotateCcw, SunMoon, Sun, Moon } from 'lucide-react';
 import { useDomainStore } from '../store/useDomainStore';
 import { domains } from '../config/domainConfig';
 
@@ -11,7 +11,7 @@ export const TopNavbar: React.FC = () => {
     selectedDomainId,
     userMode,
     theme,
-    toggleHelp,
+    goToLanding,
     resetApp,
     setUserMode,
     setTheme,
@@ -61,7 +61,7 @@ export const TopNavbar: React.FC = () => {
               setTheme('dark');
               setIsThemeMenuOpen(false);
             }}
-            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${theme === 'dark' ? 'bg-[var(--accent-soft)] text-[var(--accent-ink)]' : 'text-[var(--text2)] hover:bg-[var(--surface2)]'}`}
+            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${theme === 'dark' ? 'bg-white text-slate-900' : 'text-[var(--text2)] hover:bg-[var(--surface2)]'}`}
           >
             <Moon size={14} /> Dark
           </button>
@@ -72,7 +72,7 @@ export const TopNavbar: React.FC = () => {
 
   return (
     <nav className="ha-navbar">
-      <div className="page-wrap-wide flex min-h-[72px] flex-col gap-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="page-wrap-wide ha-topbar-inner flex min-h-[72px] flex-col gap-4 py-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-center gap-4">
           <div className="ha-topbar-brand-icon grid h-12 w-12 place-items-center rounded-2xl bg-[linear-gradient(135deg,var(--trust),var(--clinical))] shadow-[0_16px_34px_rgba(26,86,219,0.18)]">
             <div className="relative flex h-5 w-5 items-center justify-center">
@@ -101,14 +101,14 @@ export const TopNavbar: React.FC = () => {
               onClick={() => setUserMode('clinical')}
               className={userMode === 'clinical' ? 'ha-mode-pill' : 'ha-pill border-transparent bg-transparent py-2'}
             >
-              Doctor Mode
+              Basic Mode
             </button>
             <button
               type="button"
               onClick={() => setUserMode('data_scientist')}
               className={userMode === 'data_scientist' ? 'ha-mode-pill' : 'ha-pill border-transparent bg-transparent py-2'}
             >
-              Data Scientist
+              Pro Mode
             </button>
           </div>
 
@@ -119,13 +119,12 @@ export const TopNavbar: React.FC = () => {
 
           <button
             type="button"
-            onClick={toggleHelp}
+            onClick={goToLanding}
             className="ha-button-secondary inline-flex h-11 w-11 items-center justify-center p-0"
-            data-tutorial="help-button"
-            aria-label="Open help"
-            title="Help"
+            aria-label="Go to landing page"
+            title="Home"
           >
-            <HelpCircle size={17} />
+            <House size={17} />
           </button>
 
           {themeMenu}

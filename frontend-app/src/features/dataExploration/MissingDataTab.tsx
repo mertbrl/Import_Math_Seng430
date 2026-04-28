@@ -38,12 +38,12 @@ interface MissingDataTabProps {
 const MissingDataTab: React.FC<MissingDataTabProps> = ({ missingAnalysis, totalRows, allColumns }) => {
   if (missingAnalysis.length === 0) {
     return (
-      <div className="rounded-[20px] border border-[rgba(14,116,82,0.18)] bg-[linear-gradient(180deg,#eef8f2,#fbfefc)] py-20 text-center shadow-[0_10px_26px_rgba(14,116,82,0.04)]">
-        <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full border border-[rgba(14,116,82,0.14)] bg-white shadow-sm">
+      <div className="ha-missing-empty-state rounded-[20px] border border-[rgba(14,116,82,0.18)] bg-[linear-gradient(180deg,#eef8f2,#fbfefc)] py-20 text-center shadow-[0_10px_26px_rgba(14,116,82,0.04)]">
+        <div className="ha-missing-empty-state-icon mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full border border-[rgba(14,116,82,0.14)] bg-white shadow-sm">
           <CheckCircle size={22} className="text-[var(--accent)]" />
         </div>
-        <p className="text-[16px] font-bold text-[var(--text)]">No missing data detected</p>
-        <p className="mt-2 text-sm leading-7 text-[var(--text2)]">
+        <p className="ha-missing-empty-state-title text-[16px] font-bold text-[var(--text)]">No missing data detected</p>
+        <p className="ha-missing-empty-state-copy mt-2 text-sm leading-7 text-[var(--text2)]">
           Every cell in this dataset has a value. No imputation is required.
         </p>
       </div>

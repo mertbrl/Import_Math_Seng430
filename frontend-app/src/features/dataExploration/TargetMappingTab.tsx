@@ -58,6 +58,14 @@ const TargetMappingTab: React.FC<TargetMappingTabProps> = ({ columns, totalRows 
     () => columns.find((column) => column.name === targetColumn) ?? null,
     [columns, targetColumn],
   );
+  const persistedProblemType =
+    persistedTask === 'regression'
+      ? 'regression'
+      : persistedTask === 'multiclass'
+        ? 'multi_class_classification'
+        : 'binary_classification';
+  const hasMappingChanged = targetColumn !== (persistedTargetColumn || '') || problemType !== persistedProblemType;
+  const isSaveDisabled = !targetColumn || (schemaValid && !hasMappingChanged);
 
   const handleSave = () => {
     if (!targetColumn || !problemType) return;
@@ -89,7 +97,7 @@ const TargetMappingTab: React.FC<TargetMappingTabProps> = ({ columns, totalRows 
             </p>
           </div>
 
-          <div className="rounded-[18px] border border-[rgba(190,201,193,0.5)] bg-[linear-gradient(180deg,#ffffff,#f5faf6)] px-5 py-4 shadow-[0_10px_26px_rgba(14,116,82,0.05)]">
+          <div className="ha-target-map-scope rounded-[18px] border border-[rgba(190,201,193,0.5)] bg-[linear-gradient(180deg,#ffffff,#f5faf6)] px-5 py-4 shadow-[0_10px_26px_rgba(14,116,82,0.05)]">
             <p className="ha-section-label">Dataset Scope</p>
             <p className="mt-2 text-sm font-semibold text-[var(--text)]">
               {totalRows.toLocaleString()} rows · {columns.length} candidate columns
@@ -112,7 +120,7 @@ const TargetMappingTab: React.FC<TargetMappingTabProps> = ({ columns, totalRows 
                   setTargetColumn(e.target.value);
                   setShowSuccess(false);
                 }}
-                className="w-full appearance-none rounded-[16px] border border-[rgba(190,201,193,0.7)] bg-[linear-gradient(180deg,#ffffff,#f6faf6)] px-4 py-3.5 pr-11 text-[14px] font-semibold text-[var(--text)] outline-none transition focus:border-[var(--accent)] focus:ring-4 focus:ring-[rgba(0,89,62,0.08)]"
+                className="ha-target-map-select w-full appearance-none rounded-[16px] border border-[rgba(190,201,193,0.7)] bg-[linear-gradient(180deg,#ffffff,#f6faf6)] px-4 py-3.5 pr-11 text-[14px] font-semibold text-[var(--text)] outline-none transition focus:border-[var(--accent)] focus:ring-4 focus:ring-[rgba(0,89,62,0.08)]"
               >
                 <option value="">Choose the outcome column</option>
                 {columns.map((column) => (
@@ -137,7 +145,7 @@ const TargetMappingTab: React.FC<TargetMappingTabProps> = ({ columns, totalRows 
                   setProblemType(e.target.value as typeof problemType);
                   setShowSuccess(false);
                 }}
-                className="w-full appearance-none rounded-[16px] border border-[rgba(190,201,193,0.7)] bg-[linear-gradient(180deg,#ffffff,#f6faf6)] px-4 py-3.5 pr-11 text-[14px] font-semibold text-[var(--text)] outline-none transition focus:border-[var(--accent)] focus:ring-4 focus:ring-[rgba(0,89,62,0.08)]"
+                className="ha-target-map-select w-full appearance-none rounded-[16px] border border-[rgba(190,201,193,0.7)] bg-[linear-gradient(180deg,#ffffff,#f6faf6)] px-4 py-3.5 pr-11 text-[14px] font-semibold text-[var(--text)] outline-none transition focus:border-[var(--accent)] focus:ring-4 focus:ring-[rgba(0,89,62,0.08)]"
               >
                 {PROBLEM_TYPES.map((item) => (
                   <option key={item.value} value={item.value}>
@@ -154,16 +162,16 @@ const TargetMappingTab: React.FC<TargetMappingTabProps> = ({ columns, totalRows 
 
           <button
             onClick={handleSave}
-            disabled={!targetColumn || schemaValid}
+            disabled={isSaveDisabled}
             className={
-              schemaValid
+              isSaveDisabled
                 ? 'ha-button-locked inline-flex w-full items-center justify-center gap-2'
                 : targetColumn
                   ? 'ha-button-primary inline-flex w-full items-center justify-center gap-2'
                   : 'ha-button-locked inline-flex w-full items-center justify-center gap-2'
             }
           >
-            {schemaValid ? (
+            {schemaValid && !hasMappingChanged ? (
               <>
                 <CheckCircle2 size={18} />
                 Mapping Saved
@@ -180,7 +188,7 @@ const TargetMappingTab: React.FC<TargetMappingTabProps> = ({ columns, totalRows 
         <div className="ha-card space-y-4 p-6">
           <p className="ha-section-label">Selection Summary</p>
 
-          <div className="rounded-[16px] border border-[rgba(190,201,193,0.48)] bg-[linear-gradient(180deg,#ffffff,#f6faf6)] p-4">
+          <div className="ha-target-map-summary-card rounded-[16px] border border-[rgba(190,201,193,0.48)] bg-[linear-gradient(180deg,#ffffff,#f6faf6)] p-4">
             <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--text3)]">Target</p>
             <p className="mt-2 text-[16px] font-semibold text-[var(--text)]">
               {selectedColumnMeta?.name || 'No target selected yet'}
@@ -198,7 +206,7 @@ const TargetMappingTab: React.FC<TargetMappingTabProps> = ({ columns, totalRows 
             ) : null}
           </div>
 
-          <div className="rounded-[16px] border border-[rgba(190,201,193,0.48)] bg-[linear-gradient(180deg,#ffffff,#f6faf6)] p-4">
+          <div className="ha-target-map-summary-card rounded-[16px] border border-[rgba(190,201,193,0.48)] bg-[linear-gradient(180deg,#ffffff,#f6faf6)] p-4">
             <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--text3)]">Task</p>
             <p className="mt-2 text-[16px] font-semibold text-[var(--text)]">
               {PROBLEM_TYPES.find((item) => item.value === problemType)?.label}
@@ -206,7 +214,7 @@ const TargetMappingTab: React.FC<TargetMappingTabProps> = ({ columns, totalRows 
           </div>
 
           {showSuccess ? (
-            <div className="rounded-[16px] border border-[rgba(14,116,82,0.24)] bg-[linear-gradient(180deg,#edf8f1,#e7f5ec)] p-4 text-sm text-[var(--text)]">
+            <div className="ha-target-map-success rounded-[16px] border border-[rgba(14,116,82,0.24)] bg-[linear-gradient(180deg,#edf8f1,#e7f5ec)] p-4 text-sm text-[var(--text)]">
               <div className="flex items-start gap-3">
                 <div className="grid h-9 w-9 place-items-center rounded-2xl bg-white text-[var(--accent)] shadow-sm">
                   <CheckCircle2 size={18} />

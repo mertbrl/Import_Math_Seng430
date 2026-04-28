@@ -21,6 +21,7 @@ import { ClinicalAutoPrepView } from './ClinicalAutoPrepView';
 export const Step3_DataPreparation: React.FC = () => {
   const sessionId = useDomainStore((s) => s.sessionId);
   const userMode = useDomainStore((s) => s.userMode);
+  const setCurrentStep = useDomainStore((s) => s.setCurrentStep);
   const { activeTabId, completedSteps, setActiveTab } = useDataPrepStore();
 
   const renderActiveComponent = () => {
@@ -62,9 +63,9 @@ export const Step3_DataPreparation: React.FC = () => {
   }
 
   return (
-    <div className="w-full space-y-6">
+    <div className="ha-step3-manual-shell w-full space-y-6">
       <div className="ha-card overflow-hidden">
-        <div className="mx-4 mb-4 mt-4 rounded-[28px] border border-[rgba(190,201,193,0.4)] bg-[radial-gradient(circle_at_top_left,_rgba(195,236,215,0.5),_transparent_34%),radial-gradient(circle_at_top_right,_rgba(156,245,202,0.42),_transparent_35%),linear-gradient(180deg,_#fcfefd,_#eef7f1)] px-7 py-8 shadow-[0_18px_42px_rgba(0,89,62,0.06)] sm:px-10">
+        <div className="ha-step3-hero-shell mx-4 mb-4 mt-4 rounded-[28px] border border-[rgba(190,201,193,0.4)] bg-[radial-gradient(circle_at_top_left,_rgba(195,236,215,0.5),_transparent_34%),radial-gradient(circle_at_top_right,_rgba(156,245,202,0.42),_transparent_35%),linear-gradient(180deg,_#fcfefd,_#eef7f1)] px-7 py-8 shadow-[0_18px_42px_rgba(0,89,62,0.06)] sm:px-10">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl">
               <span className="ha-pill ha-pill-accent">
@@ -77,7 +78,7 @@ export const Step3_DataPreparation: React.FC = () => {
               </p>
             </div>
 
-            <div className="rounded-[20px] border border-[var(--border)] bg-white/82 px-5 py-4 backdrop-blur-md">
+            <div className="ha-step3-hero-scope rounded-[20px] border border-[var(--border)] bg-white/82 px-5 py-4 backdrop-blur-md">
               <p className="ha-section-label">Advanced Workspace</p>
               <p className="mt-2 text-sm font-semibold text-[var(--text)]">
                 {completedSteps.length} of {PREP_TABS.length} prep stages reviewed
@@ -165,6 +166,18 @@ export const Step3_DataPreparation: React.FC = () => {
 
         <div className="ha-card min-w-0 min-h-[70vh] p-5 lg:p-6 xl:p-8 2xl:p-10" data-tutorial="step3-content">
           {renderActiveComponent()}
+          {activeTabId === 'preprocessing_review' && completedSteps.includes('preprocessing_review') ? (
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setCurrentStep(4)}
+                className="ha-button-primary inline-flex items-center justify-center gap-2"
+              >
+                Next Step
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          ) : null}
         </div>
 
       </div>

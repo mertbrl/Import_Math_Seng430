@@ -27,16 +27,16 @@ const TrainingQueueItem: React.FC<{ model: ModelId; taskId: string }> = ({ model
 
   const icon =
     status === 'completed' ? (
-      <Check size={15} className="text-emerald-600" />
+      <Check size={15} className="ha-step4-queue-icon-ok text-emerald-600" />
     ) : status === 'failed' || status === 'cancelled' ? (
-      <X size={15} className="text-rose-600" />
+      <X size={15} className="ha-step4-queue-icon-error text-rose-600" />
     ) : (
-      <Loader2 size={15} className="animate-spin text-[var(--accent)]" />
+      <Loader2 size={15} className="ha-step4-queue-icon-progress animate-spin text-[var(--accent)]" />
     );
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5">
-      <p className="min-w-0 truncate text-sm font-semibold text-slate-700">{meta.name}</p>
+    <div className="ha-step4-queue-item flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+      <p className="ha-step4-queue-item-name min-w-0 truncate text-sm font-semibold text-slate-700">{meta.name}</p>
       <span className="shrink-0">{icon}</span>
     </div>
   );
@@ -129,9 +129,9 @@ export const TrainingQueuePanel: React.FC<{
   }, [pollableTaskIds, setResult, setTask]);
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="ha-step4-queue-panel rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-center gap-3">
-        <h3 className="flex items-center gap-2 text-sm font-bold text-slate-800">
+        <h3 className="ha-step4-queue-title flex items-center gap-2 text-sm font-bold text-slate-800">
           <ClipboardList size={16} className="text-[var(--accent)]" />
           Queue
         </h3>
@@ -139,7 +139,7 @@ export const TrainingQueuePanel: React.FC<{
 
       <div className="mt-4 space-y-2">
         {queueItems.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+          <div className="ha-step4-queue-empty rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
             {emptyMessage ?? 'No training run has started yet.'}
           </div>
         ) : (
@@ -158,7 +158,7 @@ export const TrainingQueuePanel: React.FC<{
           <button
             type="button"
             onClick={onStopRemaining}
-            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50"
+            className="ha-step4-queue-stop-btn rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50"
           >
             Stop remaining
           </button>

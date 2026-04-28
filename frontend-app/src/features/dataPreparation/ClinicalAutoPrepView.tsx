@@ -300,7 +300,7 @@ export const ClinicalAutoPrepView: React.FC = () => {
                 {summaryItems.map((item) => (
                   <div
                     key={item}
-                    className="rounded-[18px] border border-[var(--border)] bg-[linear-gradient(180deg,#ffffff,rgba(241,245,240,0.9))] px-4 py-4 shadow-[0_18px_40px_rgba(0,89,62,0.08)]"
+                    className="ha-step3-complete-item rounded-[18px] border border-[var(--border)] bg-[linear-gradient(180deg,#ffffff,rgba(241,245,240,0.9))] px-4 py-4 shadow-[0_18px_40px_rgba(0,89,62,0.08)]"
                   >
                     <div className="flex items-start gap-3">
                       <div className="mt-0.5 rounded-full bg-emerald-50 p-1 text-emerald-700">
@@ -313,20 +313,20 @@ export const ClinicalAutoPrepView: React.FC = () => {
               </div>
             </div>
 
-            <div className="space-y-4 rounded-[24px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(235,239,234,0.92))] p-5 shadow-[0_24px_55px_rgba(0,89,62,0.08)]">
+            <div className="ha-step3-complete-summary space-y-4 rounded-[24px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(235,239,234,0.92))] p-5 shadow-[0_24px_55px_rgba(0,89,62,0.08)]">
               <div>
                 <p className="ha-section-label">Selected Target</p>
                 <p className="mt-2 text-lg font-semibold text-[var(--text)]">{targetColumn || 'Clinical outcome'}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-[18px] border border-[var(--border)] bg-white/92 px-4 py-4">
+                <div className="ha-step3-complete-stat rounded-[18px] border border-[var(--border)] bg-white/92 px-4 py-4">
                   <p className="ha-section-label">Rows</p>
                   <p className="mt-2 text-[28px] font-semibold tracking-[-0.04em] text-[var(--text)]">
                     {review?.afterShape?.[0] ?? '--'}
                   </p>
                 </div>
-                <div className="rounded-[18px] border border-[var(--border)] bg-white/92 px-4 py-4">
+                <div className="ha-step3-complete-stat rounded-[18px] border border-[var(--border)] bg-white/92 px-4 py-4">
                   <p className="ha-section-label">Columns</p>
                   <p className="mt-2 text-[28px] font-semibold tracking-[-0.04em] text-[var(--text)]">
                     {review?.afterShape?.[1] ?? '--'}
@@ -334,7 +334,7 @@ export const ClinicalAutoPrepView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="rounded-[18px] border border-[var(--border)] bg-white/90 px-4 py-4">
+              <div className="ha-step3-complete-note rounded-[18px] border border-[var(--border)] bg-white/90 px-4 py-4">
                 <p className="ha-section-label">Imbalance Handling</p>
                 <p className="mt-2 text-sm leading-6 text-[var(--text2)]">
                   {cleaningPipeline.some((action) => action.action === 'handle_imbalance')
@@ -423,19 +423,19 @@ export const ClinicalAutoPrepView: React.FC = () => {
                     </div>
 
                     <div
-                      className={`flex min-w-0 flex-1 items-center justify-between rounded-[14px] border px-4 py-3 transition-all duration-500 ${
+                      className={`ha-step3-status-row flex min-w-0 flex-1 items-center justify-between rounded-[14px] border px-4 py-3 transition-all duration-500 ${
                         isCurrent
-                          ? 'border-[rgba(0,89,62,0.22)] bg-[rgba(239,248,244,0.95)] shadow-[0_18px_36px_rgba(0,89,62,0.08)]'
+                          ? 'ha-step3-status-row-current border-[rgba(0,89,62,0.22)] bg-[rgba(239,248,244,0.95)] shadow-[0_18px_36px_rgba(0,89,62,0.08)]'
                           : isDone
-                            ? 'border-[rgba(0,89,62,0.08)] bg-[rgba(242,247,241,0.98)]'
-                            : 'border-transparent bg-[rgba(243,246,242,0.92)]'
+                            ? 'ha-step3-status-row-done border-[rgba(0,89,62,0.08)] bg-[rgba(242,247,241,0.98)]'
+                            : 'ha-step3-status-row-idle border-transparent bg-[rgba(243,246,242,0.92)]'
                       }`}
                     >
-                      <p className={`truncate text-[14px] font-medium ${isDone || isCurrent ? 'text-[var(--text)]' : 'text-[var(--text3)]'}`}>
+                      <p className={`ha-step3-status-label truncate text-[14px] font-medium ${isDone || isCurrent ? 'text-[var(--text)]' : 'text-[var(--text3)]'}`}>
                         {step.label}
                       </p>
 
-                      <div className={`ml-3 shrink-0 text-[14px] font-medium ${isDone || isCurrent ? 'text-[var(--primary)]' : 'text-[var(--text3)]'}`}>
+                      <div className={`ha-step3-status-percent ml-3 shrink-0 text-[14px] font-medium ${isDone || isCurrent ? 'text-[var(--primary)]' : 'text-[var(--text3)]'}`}>
                         {percent}%
                       </div>
                     </div>

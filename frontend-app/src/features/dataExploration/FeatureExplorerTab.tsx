@@ -25,6 +25,15 @@ const typeMeta: Record<ColumnStats['type'], { label: string; icon: React.ReactNo
   },
 };
 
+function toneToBadgeClass(tone: string): string {
+  if (tone.includes('sky')) return 'ha-badge-sky';
+  if (tone.includes('emerald')) return 'ha-badge-emerald';
+  if (tone.includes('amber')) return 'ha-badge-amber';
+  if (tone.includes('orange')) return 'ha-badge-orange';
+  if (tone.includes('violet')) return 'ha-badge-violet';
+  return 'ha-badge-neutral';
+}
+
 function getColumnBadges(column: ColumnStats) {
   const badges: Array<{ label: string; tone: string; icon: React.ReactNode }> = [];
 
@@ -186,16 +195,19 @@ const FeatureExplorerTab: React.FC<FeatureExplorerTabProps> = ({
                   key={column.name}
                   type="button"
                   onClick={() => handleSelectColumn(column.name)}
-                  className={`w-full rounded-[16px] border px-3.5 py-3.5 text-left transition-all ${
+                  className={`ha-feature-list-item w-full rounded-[16px] border px-3.5 py-3.5 text-left transition-all ${
                     active
-                      ? 'border-[rgba(0,89,62,0.38)] bg-[linear-gradient(180deg,#edf8f1,#e6f3eb)] shadow-[0_10px_26px_rgba(14,116,82,0.08)]'
-                      : 'border-[rgba(190,201,193,0.34)] bg-white hover:bg-[var(--surface2)]'
+                      ? 'ha-feature-list-item-active border-[rgba(0,89,62,0.38)] bg-[linear-gradient(180deg,#edf8f1,#e6f3eb)] shadow-[0_10px_26px_rgba(14,116,82,0.08)]'
+                      : 'ha-feature-list-item-inactive border-[rgba(190,201,193,0.34)] bg-white hover:bg-[var(--surface2)]'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className={`ha-badge ${typeMeta[column.type].tone}`}>{typeMeta[column.type].icon}{typeMeta[column.type].label}</span>
+                        <span className={`ha-badge ha-feature-badge ${toneToBadgeClass(typeMeta[column.type].tone)} ${typeMeta[column.type].tone}`}>
+                          {typeMeta[column.type].icon}
+                          {typeMeta[column.type].label}
+                        </span>
                       </div>
                       <p className="mt-2.5 truncate font-[var(--font-display)] text-[15px] font-bold tracking-[-0.03em] text-[var(--text)]">
                         {column.name}
@@ -206,7 +218,10 @@ const FeatureExplorerTab: React.FC<FeatureExplorerTabProps> = ({
                   {showBadges && badges.length > 0 ? (
                     <div className="mt-2.5 flex flex-wrap gap-1.5">
                       {badges.map((badge) => (
-                        <span key={`${column.name}-${badge.label}`} className={`ha-badge ${badge.tone}`}>
+                        <span
+                          key={`${column.name}-${badge.label}`}
+                          className={`ha-badge ha-feature-badge ${toneToBadgeClass(badge.tone)} ${badge.tone}`}
+                        >
                           {badge.icon}
                           {badge.label}
                         </span>

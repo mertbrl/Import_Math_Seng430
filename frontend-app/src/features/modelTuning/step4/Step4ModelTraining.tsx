@@ -102,7 +102,7 @@ export const Step4ModelTraining: React.FC = () => {
     () => autoModels.filter((modelId) => !excludedModels.includes(modelId)),
     [autoModels, excludedModels],
   );
-  const hasQueuedBatch = queueItems.length > 0;
+  const hasActiveBatch = activeTasks > 0;
 
   const queueSingleRun = async (
     model: ModelId,
@@ -251,7 +251,7 @@ export const Step4ModelTraining: React.FC = () => {
     };
 
     return (
-      <div className="space-y-6">
+      <div className="ha-step4-shell space-y-6">
         <div className="ha-card-muted p-6 sm:p-8">
           <div className="max-w-3xl">
             <p className="ha-section-label" style={{ color: 'var(--accent-ink)' }}>
@@ -348,16 +348,16 @@ export const Step4ModelTraining: React.FC = () => {
                       key={modelId}
                       type="button"
                       onClick={() => toggleModelExclusion(modelId)}
-                      className={`rounded-[18px] border px-4 py-4 text-left transition-all ${
+                      className={`ha-step4-model-card rounded-[18px] border px-4 py-4 text-left transition-all ${
                         included
-                          ? 'border-[rgba(0,89,62,0.24)] bg-[linear-gradient(180deg,#ffffff,#f3faf5)] shadow-[0_10px_24px_rgba(0,89,62,0.08)]'
-                          : 'border-[rgba(190,201,193,0.48)] bg-slate-50/90 opacity-75'
+                          ? 'ha-step4-model-card-included border-[rgba(0,89,62,0.24)] bg-[linear-gradient(180deg,#ffffff,#f3faf5)] shadow-[0_10px_24px_rgba(0,89,62,0.08)]'
+                          : 'ha-step4-model-card-excluded border-[rgba(190,201,193,0.48)] bg-slate-50/90 opacity-75'
                       }`}
                     >
                       <div className="flex items-center justify-between gap-3">
-                        <h4 className={`text-sm font-black ${included ? 'text-[var(--text)]' : 'text-slate-500'}`}>{meta.name}</h4>
-                        <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${
-                          included ? 'bg-[var(--accent-soft)] text-[var(--accent-ink)]' : 'bg-slate-200 text-slate-500'
+                        <h4 className={`ha-step4-model-name text-sm font-black ${included ? 'text-[var(--text)]' : 'text-slate-500'}`}>{meta.name}</h4>
+                        <span className={`ha-step4-model-pill rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${
+                          included ? 'ha-step4-model-pill-included bg-[var(--accent-soft)] text-[var(--accent-ink)]' : 'ha-step4-model-pill-excluded bg-slate-200 text-slate-500'
                         }`}>
                           {included ? 'Included' : 'Excluded'}
                         </span>
@@ -388,12 +388,12 @@ export const Step4ModelTraining: React.FC = () => {
               type="button"
               data-tutorial="step4-train-btn"
               onClick={() => void queueAutoPlan()}
-              disabled={queueingKey !== null || hasQueuedBatch}
+              disabled={queueingKey !== null || hasActiveBatch}
               className="ha-button-primary inline-flex items-center justify-center gap-3"
             >
-              {queueingKey === 'auto-plan' ? <Loader2 size={18} className="animate-spin" /> : hasQueuedBatch ? <Activity size={18} /> : <Play size={18} />}
-              {hasQueuedBatch
-                ? 'Batch Started'
+              {queueingKey === 'auto-plan' ? <Loader2 size={18} className="animate-spin" /> : hasActiveBatch ? <Activity size={18} /> : <Play size={18} />}
+              {hasActiveBatch
+                ? 'Batch Running'
                 : `Train ${selectedCount} Selected Model${selectedCount === 1 ? '' : 's'}`}
             </button>
           </div>
@@ -419,9 +419,9 @@ export const Step4ModelTraining: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="ha-step4-shell space-y-6 animate-in fade-in duration-300">
       <div className="ha-card overflow-hidden p-0">
-        <div className="border-b border-[var(--border)] bg-[radial-gradient(circle_at_top_left,_rgba(var(--accent-rgb),0.14),_transparent_34%),radial-gradient(circle_at_top_right,_rgba(var(--accent-rgb),0.08),_transparent_34%),linear-gradient(180deg,_#ffffff,_#f4fbfb)] px-6 py-7">
+        <div className="ha-step4-ds-hero border-b border-[var(--border)] bg-[radial-gradient(circle_at_top_left,_rgba(var(--accent-rgb),0.14),_transparent_34%),radial-gradient(circle_at_top_right,_rgba(var(--accent-rgb),0.08),_transparent_34%),linear-gradient(180deg,_#ffffff,_#f4fbfb)] px-6 py-7">
           <h2 className="flex items-center gap-2 text-2xl font-black tracking-tight text-[var(--text)]">
             <Brain className="text-[var(--accent)]" size={26} />
             Step 4: Model Training Goal
