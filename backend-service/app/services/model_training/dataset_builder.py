@@ -47,9 +47,6 @@ class TrainingDatasetBuilder:
         config = self._resolve_pipeline_config(session_id, state, pipeline_config)
 
         problem_type = self._resolve_problem_type(config, state)
-        if problem_type == "regression":
-            raise PipelineError("Step 4 currently supports classification datasets only.", status_code=400)
-
         raw_df = load_dataframe(session_id)
         target_column = self._resolve_target_column(raw_df, config, state)
 
@@ -94,8 +91,14 @@ class TrainingDatasetBuilder:
         if X_train.shape[1] == 0:
             raise PipelineError("Training requires at least one usable feature column after preprocessing.", status_code=400)
 
-        y_train, y_validation, y_test, class_names = self._encode_target(train_df, validation_df, test_df, target_column)
-        if len(np.unique(y_train)) < 2:
+        y_train, y_validation, y_test, class_names = self._encode_target(
+            train_df,
+            validation_df,
+            test_df,
+            target_column,
+            problem_type,
+        )
+        if problem_type != "regression" and len(np.unique(y_train)) < 2:
             raise PipelineError("Training requires at least two target classes in the training split.", status_code=400)
 
         return PreparedTrainingData(
@@ -423,7 +426,24 @@ class TrainingDatasetBuilder:
         validation_df: pd.DataFrame,
         test_df: pd.DataFrame,
         target_column: str,
+        problem_type: str,
     ) -> tuple[np.ndarray, np.ndarray | None, np.ndarray, list[str]]:
+        if problem_type == "regression":
+            y_train = pd.to_numeric(train_df[target_column], errors="coerce")
+            y_validation = pd.to_numeric(validation_df[target_column], errors="coerce") if not validation_df.empty else None
+            y_test = pd.to_numeric(test_df[target_column], errors="coerce")
+            if y_train.isna().any() or y_test.isna().any() or (y_validation is not None and y_validation.isna().any()):
+                raise PipelineError(
+                    "Regression training requires a numeric target column after preprocessing.",
+                    status_code=400,
+                )
+            return (
+                y_train.to_numpy(dtype=float),
+                y_validation.to_numpy(dtype=float) if y_validation is not None else None,
+                y_test.to_numpy(dtype=float),
+                [],
+            )
+
         encoder = LabelEncoder()
         train_target = train_df[target_column].astype(str)
         validation_target = validation_df[target_column].astype(str) if not validation_df.empty else None

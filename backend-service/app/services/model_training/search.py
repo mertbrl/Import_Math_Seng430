@@ -51,10 +51,16 @@ class ModelSearchService:
         X_train: Any,
         y_train: np.ndarray,
         class_names: list[str],
+        problem_type: str = "classification",
         should_cancel: ShouldCancel | None = None,
     ) -> SearchExecutionResult:
         class_count = max(2, len(class_names))
-        estimator = self._factory.create(algorithm, parameters, class_count=class_count)
+        estimator = self._factory.create(
+            algorithm,
+            parameters,
+            class_count=class_count,
+            problem_type=problem_type,
+        )
         raise_if_cancelled(should_cancel)
         if not search_config.get("enabled"):
             estimator.fit(X_train, y_train)
@@ -115,7 +121,11 @@ class ModelSearchService:
         search.fit(X_train, y_train)
         raise_if_cancelled(should_cancel)
 
-        best_params = self._factory.to_model_params(algorithm, search.best_estimator_.get_params())
+        best_params = self._factory.to_model_params(
+            algorithm,
+            search.best_estimator_.get_params(),
+            problem_type=problem_type,
+        )
         base_estimator_params = estimator.get_params(deep=True)
         return SearchExecutionResult(
             estimator=search.best_estimator_,

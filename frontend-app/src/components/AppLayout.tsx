@@ -2,6 +2,7 @@ import React from 'react';
 import { Check, ChevronLeft, ChevronRight, Lock } from 'lucide-react';
 import { TopNavbar } from './TopNavbar';
 import { HelpChatbotDrawer } from './HelpChatbotDrawer';
+import { TutorialOverlay, TutorialStep } from './TutorialOverlay';
 import { useDomainStore } from '../store/useDomainStore';
 import { useDataPrepStore } from '../store/useDataPrepStore';
 import { useModelStore } from '../store/useModelStore';
@@ -21,6 +22,44 @@ const STEPS = [
 ] as const;
 
 const TOTAL_STEPS = STEPS.length;
+
+const WORKFLOW_TUTORIAL_STEPS: TutorialStep[] = [
+  {
+    eyebrow: 'Workflow Guide',
+    title: 'Follow the stepper from left to right.',
+    body: 'The top stepper shows where you are. Locked steps open after the required earlier decisions are complete, so if Continue is disabled, finish the current review first.',
+    targetSelector: '[data-tutorial="workflow-stepper"]',
+    placement: 'bottom',
+  },
+  {
+    eyebrow: 'Navigation',
+    title: 'Use Continue and Back at the bottom.',
+    body: 'Continue saves the current milestone and moves forward when the step is ready. Back lets you revise earlier choices without resetting the whole workflow.',
+    targetSelector: '[data-tutorial="workflow-continue"]',
+    placement: 'top',
+  },
+  {
+    eyebrow: 'Mode Switch',
+    title: 'Doctor Mode and Data Scientist mode show different detail levels.',
+    body: 'Doctor Mode simplifies clinical review. Data Scientist mode exposes more model, metric, and simulator detail. The workflow data stays connected when you switch.',
+    targetSelector: '[data-tutorial="mode-switch"]',
+    placement: 'bottom',
+  },
+  {
+    eyebrow: 'Domain Selection',
+    title: 'Choose the clinical domain here.',
+    body: 'This is where you select the patient problem and outcome. The rest of the workflow updates around this domain, so start here when you want a different clinical scenario.',
+    targetSelector: '[data-tutorial="domain-picker"]',
+    placement: 'bottom',
+  },
+  {
+    eyebrow: 'AI Assistant',
+    title: 'Use the floating assistant when terminology gets dense.',
+    body: 'This animated AI button opens the help drawer. Ask about locked steps, metrics, confidence, feature importance, model selection, and explainability sliders.',
+    targetSelector: '[data-tutorial="floating-ai-chat"]',
+    placement: 'left',
+  },
+];
 
 function resolveMaxUnlockedStep(
   step1Confirmed: boolean,
@@ -44,6 +83,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     currentStep,
     setCurrentStep,
     confirmStep1,
+    completeStep5,
+    completeStep6,
     step1Confirmed,
     schemaValid,
     step5Completed,
@@ -66,24 +107,30 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     step6Completed,
   );
 
+  const canContinueByCompletingStep = currentStep === 5 || currentStep === 6;
   const continueDisabled =
-    currentStep === TOTAL_STEPS || (currentStep !== 1 && currentStep >= maxUnlockedStep);
+    currentStep === TOTAL_STEPS || (!canContinueByCompletingStep && currentStep !== 1 && currentStep >= maxUnlockedStep);
   const isClinicalStep3 = currentStep === 3 && userMode === 'clinical';
 
   return (
     <div
-      className={`app-shell ha-animate-in ${currentStep === 1 ? 'ha-step1-theme' : ''} ${currentStep === 2 ? 'ha-step2-theme' : ''} ${isClinicalStep3 ? 'ha-step3-theme' : ''}`}
+      className={`app-shell ha-animate-in ${currentStep === 1 ? 'ha-step1-theme' : ''} ${currentStep === 2 ? 'ha-step2-theme' : ''} ${isClinicalStep3 ? 'ha-step3-theme' : ''} ${currentStep === 4 ? 'ha-step4-theme' : ''}`}
       data-mode={userMode}
       data-theme={theme}
       style={{ height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
     >
       <TopNavbar />
       <HelpChatbotDrawer />
+      <TutorialOverlay
+        steps={WORKFLOW_TUTORIAL_STEPS}
+        storageKey="import-math-workflow-tutorial-v4"
+        reopenEventName="import-math-open-workflow-tutorial"
+      />
 
       <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
         <div className="page-wrap-wide">
           <div className="ha-stepper-wrap">
-            <section className="ha-stepper-shell">
+            <section className="ha-stepper-shell" data-tutorial="workflow-stepper">
               <div className="ha-stepper">
                 {STEPS.map((step, index) => {
                   const state =
@@ -143,6 +190,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                 <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <button
                     type="button"
+                    data-tutorial={currentStep === 1 ? 'workflow-back' : undefined}
                     onClick={() => setCurrentStep(currentStep - 1)}
                     disabled={currentStep === 1}
                     className={
@@ -158,9 +206,18 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
                   <button
                     type="button"
+                    data-tutorial="workflow-continue"
                     onClick={() => {
                       if (currentStep === 1 && !step1Confirmed) {
                         confirmStep1();
+                        return;
+                      }
+                      if (currentStep === 5) {
+                        completeStep5();
+                        return;
+                      }
+                      if (currentStep === 6) {
+                        completeStep6();
                         return;
                       }
                       setCurrentStep(currentStep + 1);

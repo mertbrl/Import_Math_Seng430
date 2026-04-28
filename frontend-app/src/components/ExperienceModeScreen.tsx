@@ -10,6 +10,7 @@ import {
   Stethoscope,
 } from 'lucide-react';
 import { useDomainStore } from '../store/useDomainStore';
+import { TutorialOverlay, TutorialStep } from './TutorialOverlay';
 
 const MODE_OPTIONS = [
   {
@@ -98,6 +99,30 @@ const FEATURES = [
   },
 ] as const;
 
+const LANDING_TUTORIAL_STEPS: TutorialStep[] = [
+  {
+    eyebrow: 'Welcome — Step 1 of 3',
+    title: 'Choose your working style first.',
+    body: 'Doctor Mode keeps the workflow guided and clinical. Data Scientist mode exposes more technical controls. Select the card that matches your role — you can switch modes anytime from the top bar inside the workflow.',
+    targetSelector: '[data-tutorial="mode-selection"]',
+    placement: 'bottom',
+  },
+  {
+    eyebrow: 'Welcome — Step 2 of 3',
+    title: 'Click Start Exploring to enter the workflow.',
+    body: 'Once you have chosen a mode, click this button to begin the 7-step journey: Clinical Context → Data Exploration → Preparation → Training → Results → Explainability → Final Audit.',
+    targetSelector: '[data-tutorial="start-exploring"]',
+    placement: 'top',
+  },
+  {
+    eyebrow: 'Welcome — Step 3 of 3',
+    title: 'The Tutorial button is always available.',
+    body: 'Use the Tutorial button at any time to replay these hints. Once inside the workflow, a floating AI assistant is ready to explain metrics, locked steps, feature importance, and explainability sliders.',
+    targetSelector: '[data-tutorial="start-exploring"]',
+    placement: 'top',
+  },
+];
+
 function useCountUp(target: number, active: boolean, duration = 1400) {
   const [value, setValue] = useState(0);
 
@@ -172,6 +197,11 @@ export const ExperienceModeScreen: React.FC = () => {
 
   return (
     <div className="app-shell" data-mode={selectedMode}>
+      <TutorialOverlay
+        steps={LANDING_TUTORIAL_STEPS}
+        storageKey="import-math-landing-tutorial-v3"
+        reopenEventName="import-math-open-landing-tutorial"
+      />
       <section className="ha-landing-hero">
         <div className="ha-hero-bg" aria-hidden="true" />
 
@@ -180,17 +210,19 @@ export const ExperienceModeScreen: React.FC = () => {
             <div className="ha-ref-brand">
               <span>Import Math AI</span>
             </div>
-            <button
-              type="button"
-              className="ha-ref-nav-cta"
-              onClick={() => chooseMode(selectedMode)}
-            >
-              Get Started
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                className="ha-ref-nav-ghost"
+                onClick={() => window.dispatchEvent(new Event('import-math-open-landing-tutorial'))}
+              >
+                Tutorial
+              </button>
+            </div>
           </div>
         </div>
 
-        <div className="ha-ref-page-wrap relative z-10 py-3 sm:py-4 lg:py-5">
+        <div className="ha-ref-page-wrap ha-ref-hero-compact relative z-10 py-3 sm:py-4 lg:py-5">
           <div className="ha-ref-hero">
             <div className="ha-ref-copy">
               <h1 className="ha-ref-title">Empowering Clinical Decisions with Explainable AI</h1>
@@ -199,7 +231,7 @@ export const ExperienceModeScreen: React.FC = () => {
                 Transform complex multi-modal health data into actionable, transparent insights. Engineered for trust.
               </p>
 
-              <button type="button" onClick={() => chooseMode(selectedMode)} className="ha-ref-primary">
+              <button type="button" onClick={() => chooseMode(selectedMode)} className="ha-ref-primary" data-tutorial="start-exploring">
                 Start Exploring
               </button>
             </div>
@@ -218,7 +250,7 @@ export const ExperienceModeScreen: React.FC = () => {
 
       <section className="ha-ref-modes-wrap">
         <div className="ha-ref-page-wrap py-14 sm:py-18">
-          <div className="grid gap-5 md:grid-cols-2">
+          <div className="grid gap-5 md:grid-cols-2" data-tutorial="mode-selection">
             {MODE_OPTIONS.map((option) => {
               const Icon = option.icon;
               const selected = option.mode === selectedMode;

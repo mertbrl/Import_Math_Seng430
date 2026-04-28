@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { useDomainStore } from '../../../store/useDomainStore';
 import { useModelStore } from '../../../store/useModelStore';
-import { MODEL_CATALOG } from '../../modelTuning/modelCatalog';
+import { getModelCatalogEntry } from '../../modelTuning/modelCatalog';
 import { checkFairness, downloadCertificatePdf } from '../../../services/pipelineApi';
 import { domains } from '../../../config/domainConfig';
 
@@ -302,7 +302,7 @@ export const Step7EthicsBias: React.FC = () => {
     ? runs.find((r) => r.taskId === bestResultTaskId) ?? runs[0]
     : runs[0];
   const championName = champion
-    ? MODEL_CATALOG[champion.model]?.name ?? champion.model
+    ? getModelCatalogEntry(champion.model, champion.problem_type ?? 'classification')?.name ?? champion.model
     : 'Champion Model';
   const currentDomain = domains.find((domain) => domain.id === selectedDomainId) ?? domains[0]; // RESTORED
 

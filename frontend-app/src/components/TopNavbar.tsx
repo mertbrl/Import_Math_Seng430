@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { HelpCircle, RotateCcw, SunMoon, Sun, Moon } from 'lucide-react';
+import { BookOpen, HelpCircle, RotateCcw, SunMoon, Sun, Moon } from 'lucide-react';
 import { useDomainStore } from '../store/useDomainStore';
 import { domains } from '../config/domainConfig';
 
@@ -95,7 +95,7 @@ export const TopNavbar: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-3 lg:justify-end">
-          <div className="flex items-center gap-2 rounded-[999px] border border-[var(--border)] bg-white/80 p-1 backdrop-blur-md">
+          <div className="flex items-center gap-2 rounded-[999px] border border-[var(--border)] bg-white/80 p-1 backdrop-blur-md" data-tutorial="mode-switch">
             <button
               type="button"
               onClick={() => setUserMode('clinical')}
@@ -118,8 +118,19 @@ export const TopNavbar: React.FC = () => {
 
           <button
             type="button"
+            onClick={() => window.dispatchEvent(new Event('import-math-open-workflow-tutorial'))}
+            className="ha-button-secondary inline-flex h-11 w-11 items-center justify-center p-0"
+            aria-label="Open tutorial"
+            title="Tutorial"
+          >
+            <BookOpen size={17} />
+          </button>
+
+          <button
+            type="button"
             onClick={toggleHelp}
             className="ha-button-secondary inline-flex h-11 w-11 items-center justify-center p-0"
+            data-tutorial="help-button"
             aria-label="Open help"
             title="Help"
           >

@@ -1,5 +1,5 @@
-import { MODEL_CATALOG } from './modelCatalog';
-import { ModelId } from '../../store/useModelStore';
+import { getModelCatalogEntry } from './modelCatalog';
+import { ModelId, ProblemType } from '../../store/useModelStore';
 
 function shortNumber(value: unknown, digits = 2): string {
   if (typeof value !== 'number') {
@@ -11,7 +11,22 @@ function shortNumber(value: unknown, digits = 2): string {
   return value.toFixed(digits).replace(/0+$/, '').replace(/\.$/, '');
 }
 
-export function summarizeRunParameters(model: ModelId, params: Record<string, unknown>): string[] {
+export function summarizeRunParameters(
+  model: ModelId,
+  params: Record<string, unknown>,
+  problemType: ProblemType = 'classification',
+): string[] {
+  if (problemType === 'regression') {
+    if (model === 'lr') {
+      return [String(params.fit_intercept ?? true) === 'true' ? 'intercept' : 'no intercept'];
+    }
+    if (model === 'nb') {
+      return [`alpha=${shortNumber(params.alpha)}`];
+    }
+    if (model === 'svm') {
+      return [String(params.kernel ?? 'rbf'), `C=${shortNumber(params.c)}`, `eps=${shortNumber(params.epsilon)}`];
+    }
+  }
   if (model === 'knn') {
     return [`k=${shortNumber(params.k)}`, String(params.weights ?? 'uniform')];
   }
@@ -46,7 +61,8 @@ export function buildRunLabel(
   model: ModelId,
   params: Record<string, unknown>,
   occurrence: number,
+  problemType: ProblemType = 'classification',
 ): string {
-  const details = summarizeRunParameters(model, params).slice(0, 3).join(' | ');
-  return `${MODEL_CATALOG[model].name} #${occurrence}${details ? ` | ${details}` : ''}`;
+  const details = summarizeRunParameters(model, params, problemType).slice(0, 3).join(' | ');
+  return `${getModelCatalogEntry(model, problemType).name} #${occurrence}${details ? ` | ${details}` : ''}`;
 }

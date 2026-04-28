@@ -1,7 +1,10 @@
 import time
 
+import numpy as np
+import pandas as pd
 from fastapi.testclient import TestClient
 
+import app.services.model_training.dataset_builder as dataset_builder_module
 from app.main import app
 from app.schemas.request import TrainRequest
 from app.services.model_training import sanitize_search_config
@@ -40,6 +43,26 @@ def _pipeline_config(session_id: str) -> dict:
         "basic_cleaning": {},
         "sampling": {},
         "data_split": {"enabled": True, "strategy": "2-way", "train": 0.8, "val": 0.0, "test": 0.2, "stratify": True},
+        "imputation": {},
+        "outliers": {},
+        "transformation": {},
+        "encoding": {},
+        "scaling": {},
+        "dimensionality_reduction": {},
+        "feature_selection": {},
+        "imbalance": {},
+    }
+
+
+def _regression_pipeline_config(session_id: str) -> dict:
+    return {
+        "session_id": session_id,
+        "target_column": "target_value",
+        "problem_type": "regression",
+        "excluded_columns": [],
+        "basic_cleaning": {},
+        "sampling": {},
+        "data_split": {"enabled": True, "strategy": "2-way", "train": 0.8, "val": 0.0, "test": 0.2, "stratify": False},
         "imputation": {},
         "outliers": {},
         "transformation": {},
@@ -186,3 +209,49 @@ def test_sanitize_search_config_parses_custom_ranges() -> None:
     assert config["parameter_space"]["n_estimators"] == [100, 200, 300]
     assert config["parameter_space"]["learning_rate"] == [0.05, 0.1, 0.2]
     assert config["parameter_space"]["subsample"] == [0.7, 0.8, 0.9]
+
+
+def test_training_service_supports_regression_models(monkeypatch) -> None:
+    session_id = "real-train-regression"
+    session_service._sessions.pop(session_id, None)
+    state = session_service.get_or_create(session_id)
+    state.dataset = {
+        "source": "upload",
+        "file_name": "synthetic-regression.csv",
+        "target_column": "target_value",
+        "row_count": 120,
+        "column_count": 4,
+    }
+    state.mapping = {
+        "problem_type": "regression",
+        "target_column": "target_value",
+        "roles": {"target_value": "target"},
+    }
+    state.mapping_validated = True
+    state.preprocessing_result = {"ready": True}
+    state.preprocessing = {"ready": True}
+
+    df = pd.DataFrame(
+        {
+            "feature_a": np.linspace(0, 10, 120),
+            "feature_b": np.sin(np.linspace(0, 8, 120)),
+            "feature_c": np.tile([0, 1, 2], 40),
+        }
+    )
+    df["target_value"] = 4.5 * df["feature_a"] - 2.0 * df["feature_b"] + 1.2 * df["feature_c"]
+    monkeypatch.setattr(dataset_builder_module, "load_dataframe", lambda _: df.copy())
+
+    result = TrainingService().train(
+        TrainRequest(
+            session_id=session_id,
+            algorithm="lr",
+            parameters={"fit_intercept": True},
+            pipeline_config=_regression_pipeline_config(session_id),
+        )
+    )
+
+    assert result["problem_type"] == "regression"
+    assert result["metrics"]["rmse"] is not None
+    assert result["metrics"]["mae"] is not None
+    assert result["metrics"]["r2"] is not None
+    assert result["confusion_matrix"] == {}

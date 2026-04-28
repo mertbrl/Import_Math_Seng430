@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Activity, AlertCircle, ArrowRight, BarChart3, Gauge, LineChart, ShieldCheck, Target, Trophy } from 'lucide-react';
+import { AlertCircle, ArrowRight, BarChart3, Gauge, LineChart, ShieldCheck, Target, Trophy } from 'lucide-react';
 import InfoPopover from '../../../components/common/InfoPopover';
 import { useDomainStore } from '../../../store/useDomainStore';
 import { ModelResult, useModelStore } from '../../../store/useModelStore';
-import { MODEL_CATALOG } from '../../modelTuning/modelCatalog';
+import { getModelCatalogEntry } from '../../modelTuning/modelCatalog';
 import { buildRunLabel } from '../../modelTuning/runLabeling';
 import ModelDiagnosticsPanel from './ModelDiagnosticsPanel';
 import { ConfusionHeatmap, NumericRocChart, percent, riskTone, RocLegend, SplitMetricBars } from './VisualizationPanels';
@@ -13,11 +13,65 @@ const EVAL_TABS = [
   { id: 'generalization', title: 'Generalization', icon: Gauge },
   { id: 'roc', title: 'ROC Curves', icon: LineChart },
   { id: 'confusion', title: 'Confusion', icon: Target },
-  { id: 'features', title: 'Feature Signal', icon: Activity },
   { id: 'diagnostics', title: 'Diagnostics', icon: BarChart3 },
 ] as const;
 
 type EvalTabId = (typeof EVAL_TABS)[number]['id'];
+
+function getRunMetrics(run: ModelResult) {
+  return run.test_metrics ?? run.metrics;
+}
+
+function getRunGeneralization(run: ModelResult) {
+  return run.test_visualization?.generalization ?? run.visualization?.generalization;
+}
+
+function getChampionPenalty(run: ModelResult): number {
+  const generalization = getRunGeneralization(run);
+  const riskPenalty =
+    generalization?.risk === 'high'
+      ? 0.08
+      : generalization?.risk === 'moderate'
+        ? 0.035
+        : 0;
+  const gap =
+    generalization?.train_minus_test ??
+    generalization?.train_minus_selection ??
+    generalization?.train_minus_test_f1 ??
+    generalization?.train_minus_selection_f1 ??
+    0;
+  return riskPenalty + Math.max(0, gap) * 0.6;
+}
+
+function sortRunsByPreference(runs: ModelResult[], preference: 'recall' | 'precision' | 'f1' | 'rmse') {
+  return [...runs].sort((left, right) => {
+    const leftMetrics = getRunMetrics(left);
+    const rightMetrics = getRunMetrics(right);
+    const leftPenalty = getChampionPenalty(left);
+    const rightPenalty = getChampionPenalty(right);
+
+    if (preference === 'rmse') {
+      const leftScore = (leftMetrics.rmse ?? Number.POSITIVE_INFINITY) + leftPenalty;
+      const rightScore = (rightMetrics.rmse ?? Number.POSITIVE_INFINITY) + rightPenalty;
+      if (leftScore !== rightScore) {
+        return leftScore - rightScore;
+      }
+      return (rightMetrics.r2 ?? Number.NEGATIVE_INFINITY) - (leftMetrics.r2 ?? Number.NEGATIVE_INFINITY);
+    }
+
+    const metricKey = preference === 'recall' ? 'recall' : preference === 'precision' ? 'precision' : 'f1_score';
+    const leftScore = (leftMetrics[metricKey] ?? 0) - leftPenalty;
+    const rightScore = (rightMetrics[metricKey] ?? 0) - rightPenalty;
+    if (leftScore !== rightScore) {
+      return rightScore - leftScore;
+    }
+    const fallbackF1 = (rightMetrics.f1_score ?? 0) - (leftMetrics.f1_score ?? 0);
+    if (fallbackF1 !== 0) {
+      return fallbackF1;
+    }
+    return (rightMetrics.accuracy ?? 0) - (leftMetrics.accuracy ?? 0);
+  });
+}
 
 export const Step5Results: React.FC = () => {
   const [activeTab, setActiveTab] = useState<EvalTabId>('overview');
@@ -30,6 +84,15 @@ export const Step5Results: React.FC = () => {
   const resultsMap = useModelStore((state) => state.results);
   const tasks = useModelStore((state) => state.tasks);
   const bestResultTaskId = useModelStore((state) => state.bestResultTaskId);
+  const championPreference = useModelStore((state) => state.championPreference);
+  const preferenceLabel =
+    championPreference === 'recall'
+      ? 'recall'
+      : championPreference === 'precision'
+        ? 'precision'
+        : championPreference === 'rmse'
+          ? 'RMSE'
+          : 'F1';
 
   const trainedRuns = useMemo(() => {
     return Object.values(resultsMap).map((result) => ({
@@ -52,20 +115,14 @@ export const Step5Results: React.FC = () => {
     return sortedRunsByCreated.reduce<Record<string, string>>((acc, run) => {
       const nextOccurrence = (counters[run.model] ?? 0) + 1;
       counters[run.model] = nextOccurrence;
-      acc[run.taskId] = buildRunLabel(run.model, run.parameters, nextOccurrence);
+      acc[run.taskId] = buildRunLabel(run.model, run.parameters, nextOccurrence, run.problem_type ?? 'classification');
       return acc;
     }, {});
   }, [sortedRunsByCreated]);
 
   const sortedRuns = useMemo(() => {
-    return [...trainedRuns].sort((left, right) => {
-      const f1Diff = (right.metrics?.f1_score || 0) - (left.metrics?.f1_score || 0);
-      if (f1Diff !== 0) {
-        return f1Diff;
-      }
-      return (right.metrics?.accuracy || 0) - (left.metrics?.accuracy || 0);
-    });
-  }, [trainedRuns]);
+    return sortRunsByPreference(trainedRuns, championPreference);
+  }, [championPreference, trainedRuns]);
 
   const champion = useMemo(() => {
     if (!bestResultTaskId) {
@@ -86,6 +143,7 @@ export const Step5Results: React.FC = () => {
   const selectedResult = trainedRuns.find((run) => run.taskId === selectedTaskId) ?? champion;
   const rocResult = trainedRuns.find((run) => run.taskId === selectedRocTaskId) ?? champion;
   const usesHeldOutTest = Object.values(resultsMap).some((result) => Boolean(result?.test_metrics));
+  const problemType = champion?.problem_type ?? 'classification';
 
   if (trainedRuns.length === 0) {
     return (
@@ -114,11 +172,177 @@ export const Step5Results: React.FC = () => {
     f1_score: trainedRuns.reduce((sum, run) => sum + (run.metrics?.f1_score || 0), 0) / trainedRuns.length,
   };
 
-  const championLabel = champion ? runLabels[champion.taskId] ?? MODEL_CATALOG[champion.model].name : '';
+  const championLabel = champion ? runLabels[champion.taskId] ?? getModelCatalogEntry(champion.model, problemType).name : '';
   const rocCurves = rocResult?.roc_curve?.curves ?? [];
 
+  if (problemType === 'regression' && champion) {
+    const championMetrics = getRunMetrics(champion);
+    const championGeneralization = getRunGeneralization(champion);
+    const regressionRuns = sortedRuns;
+    const selectedRegressionRun = trainedRuns.find((run) => run.taskId === selectedTaskId) ?? champion;
+    const selectedRegressionMetrics = getRunMetrics(selectedRegressionRun);
+
+    return (
+      <div className="space-y-6 px-4 py-8">
+        <div className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(0,89,62,0.08),_transparent_32%),radial-gradient(circle_at_top_right,_rgba(14,116,82,0.12),_transparent_36%),linear-gradient(180deg,_#ffffff,_#f7fbf8)] px-8 py-8">
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.9fr)]">
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Step 5</p>
+                <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Regression Results & Evaluation</h1>
+                <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600">
+                  Compare all 11 regression runs, then keep the model with the lowest RMSE and the smallest generalization penalty.
+                </p>
+              </div>
+
+              <div className="rounded-[28px] border border-slate-200 bg-white/90 p-5 shadow-sm">
+                <div className="flex items-start gap-4">
+                  <div className="rounded-2xl bg-emerald-100 p-3 text-emerald-700">
+                    <Trophy size={30} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-600">Champion Run</p>
+                    <h2 className="mt-1 text-xl font-black tracking-tight text-slate-900">{championLabel}</h2>
+                    <div className={`mt-3 inline-flex rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide ${riskTone(championGeneralization?.risk)}`}>
+                      Overfit risk: {championGeneralization?.risk ?? 'unknown'}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">RMSE</p>
+                    <p className="mt-2 text-2xl font-black text-slate-900">{championMetrics.rmse ?? 'N/A'}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">MAE</p>
+                    <p className="mt-2 text-2xl font-black text-slate-900">{championMetrics.mae ?? 'N/A'}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">R²</p>
+                    <p className="mt-2 text-2xl font-black text-slate-900">{percent(championMetrics.r2)}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6 space-y-6">
+            <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-200 bg-slate-50 px-6 py-4">
+                <h3 className="text-lg font-black tracking-tight text-slate-900">Regression Leaderboard</h3>
+                <p className="mt-1 text-sm text-slate-500">Runs are ranked by lower RMSE, then lower overfit risk, then higher R².</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="border-b bg-white text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                    <tr>
+                      <th className="px-6 py-4 sticky left-0 z-10 bg-white shadow-[1px_0_0_0_var(--border)]">Rank</th>
+                      <th className="px-6 py-4">Run</th>
+                      <th className="px-6 py-4">Overfit Risk</th>
+                      <th className="px-6 py-4">RMSE</th>
+                      <th className="px-6 py-4">MAE</th>
+                      <th className="px-6 py-4">R²</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {regressionRuns.map((run, index) => {
+                      const metrics = getRunMetrics(run);
+                      const generalization = getRunGeneralization(run);
+                      return (
+                        <tr key={run.taskId} className="group border-b last:border-0 hover:bg-slate-50/70">
+                          <td className={`px-6 py-4 font-black text-slate-800 sticky left-0 z-10 shadow-[1px_0_0_0_var(--border)] ${run.taskId === champion.taskId ? 'bg-slate-50' : 'bg-white group-hover:bg-slate-50'}`}>
+                            {index === 0 ? '1st' : `#${index + 1}`}
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className="font-bold text-slate-900">{runLabels[run.taskId] ?? getModelCatalogEntry(run.model, 'regression').name}</p>
+                            <p className="mt-1 text-xs text-slate-500">{getModelCatalogEntry(run.model, 'regression').family}</p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wide ${riskTone(generalization?.risk)}`}>
+                              {generalization?.risk ?? 'unknown'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 font-bold text-slate-800">{metrics.rmse ?? 'N/A'}</td>
+                          <td className="px-6 py-4 text-slate-600">{metrics.mae ?? 'N/A'}</td>
+                          <td className="px-6 py-4 text-slate-600">{percent(metrics.r2)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <RunSelector
+              title="Regression Diagnostics"
+              subtitle="Inspect train, validation, and test behaviour for one finished run."
+              value={selectedTaskId || champion.taskId}
+              onChange={setSelectedTaskId}
+              runs={regressionRuns}
+              runLabels={runLabels}
+            />
+
+            <div className="grid gap-6">
+              <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                <h3 className="text-lg font-black tracking-tight text-slate-900">Generalization Check</h3>
+                <div className="mt-5 grid gap-4 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">RMSE</p>
+                    <p className="mt-2 text-2xl font-black text-slate-900">{selectedRegressionMetrics.rmse ?? 'N/A'}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">MAE</p>
+                    <p className="mt-2 text-2xl font-black text-slate-900">{selectedRegressionMetrics.mae ?? 'N/A'}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">R²</p>
+                    <p className="mt-2 text-2xl font-black text-slate-900">{percent(selectedRegressionMetrics.r2)}</p>
+                  </div>
+                </div>
+                <div className={`mt-5 rounded-2xl border p-4 ${riskTone(getRunGeneralization(selectedRegressionRun)?.risk)}`}>
+                  <p className="text-sm font-bold">Generalization notes</p>
+                  <div className="mt-3 space-y-2 text-sm">
+                    {(getRunGeneralization(selectedRegressionRun)?.notes ?? []).map((note) => (
+                      <div key={note} className="rounded-xl bg-white/80 px-3 py-2 text-slate-700">
+                        {note}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-[32px] border border-emerald-200 bg-gradient-to-r from-emerald-50 via-teal-50 to-sky-50 shadow-sm">
+          <div className="flex flex-col items-center gap-6 px-8 py-8 text-center sm:flex-row sm:text-left">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg">
+              <Trophy size={26} className="text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-600">Evaluation Complete</p>
+              <h3 className="mt-1 text-xl font-black tracking-tight text-slate-900">Ready to continue with the champion regression model?</h3>
+              <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                Step 6 will open with <strong>{championLabel}</strong> as the selected run.
+              </p>
+            </div>
+            <button
+              id="proceed-to-explainability-btn"
+              onClick={completeStep5}
+              className="flex shrink-0 items-center gap-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4 text-sm font-black text-white shadow-lg transition-all duration-200 hover:scale-[1.03] hover:shadow-xl active:scale-[0.98]"
+            >
+              Complete Training &amp; Proceed
+              <ArrowRight size={18} />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (userMode === 'clinical' && champion) {
-    const metrics = champion.test_metrics ?? champion.metrics;
+    const metrics = getRunMetrics(champion);
     const interpretation =
       (metrics.recall ?? 0) >= 0.85
         ? 'The model is catching most positive cases and suits a triage-first workflow where missed cases are costly.'
@@ -139,7 +363,7 @@ export const Step5Results: React.FC = () => {
                   Winning Model
                 </p>
                 <h2 className="mt-2 font-[var(--font-display)] text-[34px] font-bold tracking-[-0.06em] text-[var(--text)]">
-                  Best Model: {MODEL_CATALOG[champion.model].name}
+                  Best Model: {getModelCatalogEntry(champion.model, problemType).name}
                 </h2>
                 <p className="mt-2 text-lg font-semibold text-[var(--success)]">
                   {percent(metrics.accuracy)} Accuracy
@@ -160,6 +384,8 @@ export const Step5Results: React.FC = () => {
           <DoctorMetric label="F1 Score" value={percent(metrics.f1_score)} />
         </div>
 
+        <DoctorConfusionPanel result={champion} />
+
         <div className="ha-card p-6">
           <div className="flex items-start gap-4">
             <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[var(--clinical-light)] text-[var(--clinical)]">
@@ -173,32 +399,14 @@ export const Step5Results: React.FC = () => {
           </div>
         </div>
 
-        <div className="ha-card p-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="ha-section-label">Next Step</p>
-              <p className="mt-2 text-sm text-[var(--text2)]">
-                Move into explainability to see which clinical factors drove the model recommendation.
-              </p>
-            </div>
-            <button
-              id="proceed-to-explainability-btn"
-              onClick={completeStep5}
-              className="ha-button-primary inline-flex items-center justify-center gap-3"
-            >
-              Accept This Model
-              <ArrowRight size={18} />
-            </button>
-          </div>
-        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6 px-4 py-8">
-      <div className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(15,23,42,0.05),_transparent_35%),radial-gradient(circle_at_top_right,_rgba(59,130,246,0.14),_transparent_40%),linear-gradient(180deg,_#ffffff,_#f8fafc)] px-8 py-8">
+      <div className="ha-card overflow-hidden p-0">
+        <div className="border-b border-[var(--border)] bg-[radial-gradient(circle_at_top_left,_rgba(var(--accent-rgb),0.08),_transparent_35%),radial-gradient(circle_at_top_right,_rgba(var(--accent-rgb),0.14),_transparent_40%),linear-gradient(180deg,_#ffffff,_#f8fafc)] px-8 py-8">
           <div className={`grid gap-6 ${activeTab === 'overview' ? 'xl:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.9fr)]' : ''}`}>
             <div>
               <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Step 5</p>
@@ -214,25 +422,25 @@ export const Step5Results: React.FC = () => {
             </div>
 
             {activeTab === 'overview' ? (
-              <div className="rounded-[28px] border border-slate-200 bg-white/90 p-5 shadow-sm">
+              <div className="rounded-[28px] border border-[var(--border)] bg-white/90 p-5 shadow-sm">
                 <div className="flex items-start gap-4">
-                  <div className="rounded-2xl bg-indigo-100 p-3 text-indigo-600">
+                  <div className="rounded-2xl bg-[var(--accent-soft)] p-3 text-[var(--accent)]">
                     <Trophy size={30} />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-500">Champion Run</p>
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--accent)]">Champion Run</p>
                     <h2 className="mt-1 text-xl font-black tracking-tight text-slate-900">{championLabel}</h2>
-                    <div className={`mt-3 inline-flex rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide ${riskTone(champion.visualization?.generalization?.risk)}`}>
-                      Overfit risk: {champion.visualization?.generalization?.risk ?? 'unknown'}
+                    <div className={`mt-3 inline-flex rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide ${riskTone(getRunGeneralization(champion)?.risk)}`}>
+                      Overfit risk: {getRunGeneralization(champion)?.risk ?? 'unknown'}
                     </div>
                   </div>
                 </div>
                 <div className="mt-5 flex flex-wrap gap-2"> 
                   {[
-                    { label: 'Accuracy', value: champion.metrics.accuracy, avg: averageMetrics.accuracy },
-                    { label: 'F1 Score', value: champion.metrics.f1_score, avg: averageMetrics.f1_score },
-                    { label: 'Precision', value: champion.metrics.precision, avg: averageMetrics.precision },
-                    { label: 'Recall', value: champion.metrics.recall, avg: averageMetrics.recall },
+                    { label: 'Accuracy', value: getRunMetrics(champion).accuracy, avg: averageMetrics.accuracy },
+                    { label: 'F1 Score', value: getRunMetrics(champion).f1_score, avg: averageMetrics.f1_score },
+                    { label: 'Precision', value: getRunMetrics(champion).precision, avg: averageMetrics.precision },
+                    { label: 'Recall', value: getRunMetrics(champion).recall, avg: averageMetrics.recall },
                   ].map((item) => (
                     <div key={item.label} className="flex-1 min-w-[140px] rounded-2xl border border-slate-200 bg-slate-50 p-4"> 
                       <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">{item.label}</p>
@@ -251,7 +459,7 @@ export const Step5Results: React.FC = () => {
 
         <div className="flex flex-col gap-6 p-6 xl:flex-row xl:items-start">
           <aside className="w-full shrink-0 xl:w-72">
-            <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="ha-card p-4">
               <h3 className="px-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Evaluation Views</h3>
               <div className="mt-3 space-y-1">
                 {EVAL_TABS.map((tab) => {
@@ -262,7 +470,7 @@ export const Step5Results: React.FC = () => {
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
                       className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-all ${
-                        active ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'
+                        active ? 'bg-[var(--accent)] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'
                       }`}
                     >
                       <Icon size={18} className={active ? 'text-white' : 'text-slate-400'} />
@@ -277,10 +485,10 @@ export const Step5Results: React.FC = () => {
           <div className="min-w-0 flex-1 space-y-6">
             {activeTab === 'overview' && (
               <>
-                <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
-                  <div className="border-b border-slate-200 bg-slate-50 px-6 py-4">
+                <div className="ha-card overflow-hidden p-0">
+                  <div className="border-b border-[var(--border)] bg-slate-50 px-6 py-4">
                     <h3 className="text-lg font-black tracking-tight text-slate-900">Leaderboard</h3>
-                    <p className="mt-1 text-sm text-slate-500">Runs are ranked by final F1 score, then accuracy.</p>
+                    <p className="mt-1 text-sm text-slate-500">Runs are ranked by final {preferenceLabel}, then lower overfit risk.</p>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm">
@@ -303,17 +511,17 @@ export const Step5Results: React.FC = () => {
                             </td>
                             <td className="px-6 py-4">
                               <p className="font-bold text-slate-900">{runLabels[run.taskId] ?? run.taskId}</p>
-                              <p className="mt-1 text-xs text-slate-500">{MODEL_CATALOG[run.model].family}</p>
+                              <p className="mt-1 text-xs text-slate-500">{getModelCatalogEntry(run.model, run.problem_type ?? 'classification').family}</p>
                             </td>
                             <td className="px-6 py-4">
                               <span className={`rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wide ${riskTone(run.visualization?.generalization?.risk)}`}>
-                                {run.visualization?.generalization?.risk ?? 'unknown'}
+                                {getRunGeneralization(run)?.risk ?? 'unknown'}
                               </span>
                             </td>
-                            <td className="px-6 py-4 font-bold text-slate-800">{percent(run.metrics?.f1_score)}</td>
-                            <td className="px-6 py-4 text-slate-600">{percent(run.metrics?.accuracy)}</td>
-                            <td className="px-6 py-4 text-slate-600">{percent(run.metrics?.precision)}</td>
-                            <td className="px-6 py-4 text-slate-600">{percent(run.metrics?.recall)}</td>
+                            <td className="px-6 py-4 font-bold text-slate-800">{percent(getRunMetrics(run)?.f1_score)}</td>
+                            <td className="px-6 py-4 text-slate-600">{percent(getRunMetrics(run)?.accuracy)}</td>
+                            <td className="px-6 py-4 text-slate-600">{percent(getRunMetrics(run)?.precision)}</td>
+                            <td className="px-6 py-4 text-slate-600">{percent(getRunMetrics(run)?.recall)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -415,61 +623,6 @@ export const Step5Results: React.FC = () => {
               </div>
             )}
 
-            {activeTab === 'features' && selectedResult && (
-              <div className="space-y-6">
-                <RunSelector
-                  title="Feature Signal"
-                  subtitle="Inspect feature importance for one concrete run."
-                  helpTitle="Feature signal"
-                  helpBody={
-                    <>
-                      <p>This summarizes which features the fitted model relied on most.</p>
-                      <p>It helps with diagnostics and trust, but it should not be interpreted as proof of causation.</p>
-                    </>
-                  }
-                  value={selectedTaskId || champion.taskId}
-                  onChange={setSelectedTaskId}
-                  runs={sortedRuns}
-                  runLabels={runLabels}
-                />
-
-                {selectedResult.feature_importance && selectedResult.feature_importance.length > 0 ? (
-                  <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-                    <div>
-                      <h3 className="text-lg font-black tracking-tight text-slate-900">Top Features</h3>
-                      <p className="mt-1 text-sm text-slate-500">
-                        Source: {selectedResult.feature_importance_source ?? selectedResult.visualization?.feature_signal_source ?? 'unknown'}
-                      </p>
-                    </div>
-                    <div className="mt-5 space-y-4">
-                      {selectedResult.feature_importance.map((feature, index) => {
-                        const maxValue = selectedResult.feature_importance?.[0]?.importance || 1;
-                        return (
-                          <div key={feature.feature} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                            <div className="flex items-center justify-between gap-4">
-                              <div>
-                                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">#{index + 1}</p>
-                                <p className="mt-1 text-base font-bold text-slate-900">{feature.feature}</p>
-                              </div>
-                              <p className="text-sm font-black text-slate-900">{(feature.importance * 100).toFixed(2)}%</p>
-                            </div>
-                            <div className="mt-3 h-3 rounded-full bg-white">
-                              <div
-                                className="h-full rounded-full bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-600"
-                                style={{ width: `${(feature.importance / maxValue) * 100}%` }}
-                              />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  <EmptyPanel message="Feature signal is not available for this run." />
-                )}
-              </div>
-            )}
-
             {activeTab === 'diagnostics' && selectedResult && (
               <div className="space-y-6">
                 <RunSelector
@@ -489,7 +642,7 @@ export const Step5Results: React.FC = () => {
                 />
                 <ModelDiagnosticsPanel
                   result={selectedResult}
-                  runLabel={runLabels[selectedResult.taskId] ?? MODEL_CATALOG[selectedResult.model].name}
+                  runLabel={runLabels[selectedResult.taskId] ?? getModelCatalogEntry(selectedResult.model, selectedResult.problem_type ?? 'classification').name}
                 />
               </div>
             )}
@@ -497,33 +650,6 @@ export const Step5Results: React.FC = () => {
         </div>
       </div>
 
-      {/* Step 5 → Step 6 Transition CTA */}
-      {trainedRuns.length > 0 && (
-        <div className="overflow-hidden rounded-[32px] border border-emerald-200 bg-gradient-to-r from-emerald-50 via-teal-50 to-sky-50 shadow-sm">
-          <div className="flex flex-col items-center gap-6 px-8 py-8 text-center sm:flex-row sm:text-left">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg">
-              <Trophy size={26} className="text-white" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-600">Evaluation Complete</p>
-              <h3 className="mt-1 text-xl font-black tracking-tight text-slate-900">
-                Ready to explain the champion model?
-              </h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-600">
-                Step 6 unlocks SHAP-based explanations, a live What-If simulator, and a global feature importance breakdown — all powered by <strong>{championLabel}</strong>.
-              </p>
-            </div>
-            <button
-              id="proceed-to-explainability-btn"
-              onClick={completeStep5}
-              className="flex shrink-0 items-center gap-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4 text-sm font-black text-white shadow-lg transition-all duration-200 hover:scale-[1.03] hover:shadow-xl active:scale-[0.98]"
-            >
-              Complete Training &amp; Proceed to Explainability
-              <ArrowRight size={18} />
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
@@ -579,6 +705,91 @@ const DoctorMetric: React.FC<{ label: string; value: string }> = ({ label, value
     </p>
   </div>
 );
+
+const DoctorConfusionPanel: React.FC<{ result: ModelResult }> = ({ result }) => {
+  const summary = result.confusion_matrix;
+  const fullMatrix = result.visualization?.confusion_matrix_full;
+
+  if (summary?.tn == null || summary.fp == null || summary.fn == null || summary.tp == null) {
+    if (!fullMatrix) {
+      return null;
+    }
+
+    return (
+      <div className="ha-card p-6">
+        <div className="flex items-start gap-4">
+          <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[var(--clinical-light)] text-[var(--clinical)]">
+            <Target size={22} />
+          </div>
+          <div className="min-w-0">
+            <p className="ha-section-label">Prediction Breakdown</p>
+            <h3 className="mt-2 text-xl font-bold text-[var(--text)]">Confusion matrix</h3>
+            <p className="mt-3 text-sm leading-8 text-[var(--text2)]">
+              Rows show the real class. Columns show what the model predicted. The diagonal cells are the correct predictions.
+            </p>
+          </div>
+        </div>
+        <div className="mt-5">
+          <ConfusionHeatmap result={result} />
+        </div>
+      </div>
+    );
+  }
+
+  const cells = [
+    {
+      title: 'Real patient, predicted positive',
+      value: summary.tp,
+      description: 'The patient truly had the condition and the model correctly flagged it.',
+      tone: 'border-emerald-200 bg-emerald-50',
+    },
+    {
+      title: 'Real patient, predicted negative',
+      value: summary.fn,
+      description: 'The patient had the condition but the model missed it.',
+      tone: 'border-rose-200 bg-rose-50',
+    },
+    {
+      title: 'Healthy patient, predicted positive',
+      value: summary.fp,
+      description: 'The patient did not have the condition but the model raised an alert.',
+      tone: 'border-amber-200 bg-amber-50',
+    },
+    {
+      title: 'Healthy patient, predicted negative',
+      value: summary.tn,
+      description: 'The patient did not have the condition and the model stayed negative.',
+      tone: 'border-sky-200 bg-sky-50',
+    },
+  ];
+
+  return (
+    <div className="ha-card p-6">
+      <div className="flex items-start gap-4">
+        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[var(--clinical-light)] text-[var(--clinical)]">
+          <Target size={22} />
+        </div>
+        <div className="min-w-0">
+          <p className="ha-section-label">Prediction Breakdown</p>
+          <h3 className="mt-2 text-xl font-bold text-[var(--text)]">Confusion matrix</h3>
+          <p className="mt-3 text-sm leading-8 text-[var(--text2)]">
+            This tells you what was real and what the model predicted, so you can see whether the model mostly misses patients or mostly raises extra alerts.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        {cells.map((cell) => (
+          <div key={cell.title} className={`rounded-2xl border p-5 ${cell.tone}`}>
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">{cell.title}</p>
+            <p className="mt-3 font-[var(--font-display)] text-[36px] font-bold tracking-[-0.05em] text-[var(--text)]">{cell.value}</p>
+            <p className="mt-3 text-sm leading-7 text-slate-700">{cell.description}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 const EmptyPanel: React.FC<{ message: string }> = ({ message }) => (
   <div className="rounded-[28px] border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-slate-500">

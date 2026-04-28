@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Bot, Sparkles } from 'lucide-react';
 import { useDomainStore } from '../store/useDomainStore';
 import { useEDAStore } from '../store/useEDAStore';
 import { useDataPrepStore } from '../store/useDataPrepStore';
@@ -157,6 +158,24 @@ export const HelpChatbotDrawer: React.FC = () => {
 
   return (
     <>
+      <button
+        type="button"
+        onClick={toggleHelp}
+        className={`ha-floating-ai-button ${isHelpOpen ? 'ha-floating-ai-button-open' : ''}`}
+        data-tutorial="floating-ai-chat"
+        aria-label="Open HEALTH-AI Assistant"
+        title="HEALTH-AI Assistant"
+      >
+        <span className="ha-floating-ai-ring" aria-hidden="true" />
+        <span className="ha-floating-ai-core">
+          <Bot size={24} />
+          <span>AI</span>
+        </span>
+        <span className="ha-floating-ai-spark" aria-hidden="true">
+          <Sparkles size={14} />
+        </span>
+      </button>
+
       {/* Backdrop overlay */}
       <div 
         onClick={toggleHelp}

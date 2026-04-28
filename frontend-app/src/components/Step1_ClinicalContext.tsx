@@ -42,7 +42,7 @@ export const Step1_ClinicalContext: React.FC = () => {
           downstream becomes easier to interpret once the question is sharp.
         </p>
 
-        <div className="ha-step1-domain-picker mt-8" ref={dropdownRef}>
+        <div className="ha-step1-domain-picker mt-8" ref={dropdownRef} data-tutorial="domain-picker">
           <div className="ha-step1-domain-icon">
             <HeartPulse size={18} />
           </div>

@@ -22,6 +22,8 @@ export type TreeCriterion = 'gini' | 'entropy' | 'log_loss';
 export type SvmGamma = 'scale' | 'auto';
 export type RFMaxFeatures = 'sqrt' | 'log2' | 'all';
 export type SearchScoring = 'auto' | 'accuracy' | 'f1' | 'precision' | 'recall' | 'roc_auc';
+export type ProblemType = 'classification' | 'multiclass' | 'regression';
+export type ChampionPreference = 'recall' | 'precision' | 'f1' | 'rmse';
 
 export interface ModelTask {
   taskId: string;
@@ -41,6 +43,10 @@ export interface ModelMetrics {
   specificity?: number | null;
   f1_score?: number | null;
   auc?: number | null;
+  mae?: number | null;
+  rmse?: number | null;
+  r2?: number | null;
+  mape?: number | null;
 }
 
 export interface RocCurveLine {
@@ -135,6 +141,10 @@ export interface GeneralizationSummary {
   selection_split?: 'validation' | 'test';
   train_minus_selection_f1?: number;
   train_minus_test_f1?: number;
+  primary_metric_name?: 'f1_score' | 'rmse';
+  primary_metric_direction?: 'higher_is_better' | 'lower_is_better';
+  train_minus_selection?: number | null;
+  train_minus_test?: number | null;
   notes?: string[];
 }
 
@@ -175,6 +185,7 @@ export interface ModelResult {
   modelId?: string;
   model: ModelId;
   taskId: string;
+  problem_type?: ProblemType;
   metrics: ModelMetrics;
   confusion_matrix: ConfusionMatrix;
   evaluation_split?: 'validation' | 'test';
@@ -250,8 +261,10 @@ interface ModelState {
   tasks: Record<string, ModelTask>;
   results: Record<string, ModelResult>;
   bestResultTaskId: string | null;
+  championPreference: ChampionPreference;
   setActiveVizModel: (model: ModelId) => void;
   setPhase: (phase: ModelPhase) => void;
+  setChampionPreference: (preference: ChampionPreference) => void;
   setModelParam: <T extends ModelId>(model: T, patch: Partial<ModelParamsById[T]>) => void;
   setSearchConfig: (model: ModelId, patch: Partial<GridSearchConfig>) => void;
   setTask: (taskId: string, task: Partial<ModelTask> & Pick<ModelTask, 'taskId' | 'model'>) => void;
@@ -367,24 +380,77 @@ function getInitialState() {
     tasks: {} as Record<string, ModelTask>,
     results: {} as Record<string, ModelResult>,
     bestResultTaskId: null as string | null,
+    championPreference: 'f1' as ChampionPreference,
   };
 }
 
-function pickBestResultTaskId(results: Record<string, ModelResult>): string | null {
+function getEffectiveMetrics(result: ModelResult): ModelMetrics {
+  return result.test_metrics ?? result.metrics;
+}
+
+function getGeneralizationGap(result: ModelResult): number {
+  const generalization = result.test_visualization?.generalization ?? result.visualization?.generalization;
+  const directGap = generalization?.train_minus_test ?? generalization?.train_minus_selection;
+  if (typeof directGap === 'number') {
+    return Math.max(0, directGap);
+  }
+  const fallbackGap = generalization?.train_minus_test_f1 ?? generalization?.train_minus_selection_f1 ?? 0;
+  return Math.max(0, fallbackGap);
+}
+
+function getOverfitPenalty(result: ModelResult): number {
+  const generalization = result.test_visualization?.generalization ?? result.visualization?.generalization;
+  const riskPenalty =
+    generalization?.risk === 'high'
+      ? 0.08
+      : generalization?.risk === 'moderate'
+        ? 0.035
+        : 0;
+  return riskPenalty + getGeneralizationGap(result) * 0.6;
+}
+
+function compareResultsForPreference(
+  left: ModelResult,
+  right: ModelResult,
+  preference: ChampionPreference,
+): number {
+  const leftMetrics = getEffectiveMetrics(left);
+  const rightMetrics = getEffectiveMetrics(right);
+  const leftPenalty = getOverfitPenalty(left);
+  const rightPenalty = getOverfitPenalty(right);
+
+  if (preference === 'rmse') {
+    const leftScore = (leftMetrics.rmse ?? Number.POSITIVE_INFINITY) + leftPenalty;
+    const rightScore = (rightMetrics.rmse ?? Number.POSITIVE_INFINITY) + rightPenalty;
+    if (leftScore !== rightScore) {
+      return leftScore - rightScore;
+    }
+    return (rightMetrics.r2 ?? Number.NEGATIVE_INFINITY) - (leftMetrics.r2 ?? Number.NEGATIVE_INFINITY);
+  }
+
+  const metricKey = preference === 'recall' ? 'recall' : preference === 'precision' ? 'precision' : 'f1_score';
+  const leftScore = (leftMetrics[metricKey] ?? 0) - leftPenalty;
+  const rightScore = (rightMetrics[metricKey] ?? 0) - rightPenalty;
+  if (leftScore !== rightScore) {
+    return rightScore - leftScore;
+  }
+  const fallbackF1 = (rightMetrics.f1_score ?? 0) - (leftMetrics.f1_score ?? 0);
+  if (fallbackF1 !== 0) {
+    return fallbackF1;
+  }
+  return (rightMetrics.accuracy ?? 0) - (leftMetrics.accuracy ?? 0);
+}
+
+function pickBestResultTaskId(
+  results: Record<string, ModelResult>,
+  preference: ChampionPreference,
+): string | null {
   const entries = Object.entries(results);
   if (entries.length === 0) {
     return null;
   }
 
-  entries.sort(([, left], [, right]) => {
-    const leftMetrics = left.test_metrics ?? left.metrics;
-    const rightMetrics = right.test_metrics ?? right.metrics;
-    const f1Diff = (rightMetrics.f1_score ?? 0) - (leftMetrics.f1_score ?? 0);
-    if (f1Diff !== 0) {
-      return f1Diff;
-    }
-    return (rightMetrics.accuracy ?? 0) - (leftMetrics.accuracy ?? 0);
-  });
+  entries.sort(([, left], [, right]) => compareResultsForPreference(left, right, preference));
 
   return entries[0][0];
 }
@@ -394,6 +460,11 @@ export const useModelStore = create<ModelState>((set) => ({
 
   setActiveVizModel: (model) => set({ activeVizModel: model }),
   setPhase: (phase) => set({ phase }),
+  setChampionPreference: (preference) =>
+    set((state) => ({
+      championPreference: preference,
+      bestResultTaskId: pickBestResultTaskId(state.results, preference),
+    })),
 
   setModelParam: (model, patch) =>
     set((state) => ({
@@ -437,7 +508,7 @@ export const useModelStore = create<ModelState>((set) => ({
 
       return {
         results: nextResults,
-        bestResultTaskId: pickBestResultTaskId(nextResults),
+        bestResultTaskId: pickBestResultTaskId(nextResults, state.championPreference),
       };
     }),
 
@@ -451,7 +522,7 @@ export const useModelStore = create<ModelState>((set) => ({
       return {
         tasks: nextTasks,
         results: nextResults,
-        bestResultTaskId: pickBestResultTaskId(nextResults),
+        bestResultTaskId: pickBestResultTaskId(nextResults, state.championPreference),
       };
     }),
 

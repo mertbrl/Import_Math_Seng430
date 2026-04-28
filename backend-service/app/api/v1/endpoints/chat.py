@@ -2,12 +2,15 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
 import os
-from dotenv import load_dotenv
+from importlib.util import find_spec
 
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - optional dependency guard
+    load_dotenv = None
 
-load_dotenv()
+if load_dotenv is not None:
+    load_dotenv()
 
 router = APIRouter(prefix="/chat", tags=["chatbot"])
 
@@ -81,6 +84,18 @@ async def handle_chat(request: ChatRequest):
     LangChain Gemini Model Uç Noktası.
     """
     try:
+        if find_spec("langchain_google_genai") is None or find_spec("langchain_core") is None:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Chat assistant dependencies are not installed. "
+                    "Reinstall backend requirements to enable the chatbot."
+                ),
+            )
+
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             raise HTTPException(status_code=500, detail="Gemini API Key bulunamadı.")

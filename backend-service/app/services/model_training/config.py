@@ -4,7 +4,7 @@ from typing import Any
 
 from app.core.exceptions import PipelineError
 
-MODEL_PARAM_BOUNDS: dict[str, dict[str, dict[str, Any]]] = {
+CLASSIFICATION_MODEL_PARAM_BOUNDS: dict[str, dict[str, dict[str, Any]]] = {
     "knn": {
         "k": {"type": "int", "min": 1, "max": 50, "default": 5},
         "weights": {"type": "enum", "values": ["uniform", "distance"], "default": "uniform"},
@@ -81,13 +81,93 @@ MODEL_PARAM_BOUNDS: dict[str, dict[str, dict[str, Any]]] = {
     },
 }
 
+REGRESSION_MODEL_PARAM_BOUNDS: dict[str, dict[str, dict[str, Any]]] = {
+    "knn": {
+        "k": {"type": "int", "min": 1, "max": 80, "default": 7},
+        "weights": {"type": "enum", "values": ["uniform", "distance"], "default": "distance"},
+        "p": {"type": "enum", "values": [1, 2], "default": 2},
+    },
+    "svm": {
+        "kernel": {"type": "enum", "values": ["linear", "rbf", "poly"], "default": "rbf"},
+        "c": {"type": "float", "min": 0.05, "max": 100.0, "default": 2.0},
+        "gamma": {"type": "enum", "values": ["scale", "auto"], "default": "scale"},
+        "degree": {"type": "int", "min": 2, "max": 5, "default": 3},
+        "epsilon": {"type": "float", "min": 0.01, "max": 2.0, "default": 0.1},
+    },
+    "dt": {
+        "criterion": {"type": "enum", "values": ["squared_error", "friedman_mse", "absolute_error"], "default": "squared_error"},
+        "max_depth": {"type": "int", "min": 1, "max": 30, "default": 10},
+        "min_samples_split": {"type": "int", "min": 2, "max": 50, "default": 6},
+        "min_samples_leaf": {"type": "int", "min": 1, "max": 50, "default": 2},
+    },
+    "rf": {
+        "n_estimators": {"type": "int", "min": 50, "max": 500, "default": 220},
+        "max_depth": {"type": "int", "min": 1, "max": 30, "default": 14},
+        "min_samples_split": {"type": "int", "min": 2, "max": 50, "default": 4},
+        "min_samples_leaf": {"type": "int", "min": 1, "max": 50, "default": 2},
+        "max_features": {"type": "enum", "values": ["sqrt", "log2", "all"], "default": "sqrt"},
+        "bootstrap": {"type": "bool", "default": True},
+    },
+    "et": {
+        "n_estimators": {"type": "int", "min": 50, "max": 500, "default": 260},
+        "max_depth": {"type": "int", "min": 1, "max": 30, "default": 14},
+        "min_samples_split": {"type": "int", "min": 2, "max": 50, "default": 4},
+        "min_samples_leaf": {"type": "int", "min": 1, "max": 50, "default": 2},
+        "max_features": {"type": "enum", "values": ["sqrt", "log2", "all"], "default": "sqrt"},
+        "bootstrap": {"type": "bool", "default": False},
+    },
+    "ada": {
+        "n_estimators": {"type": "int", "min": 25, "max": 500, "default": 180},
+        "learning_rate": {"type": "float", "min": 0.01, "max": 2.0, "default": 0.05},
+        "estimator_depth": {"type": "int", "min": 1, "max": 6, "default": 4},
+    },
+    "lr": {
+        "fit_intercept": {"type": "bool", "default": True},
+    },
+    "nb": {
+        "alpha": {"type": "float", "min": 0.0, "max": 100.0, "default": 1.0},
+    },
+    "xgb": {
+        "n_estimators": {"type": "int", "min": 50, "max": 500, "default": 260},
+        "max_depth": {"type": "int", "min": 2, "max": 12, "default": 6},
+        "learning_rate": {"type": "float", "min": 0.01, "max": 0.5, "default": 0.05},
+        "subsample": {"type": "float", "min": 0.5, "max": 1.0, "default": 0.85},
+        "colsample_bytree": {"type": "float", "min": 0.5, "max": 1.0, "default": 0.85},
+        "reg_lambda": {"type": "float", "min": 0.0, "max": 10.0, "default": 1.5},
+    },
+    "lgbm": {
+        "n_estimators": {"type": "int", "min": 50, "max": 500, "default": 260},
+        "max_depth": {"type": "int", "min": -1, "max": 16, "default": -1},
+        "learning_rate": {"type": "float", "min": 0.01, "max": 0.5, "default": 0.05},
+        "num_leaves": {"type": "int", "min": 8, "max": 128, "default": 31},
+        "subsample": {"type": "float", "min": 0.5, "max": 1.0, "default": 0.85},
+        "colsample_bytree": {"type": "float", "min": 0.5, "max": 1.0, "default": 0.85},
+    },
+    "catboost": {
+        "iterations": {"type": "int", "min": 50, "max": 500, "default": 260},
+        "depth": {"type": "int", "min": 2, "max": 10, "default": 6},
+        "learning_rate": {"type": "float", "min": 0.01, "max": 0.5, "default": 0.05},
+        "l2_leaf_reg": {"type": "float", "min": 1.0, "max": 10.0, "default": 4.0},
+    },
+}
 
-def list_supported_models() -> list[str]:
-    return list(MODEL_PARAM_BOUNDS.keys())
+MODEL_PARAM_BOUNDS = CLASSIFICATION_MODEL_PARAM_BOUNDS
 
 
-def sanitize_model_params(algorithm: str, raw_params: dict[str, Any] | None) -> dict[str, Any]:
-    bounds = MODEL_PARAM_BOUNDS.get(algorithm)
+def get_model_param_bounds(problem_type: str = "classification") -> dict[str, dict[str, dict[str, Any]]]:
+    return REGRESSION_MODEL_PARAM_BOUNDS if problem_type == "regression" else CLASSIFICATION_MODEL_PARAM_BOUNDS
+
+
+def list_supported_models(problem_type: str = "classification") -> list[str]:
+    return list(get_model_param_bounds(problem_type).keys())
+
+
+def sanitize_model_params(
+    algorithm: str,
+    raw_params: dict[str, Any] | None,
+    problem_type: str = "classification",
+) -> dict[str, Any]:
+    bounds = get_model_param_bounds(problem_type).get(algorithm)
     if bounds is None:
         raise PipelineError(f"Unsupported model '{algorithm}'.", status_code=400)
 

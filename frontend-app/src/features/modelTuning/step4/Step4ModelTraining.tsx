@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Activity,
   Brain,
-  Compass,
   Loader2,
   Play,
   Scale,
@@ -11,52 +11,97 @@ import {
 } from 'lucide-react';
 import WarningModal from '../../../components/common/WarningModal';
 import { buildApiUrl } from '../../../config/apiConfig';
-import { MODEL_CATALOG, MODEL_ORDER } from '../modelCatalog';
+import {
+  DOCTOR_CLASSIFICATION_MODEL_ORDER,
+  getModelCatalogEntry,
+  MODEL_ORDER,
+  REGRESSION_MODEL_ORDER,
+} from '../modelCatalog';
 import { useDomainStore } from '../../../store/useDomainStore';
 import { buildPipelineConfig } from '../../../store/pipelineConfig';
-import { ModelId, TaskStatus, useModelStore } from '../../../store/useModelStore';
+import { useEDAStore } from '../../../store/useEDAStore';
+import { ChampionPreference, ModelId, TaskStatus, useModelStore } from '../../../store/useModelStore';
 import { cancelTrainingTasks } from '../../../services/pipelineApi';
 import ModelParamsPanel from './components/ModelParamsPanel';
 import TrainingQueuePanel from './components/TrainingQueuePanel';
 import { buildResolvedSearchConfig } from './searchSpace';
+import {
+  buildClassificationAutoPlan,
+  buildRegressionAutoPlan,
+} from './standardTrainingProfiles';
+import { TutorialOverlay, TutorialStep } from '../../../components/TutorialOverlay';
+
+const STEP4_AUTO_TUTORIAL_STEPS: TutorialStep[] = [
+  {
+    eyebrow: 'Step 4 — Clinical Goal',
+    title: 'Pick the clinical priority for champion selection.',
+    body: 'High Sensitivity catches as many real cases as possible. High Precision only alerts when confident. Balanced keeps both errors in check. Step 5 ranks models according to your choice here.',
+    targetSelector: '[data-tutorial="step4-goals"]',
+    placement: 'bottom',
+  },
+  {
+    eyebrow: 'Step 4 — Model Selection',
+    title: 'Toggle models in or out of the training batch.',
+    body: 'All models are included by default. Click any card to exclude it. Fewer models train faster; more models give a broader performance comparison in Step 5.',
+    targetSelector: '[data-tutorial="step4-models"]',
+    placement: 'top',
+  },
+  {
+    eyebrow: 'Step 4 — Start Training',
+    title: 'Click Train to queue all selected models.',
+    body: 'The queue panel shows live status for each run. Once training finishes, Continue becomes available and takes you to Step 5 where the champion model is automatically identified.',
+    targetSelector: '[data-tutorial="step4-train-btn"]',
+    placement: 'top',
+  },
+];
+
+const STEP4_DS_TUTORIAL_STEPS: TutorialStep[] = [
+  {
+    eyebrow: 'Step 4 — Model Selector',
+    title: 'Pick a model from the tab bar to inspect it.',
+    body: 'Each tab shows parameters for one algorithm. Adjust hyperparameters, then click Queue Current Run to add it to the training queue. You can queue multiple models.',
+    targetSelector: '[data-tutorial="step4-ds-tabs"]',
+    placement: 'bottom',
+  },
+  {
+    eyebrow: 'Step 4 — Queue Panel',
+    title: 'The queue panel tracks every run in real time.',
+    body: 'Queued runs appear here. When all finish, Continue unlocks and takes you to Step 5 where results from all runs are compared side by side.',
+    targetSelector: '[data-tutorial="step4-ds-queue"]',
+    placement: 'left',
+  },
+];
 
 const ACTIVE_TASK_STATUSES: TaskStatus[] = ['queued', 'running', 'cancelling'];
 
 const CLINICAL_GOALS = [
   {
     value: 'high_sensitivity' as const,
-    title: 'Avoid Missed Cases',
-    subtitle: 'Recall / sensitivity focus',
-    description:
-      'Prioritises catching as many risky patients as possible, even if the system raises more follow-up alerts.',
+    title: 'Miss as few real patients as possible',
+    description: 'Best when missing a true case is the main risk. Step 5 will favor models that catch more real positives, then filter out overfit-heavy runs.',
     icon: Siren,
-    activeClasses: 'border-trust-500 bg-trust-50 shadow-card',
-    badgeClasses: 'border-trust-200 bg-white text-trust-700',
-    iconClasses: 'bg-trust-500 text-white',
   },
   {
     value: 'high_precision' as const,
-    title: 'Reduce False Alarms',
-    subtitle: 'Precision focus',
-    description:
-      'Prioritises cleaner alerts and reduces unnecessary escalations when downstream review is expensive or invasive.',
+    title: 'Alert only when the case is likely real',
+    description: 'Best when false alarms create unnecessary follow-up. Step 5 will favor models that are more often correct when they flag a patient.',
     icon: ShieldCheck,
-    activeClasses: 'border-danger-400 bg-danger-50 shadow-card',
-    badgeClasses: 'border-danger-200 bg-white text-danger-700',
-    iconClasses: 'bg-danger-500 text-white',
   },
   {
     value: 'balanced' as const,
-    title: 'Balanced Approach',
-    subtitle: 'F1-score focus',
-    description:
-      'Balances sensitivity and precision for a steadier clinical recommendation profile across typical outpatient workflows.',
+    title: 'Balance missed cases and false alarms',
+    description: 'Best when both types of error matter. Step 5 will favor models that keep the tradeoff balanced and still generalize well.',
     icon: Scale,
-    activeClasses: 'border-clinical-500 bg-clinical-50 shadow-card',
-    badgeClasses: 'border-clinical-200 bg-white text-clinical-700',
-    iconClasses: 'bg-clinical-500 text-white',
   },
 ] as const;
+
+type ClinicalGoal = (typeof CLINICAL_GOALS)[number]['value'];
+
+function goalToPreference(goal: ClinicalGoal): ChampionPreference {
+  if (goal === 'high_sensitivity') return 'recall';
+  if (goal === 'high_precision') return 'precision';
+  return 'f1';
+}
 
 export const Step4ModelTraining: React.FC = () => {
   const {
@@ -69,138 +114,136 @@ export const Step4ModelTraining: React.FC = () => {
     setPhase,
     setActiveVizModel,
     setTask,
+    setChampionPreference,
   } = useModelStore();
   const setCurrentStep = useDomainStore((state) => state.setCurrentStep);
-  const currentStep = useDomainStore((state) => state.currentStep);
   const sessionId = useDomainStore((state) => state.sessionId);
   const userMode = useDomainStore((state) => state.userMode);
+  const mlTask = useEDAStore((state) => state.mlTask);
+  const totalRows = useEDAStore((state) => state.totalRows);
 
   const [requestFreshSplit, setRequestFreshSplit] = useState(false);
   const [stopModalOpen, setStopModalOpen] = useState(false);
-  const [queueingModelId, setQueueingModelId] = useState<ModelId | null>(null);
+  const [queueingKey, setQueueingKey] = useState<string | null>(null);
   const [queueError, setQueueError] = useState<string | null>(null);
-  const [clinicalGoal, setClinicalGoal] = useState<'high_sensitivity' | 'high_precision' | 'balanced'>('balanced');
+  const [clinicalGoal, setClinicalGoal] = useState<ClinicalGoal>('balanced');
+  const [excludedModels, setExcludedModels] = useState<ModelId[]>([]);
 
+  const isRegression = mlTask === 'regression';
+  const isAutoMode = userMode === 'clinical' || isRegression;
   const queueItems = useMemo(() => Object.values(tasks), [tasks]);
   const activeTasks = queueItems.filter((task) => ACTIVE_TASK_STATUSES.includes(task.status)).length;
   const completedRuns = Object.keys(results).length;
-  const canOpenResults = completedRuns > 0;
+
+  const autoModels = useMemo(
+    () => (isRegression ? REGRESSION_MODEL_ORDER : DOCTOR_CLASSIFICATION_MODEL_ORDER),
+    [isRegression],
+  );
+  const selectedAutoModels = useMemo(
+    () => autoModels.filter((modelId) => !excludedModels.includes(modelId)),
+    [autoModels, excludedModels],
+  );
+  const hasQueuedBatch = queueItems.length > 0;
+
+  const queueSingleRun = async (
+    model: ModelId,
+    parameters: Record<string, unknown>,
+    searchConfig: Record<string, unknown>,
+  ) => {
+    const pipelineConfig = buildPipelineConfig(sessionId);
+    pipelineConfig.data_split = {
+      ...pipelineConfig.data_split,
+      force_resplit: requestFreshSplit,
+    };
+
+    const response = await fetch(buildApiUrl('/models/train/start'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: sessionId,
+        model,
+        parameters,
+        search_config: searchConfig,
+        pipeline_config: pipelineConfig,
+      }),
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload?.detail || `Could not queue ${getModelCatalogEntry(model, isRegression ? 'regression' : 'classification').name}.`);
+    }
+
+    const data = await response.json();
+    setTask(data.task_id, {
+      taskId: data.task_id,
+      model,
+      status: data.status,
+      createdAt: data.created_at,
+    });
+  };
 
   const queueModel = async (model: ModelId) => {
     setQueueError(null);
-    setQueueingModelId(model);
+    setQueueingKey(model);
     setPhase('training');
-
-    const pipelineConfig = buildPipelineConfig(sessionId);
-    pipelineConfig.data_split = {
-      ...pipelineConfig.data_split,
-      force_resplit: requestFreshSplit,
-    };
+    setChampionPreference('f1');
 
     try {
-      const response = await fetch(buildApiUrl('/models/train/start'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: sessionId,
-          model,
-          parameters: modelParams[model],
-          search_config: buildResolvedSearchConfig(model, searchConfigs[model], modelParams[model]),
-          pipeline_config: pipelineConfig,
-        }),
-      });
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload?.detail || `Could not queue ${MODEL_CATALOG[model].name}.`);
-      }
-
-      const data = await response.json();
-      setTask(data.task_id, {
-        taskId: data.task_id,
+      await queueSingleRun(
         model,
-        status: data.status,
-        createdAt: data.created_at,
-      });
+        modelParams[model],
+        buildResolvedSearchConfig(model, searchConfigs[model], modelParams[model]),
+      );
       setRequestFreshSplit(false);
     } catch (error) {
       console.error(error);
       setQueueError(error instanceof Error ? error.message : 'The model could not be queued.');
       setPhase('selection');
     } finally {
-      setQueueingModelId(null);
+      setQueueingKey(null);
     }
   };
 
-  const queueClinicalModel = async () => {
+  const queueAutoPlan = async () => {
+    if (selectedAutoModels.length === 0) {
+      setQueueError('Select at least one model before starting the batch.');
+      return;
+    }
+
     setQueueError(null);
-    setQueueingModelId('rf');
+    setQueueingKey('auto-plan');
     setPhase('training');
+    setChampionPreference(isRegression ? 'rmse' : goalToPreference(clinicalGoal));
 
-    const pipelineConfig = buildPipelineConfig(sessionId);
-    pipelineConfig.data_split = {
-      ...pipelineConfig.data_split,
-      force_resplit: requestFreshSplit,
-    };
+    const plan = (isRegression
+      ? buildRegressionAutoPlan(totalRows)
+      : buildClassificationAutoPlan(goalToPreference(clinicalGoal) as 'recall' | 'precision' | 'f1', totalRows)).filter(
+      (item) => selectedAutoModels.includes(item.model),
+    );
 
-    const scoringMap: Record<string, string> = {
-      high_sensitivity: 'recall',
-      high_precision: 'precision',
-      balanced: 'f1',
-    };
-
-    const clinicalSearchConfig = {
-      enabled: true,
-      mode: 'random',
-      n_iter: 10,
-      cv_folds: 3,
-      scoring: scoringMap[clinicalGoal],
-      parameter_space: {
-        n_estimators: '100, 150, 200',
-        max_depth: '6, 10, 14',
-        min_samples_leaf: '1, 2, 4',
-        max_features: 'sqrt, log2',
-      },
-    };
+    let successCount = 0;
 
     try {
-      const response = await fetch(buildApiUrl('/models/train/start'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: sessionId,
-          model: 'rf',
-          parameters: modelParams.rf,
-          search_config: clinicalSearchConfig,
-          pipeline_config: pipelineConfig,
-        }),
-      });
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload?.detail || 'Could not queue the clinical model optimisation.');
+      for (const item of plan) {
+        await queueSingleRun(item.model, item.parameters, item.search_config);
+        successCount += 1;
       }
-
-      const data = await response.json();
-      setTask(data.task_id, {
-        taskId: data.task_id,
-        model: 'rf',
-        status: data.status,
-        createdAt: data.created_at,
-      });
       setRequestFreshSplit(false);
     } catch (error) {
       console.error(error);
-      setQueueError(error instanceof Error ? error.message : 'The model could not be queued.');
-      setPhase('selection');
+      const prefix = successCount > 0 ? `${successCount} models were queued before the error. ` : '';
+      setQueueError(`${prefix}${error instanceof Error ? error.message : 'The auto-training plan could not be started.'}`);
+      if (successCount === 0) {
+        setPhase('selection');
+      }
     } finally {
-      setQueueingModelId(null);
+      setQueueingKey(null);
     }
   };
 
   const handleStopRemaining = async () => {
     const activeQueue = Object.values(useModelStore.getState().tasks).filter((task) =>
-      ACTIVE_TASK_STATUSES.includes(task.status)
+      ACTIVE_TASK_STATUSES.includes(task.status),
     );
     if (activeQueue.length === 0) return;
 
@@ -222,236 +265,316 @@ export const Step4ModelTraining: React.FC = () => {
     }
   };
 
-  const handleOpenResults = () => {
-    if (!canOpenResults) return;
-    if (activeTasks > 0) {
-      setStopModalOpen(true);
+  useEffect(() => {
+    if (isRegression) {
+      setChampionPreference('rmse');
       return;
     }
-    setCurrentStep(5);
-  };
+    if (userMode === 'clinical') {
+      setChampionPreference(goalToPreference(clinicalGoal));
+    }
+  }, [clinicalGoal, isRegression, setChampionPreference, userMode]);
 
-  return (
-    <div className="space-y-6 animate-in fade-in duration-300">
-      <div className="card-clinical overflow-hidden">
-        <div className="border-b border-clinical-100 bg-[radial-gradient(circle_at_top_left,_rgba(66,149,245,0.16),_transparent_34%),radial-gradient(circle_at_top_right,_rgba(47,157,152,0.14),_transparent_34%),linear-gradient(180deg,_#ffffff,_#f4fbfb)] px-6 py-7">
-          <h2 className="flex items-center gap-2 text-2xl font-black tracking-tight text-ink-900">
-            <Brain className="text-trust-600" size={26} />
-            Step 4: Model Training Goal
-          </h2>
-          <p className="mt-3 max-w-3xl text-sm leading-7 text-ink-600">
-            Choose the clinical outcome you care about most, then let the assistant optimise the model queue around that goal.
-          </p>
+  useEffect(() => {
+    setExcludedModels((current) => current.filter((modelId) => autoModels.includes(modelId)));
+  }, [autoModels]);
+
+  if (isAutoMode) {
+    const pageTitle = isRegression ? 'Step 4: Regression Training' : 'Step 4: Model Training';
+    const pageCopy = isRegression
+      ? 'Queue the full 11-model regression pack with stable default settings tuned for solid baseline performance without long searches.'
+      : 'Choose the clinical decision style once, then queue the selected models in one click with standard defaults.';
+    const selectedCount = selectedAutoModels.length;
+    const toggleModelExclusion = (modelId: ModelId) => {
+      setExcludedModels((current) =>
+        current.includes(modelId) ? current.filter((item) => item !== modelId) : [...current, modelId],
+      );
+    };
+
+    return (
+      <div className="space-y-6">
+        <TutorialOverlay
+          steps={STEP4_AUTO_TUTORIAL_STEPS}
+          storageKey="import-math-step4-auto-tutorial-v1"
+          reopenEventName="import-math-open-step4-tutorial"
+        />
+        <div className="ha-card-muted p-6 sm:p-8">
+          <div className="max-w-3xl">
+            <p className="ha-section-label" style={{ color: 'var(--accent-ink)' }}>
+              Guided Training
+            </p>
+            <h2 className="mt-2 font-[var(--font-display)] text-[30px] font-bold tracking-[-0.05em] text-[var(--text)]">
+              {pageTitle}
+            </h2>
+            <p className="mt-3 text-sm leading-8 text-[var(--text2)]">{pageCopy}</p>
+          </div>
         </div>
 
-        {userMode === 'clinical' ? (
-          <div className="grid gap-6 p-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="space-y-6">
-              <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}> 
-                {CLINICAL_GOALS.map((goal) => {
-                  const Icon = goal.icon;
-                  const active = clinicalGoal === goal.value;
+        {!isRegression ? (
+          <div className="grid gap-4 lg:grid-cols-3" data-tutorial="step4-goals">
+            {CLINICAL_GOALS.map((goal) => {
+              const Icon = goal.icon;
+              const active = clinicalGoal === goal.value;
+              return (
+                <button
+                  key={goal.value}
+                  type="button"
+                  onClick={() => setClinicalGoal(goal.value)}
+                  className={`ha-card text-left transition-all ${
+                    active
+                      ? 'border-[rgba(0,89,62,0.4)] bg-[linear-gradient(180deg,#ffffff,#e8f6ee)] ring-2 ring-[rgba(0,89,62,0.16)] shadow-[0_18px_40px_rgba(0,89,62,0.14)]'
+                      : 'border-[rgba(190,201,193,0.48)] bg-white hover:border-[rgba(0,89,62,0.22)]'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className={`grid h-12 w-12 place-items-center rounded-2xl ${active ? 'bg-[var(--accent)] text-white' : 'bg-[var(--accent-soft)] text-[var(--accent)]'}`}>
+                      <Icon size={22} />
+                    </div>
+                    <span className={`rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] ${active ? 'bg-[var(--accent-soft)] text-[var(--accent-ink)]' : 'bg-slate-100 text-slate-600'}`}>
+                      {active ? 'Selected Mode' : 'Champion Rule'}
+                    </span>
+                  </div>
+                  <h3 className="mt-5 text-lg font-black tracking-tight text-[var(--text)]">{goal.title}</h3>
+                  <p className="mt-3 text-sm leading-7 text-[var(--text2)]">{goal.description}</p>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+
+        <div className="space-y-6">
+          <div className="ha-card p-6" data-tutorial="step4-split">
+            <div className="rounded-[18px] border border-[rgba(190,201,193,0.48)] bg-white/80 px-4 py-4">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="text-sm font-bold text-[var(--text)]">Holdout Split Strategy</p>
+                  <p className="mt-1 text-xs leading-6 text-[var(--text2)]">
+                    Reuse the same split for fair model comparison. Turn on a fresh split only when you intentionally want a new holdout.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setRequestFreshSplit((current) => !current)}
+                  className={requestFreshSplit ? 'ha-button-secondary text-[var(--warning)]' : 'ha-button-secondary'}
+                >
+                  {requestFreshSplit ? 'Fresh split on next batch' : 'Reuse current split'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="ha-card p-6" data-tutorial="step4-models">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <p className="text-sm font-bold text-[var(--text)]">Models</p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setExcludedModels([])}
+                    className="ha-button-secondary"
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExcludedModels([...autoModels])}
+                    className="ha-button-secondary"
+                  >
+                    None
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {autoModels.map((modelId) => {
+                  const meta = getModelCatalogEntry(modelId, isRegression ? 'regression' : 'classification');
+                  const included = selectedAutoModels.includes(modelId);
                   return (
                     <button
-                      key={goal.value}
+                      key={modelId}
                       type="button"
-                      onClick={() => setClinicalGoal(goal.value)}
-                      className={`rounded-[24px] border p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card break-words min-w-[200px] flex-1 ${ 
-                        active
-                          ? goal.activeClasses
-                          : 'border-ink-200 bg-white hover:border-clinical-200'
+                      onClick={() => toggleModelExclusion(modelId)}
+                      className={`rounded-[18px] border px-4 py-4 text-left transition-all ${
+                        included
+                          ? 'border-[rgba(0,89,62,0.24)] bg-[linear-gradient(180deg,#ffffff,#f3faf5)] shadow-[0_10px_24px_rgba(0,89,62,0.08)]'
+                          : 'border-[rgba(190,201,193,0.48)] bg-slate-50/90 opacity-75'
                       }`}
                     >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${active ? goal.iconClasses : 'bg-ink-100 text-ink-500'}`}>
-                          <Icon size={20} />
-                        </div>
-                        <span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${goal.badgeClasses}`}>
-                          {goal.subtitle}
+                      <div className="flex items-center justify-between gap-3">
+                        <h4 className={`text-sm font-black ${included ? 'text-[var(--text)]' : 'text-slate-500'}`}>{meta.name}</h4>
+                        <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${
+                          included ? 'bg-[var(--accent-soft)] text-[var(--accent-ink)]' : 'bg-slate-200 text-slate-500'
+                        }`}>
+                          {included ? 'Included' : 'Excluded'}
                         </span>
                       </div>
-
-                      <h3 className="mt-5 text-lg font-black tracking-tight text-ink-900">
-                        {goal.title}
-                      </h3>
-                      <p className="mt-3 text-sm leading-7 text-ink-600">
-                        {goal.description}
-                      </p>
                     </button>
                   );
                 })}
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.9fr)]">
-                <div className="card-clinical-muted p-5">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-clinical-500 text-white">
-                      <Compass size={18} />
-                    </div>
-                    <div>
-                      <p className="text-[11px] font-black uppercase tracking-[0.16em] text-clinical-700">Optimization Strategy</p>
-                      <p className="mt-3 text-sm leading-7 text-ink-600">
-                        The clinical workflow uses automated Random Forest tuning with a scoring target matched to the selected goal. You do not need to manage hyperparameters manually.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="card-clinical p-5">
-                  <p className="text-[11px] font-black uppercase tracking-[0.16em] text-ink-500">Training Status</p>
-                  <div className="mt-4 space-y-3">
-                    <div className="flex items-center justify-between rounded-xl border border-ink-200 bg-ink-50 px-4 py-3">
-                      <span className="text-sm font-semibold text-ink-700">Active runs</span>
-                      <span className="text-lg font-black text-ink-900">{activeTasks}</span>
-                    </div>
-                    <div className="flex items-center justify-between rounded-xl border border-ink-200 bg-ink-50 px-4 py-3">
-                      <span className="text-sm font-semibold text-ink-700">Finished runs</span>
-                      <span className="text-lg font-black text-ink-900">{completedRuns}</span>
-                    </div>
-                    {phase === 'training' && (
-                      <div className="rounded-xl border border-trust-200 bg-trust-50 px-4 py-3 text-sm text-trust-800">
-                        Your model queue is active. Results will appear as soon as each optimisation run completes.
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {queueError && (
-                <div className="rounded-2xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800">
+              {queueError ? (
+                <div className="mt-5 rounded-[18px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
                   {queueError}
                 </div>
-              )}
-
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ink-200 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setRequestFreshSplit((current) => !current)}
-                  className={`rounded-full px-4 py-2 text-sm font-semibold ${
-                    requestFreshSplit
-                      ? 'bg-warning-100 text-warning-900'
-                      : 'border border-ink-200 bg-white text-ink-700'
-                  }`}
-                >
-                  {requestFreshSplit ? 'Fresh split on next run' : 'Reuse current split'}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => void queueClinicalModel()}
-                  disabled={queueingModelId !== null}
-                  className="inline-flex items-center gap-2 rounded-xl bg-trust-500 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-trust-600 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {queueingModelId !== null ? <Loader2 size={18} className="animate-spin" /> : <Play size={18} />}
-                  Start Clinical Optimisation
-                </button>
-              </div>
+              ) : null}
             </div>
 
             <TrainingQueuePanel
-              catalogCount={3}
-              onStopRemaining={() => { void handleStopRemaining(); }}
-              onOpenResults={handleOpenResults}
-              canOpenResults={canOpenResults}
-            />
-          </div>
-        ) : (
-          <div className="grid gap-6 p-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="space-y-5">
-              <div className="card-clinical p-4">
-                <div className="flex items-center gap-3 overflow-x-auto whitespace-nowrap">
-                  {MODEL_ORDER.map((modelId) => {
-                    const model = MODEL_CATALOG[modelId];
-                    const isActive = activeVizModel === modelId;
-                    return (
-                      <button
-                        key={modelId}
-                        type="button"
-                        onClick={() => setActiveVizModel(modelId)}
-                        className={`shrink-0 rounded-full px-4 py-2 text-sm font-bold transition-colors ${
-                          isActive
-                            ? 'bg-trust-500 text-white shadow-soft'
-                            : 'bg-transparent text-ink-600 hover:bg-ink-50 hover:text-ink-900'
-                        }`}
-                      >
-                        {model.name}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="card-clinical p-6">
-                <div className="flex items-center gap-2">
-                  <Settings2 className="text-trust-500" size={18} />
-                  <h3 className="text-sm font-bold text-ink-800">Current Model Setup</h3>
-                </div>
-
-                <div className="mt-4 rounded-2xl border border-clinical-100 bg-clinical-50 px-4 py-4">
-                  <p className={`text-[11px] font-bold uppercase tracking-[0.18em] ${MODEL_CATALOG[activeVizModel].accent}`}>
-                    {MODEL_CATALOG[activeVizModel].short}
-                  </p>
-                  <h4 className="mt-1 text-lg font-black tracking-tight text-ink-900">{MODEL_CATALOG[activeVizModel].name}</h4>
-                  <p className="mt-2 text-sm leading-7 text-ink-600">{MODEL_CATALOG[activeVizModel].description}</p>
-                </div>
-
-                <div className="mt-4 rounded-2xl border border-ink-200 bg-ink-50 px-4 py-4">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div>
-                      <p className="text-sm font-bold text-ink-800">Holdout Split</p>
-                      <p className="mt-1 text-xs leading-6 text-ink-500">
-                        Reuse the same split for fair comparison. Turn on a fresh split only when you intentionally want a new holdout.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setRequestFreshSplit((current) => !current)}
-                      className={`rounded-full px-3 py-1 text-xs font-bold ${
-                        requestFreshSplit ? 'bg-warning-100 text-warning-900' : 'border border-ink-200 bg-white text-ink-700'
-                      }`}
-                    >
-                      {requestFreshSplit ? 'Fresh next run' : 'Reuse current split'}
-                    </button>
-                  </div>
-                </div>
-
-                {queueError && (
-                  <div className="mt-4 rounded-2xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800">
-                    {queueError}
-                  </div>
-                )}
-
-                <div className="mt-5 space-y-4">
-                  <ModelParamsPanel model={activeVizModel} />
-                </div>
-
-                <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-ink-200 pt-4">
-                  <p className="text-sm text-ink-500">
-                    {activeTasks} active run{activeTasks === 1 ? '' : 's'}, {completedRuns} finished
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => void queueModel(activeVizModel)}
-                    disabled={queueingModelId === activeVizModel}
-                    className="inline-flex items-center gap-2 rounded-xl bg-trust-500 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-trust-600 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {queueingModelId === activeVizModel ? <Loader2 size={18} className="animate-spin" /> : <Play size={18} />}
-                    Queue current run
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <TrainingQueuePanel
-              catalogCount={MODEL_ORDER.length}
+              catalogCount={selectedCount}
               onStopRemaining={() => {
                 void handleStopRemaining();
               }}
-              onOpenResults={handleOpenResults}
-              canOpenResults={canOpenResults}
+              emptyMessage="No training run has started yet."
             />
           </div>
-        )}
+
+          <div className="flex border-t border-[var(--border)] pt-5">
+            <button
+              type="button"
+              data-tutorial="step4-train-btn"
+              onClick={() => void queueAutoPlan()}
+              disabled={queueingKey !== null || hasQueuedBatch}
+              className="ha-button-primary inline-flex items-center justify-center gap-3"
+            >
+              {queueingKey === 'auto-plan' ? <Loader2 size={18} className="animate-spin" /> : hasQueuedBatch ? <Activity size={18} /> : <Play size={18} />}
+              {hasQueuedBatch
+                ? 'Batch Started'
+                : `Train ${selectedCount} Selected Model${selectedCount === 1 ? '' : 's'}`}
+            </button>
+          </div>
+        </div>
+
+        <WarningModal
+          isOpen={stopModalOpen}
+          title="Open Step 5 with current results?"
+          message="Some model runs are still in progress. If you continue now, queued work will stop and Step 5 will open with the finished results already available."
+          onConfirm={() => {
+            setStopModalOpen(false);
+            void (async () => {
+              await handleStopRemaining();
+              setCurrentStep(5);
+            })();
+          }}
+          onCancel={() => setStopModalOpen(false)}
+          confirmText="Stop And Open Results"
+          cancelText="Keep Training"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-300">
+      <TutorialOverlay
+        steps={STEP4_DS_TUTORIAL_STEPS}
+        storageKey="import-math-step4-ds-tutorial-v1"
+        reopenEventName="import-math-open-step4-ds-tutorial"
+      />
+      <div className="ha-card overflow-hidden p-0">
+        <div className="border-b border-[var(--border)] bg-[radial-gradient(circle_at_top_left,_rgba(var(--accent-rgb),0.14),_transparent_34%),radial-gradient(circle_at_top_right,_rgba(var(--accent-rgb),0.08),_transparent_34%),linear-gradient(180deg,_#ffffff,_#f4fbfb)] px-6 py-7">
+          <h2 className="flex items-center gap-2 text-2xl font-black tracking-tight text-[var(--text)]">
+            <Brain className="text-[var(--accent)]" size={26} />
+            Step 4: Model Training Goal
+          </h2>
+          <p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--text2)]">
+            Inspect one model at a time, adjust its parameters, and queue the runs you want to compare.
+          </p>
+        </div>
+
+        <div className="grid gap-6 p-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="space-y-5">
+            <div className="ha-card p-4" data-tutorial="step4-ds-tabs">
+              <div className="flex items-center gap-3 overflow-x-auto whitespace-nowrap">
+                {MODEL_ORDER.map((modelId) => {
+                  const model = getModelCatalogEntry(modelId, 'classification');
+                  const isActive = activeVizModel === modelId;
+                  return (
+                    <button
+                      key={modelId}
+                      type="button"
+                      onClick={() => setActiveVizModel(modelId)}
+                      className={`shrink-0 rounded-full px-4 py-2 text-sm font-bold transition-colors ${
+                        isActive
+                          ? 'bg-[var(--accent)] text-white shadow-soft'
+                          : 'bg-transparent text-[var(--text2)] hover:bg-[var(--accent-soft)] hover:text-[var(--text)]'
+                      }`}
+                    >
+                      {model.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="ha-card p-6">
+              <div className="flex items-center gap-2">
+                <Settings2 className="text-[var(--accent)]" size={18} />
+                <h3 className="text-sm font-bold text-[var(--text)]">Current Model Setup</h3>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--accent-soft)]/60 px-4 py-4">
+                <p className={`text-[11px] font-bold uppercase tracking-[0.18em] ${getModelCatalogEntry(activeVizModel, 'classification').accent}`}>
+                  {getModelCatalogEntry(activeVizModel, 'classification').short}
+                </p>
+                <h4 className="mt-1 text-lg font-black tracking-tight text-[var(--text)]">{getModelCatalogEntry(activeVizModel, 'classification').name}</h4>
+                <p className="mt-2 text-sm leading-7 text-[var(--text2)]">{getModelCatalogEntry(activeVizModel, 'classification').description}</p>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-[var(--border)] bg-slate-50 px-4 py-4">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <p className="text-sm font-bold text-[var(--text)]">Holdout Split</p>
+                    <p className="mt-1 text-xs leading-6 text-[var(--text2)]">
+                      Reuse the same split for fair comparison. Turn on a fresh split only when you intentionally want a new holdout.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setRequestFreshSplit((current) => !current)}
+                    className={`rounded-full px-3 py-1 text-xs font-bold ${
+                      requestFreshSplit ? 'bg-warning-100 text-warning-900' : 'border border-[var(--border)] bg-white text-[var(--text)]'
+                    }`}
+                  >
+                    {requestFreshSplit ? 'Fresh next run' : 'Reuse current split'}
+                  </button>
+                </div>
+              </div>
+
+              {queueError ? (
+                <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+                  {queueError}
+                </div>
+              ) : null}
+
+              <div className="mt-5 space-y-4">
+                <ModelParamsPanel model={activeVizModel} />
+              </div>
+
+              <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-ink-200 pt-4">
+                <p className="text-sm text-[var(--text2)]">
+                  {activeTasks} active run{activeTasks === 1 ? '' : 's'}, {completedRuns} finished
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void queueModel(activeVizModel)}
+                  disabled={queueingKey === activeVizModel}
+                  className="ha-button-primary inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {queueingKey === activeVizModel ? <Loader2 size={18} className="animate-spin" /> : <Play size={18} />}
+                  Queue current run
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <TrainingQueuePanel
+            catalogCount={MODEL_ORDER.length}
+            onStopRemaining={() => {
+              void handleStopRemaining();
+            }}
+          />
+        </div>
       </div>
 
       <WarningModal

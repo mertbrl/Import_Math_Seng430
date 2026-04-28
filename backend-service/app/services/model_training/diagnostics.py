@@ -25,6 +25,18 @@ class TrainingDiagnosticsService:
         generalization: dict[str, Any] | None = None,
         feature_signal_source: str | None = None,
     ) -> dict[str, Any]:
+        if data.problem_type == "regression":
+            return {
+                "split_summary": self._build_split_summary(data, split_name),
+                "split_metrics": split_metrics or {},
+                "generalization": generalization or {},
+                "feature_signal_source": feature_signal_source,
+                "per_class_metrics": [],
+                "confusion_matrix_full": {"labels": [], "matrix": []},
+                "confidence_histogram": [],
+                "projection": {},
+            }
+
         return {
             "split_summary": self._build_split_summary(data, split_name),
             "split_metrics": split_metrics or {},
@@ -42,13 +54,14 @@ class TrainingDiagnosticsService:
             "train_rows": int(len(data.X_train)),
             "validation_rows": int(len(data.X_validation)) if data.X_validation is not None else 0,
             "test_rows": int(len(data.X_test)),
-            "class_distribution": {
+        }
+        if data.problem_type != "regression":
+            summary["class_distribution"] = {
                 "train": self._class_distribution(data.class_names, data.y_train),
                 "test": self._class_distribution(data.class_names, data.y_test),
-            },
-        }
-        if data.y_validation is not None:
-            summary["class_distribution"]["validation"] = self._class_distribution(data.class_names, data.y_validation)
+            }
+            if data.y_validation is not None:
+                summary["class_distribution"]["validation"] = self._class_distribution(data.class_names, data.y_validation)
         return summary
 
     def _class_distribution(self, class_names: list[str], y_values: np.ndarray) -> list[dict[str, Any]]:

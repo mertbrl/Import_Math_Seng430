@@ -9,8 +9,12 @@ from sklearn.metrics import (
     accuracy_score,
     confusion_matrix,
     f1_score,
+    mean_absolute_error,
+    mean_absolute_percentage_error,
+    mean_squared_error,
     precision_score,
     recall_score,
+    r2_score,
     roc_auc_score,
     roc_curve,
 )
@@ -31,6 +35,9 @@ class TrainingMetricsService:
         algorithm: str,
         data: PreparedTrainingData,
     ) -> dict[str, Any]:
+        if data.problem_type == "regression":
+            return self._evaluate_regression(estimator=estimator, algorithm=algorithm, data=data)
+
         selection_X = data.X_validation if data.X_validation is not None and data.y_validation is not None else data.X_test
         selection_y = data.y_validation if data.y_validation is not None else data.y_test
         selection_split = data.selection_split
@@ -99,6 +106,96 @@ class TrainingMetricsService:
                 feature_signal_source=feature_source,
             )
         return result
+
+    def _evaluate_regression(
+        self,
+        *,
+        estimator: Any,
+        algorithm: str,
+        data: PreparedTrainingData,
+    ) -> dict[str, Any]:
+        selection_X = data.X_validation if data.X_validation is not None and data.y_validation is not None else data.X_test
+        selection_y = data.y_validation if data.y_validation is not None else data.y_test
+        selection_split = data.selection_split
+
+        train_result = self._score_regression_holdout(estimator=estimator, X=data.X_train, y=data.y_train)
+        selection_result = self._score_regression_holdout(estimator=estimator, X=selection_X, y=selection_y)
+        test_result = (
+            self._score_regression_holdout(estimator=estimator, X=data.X_test, y=data.y_test)
+            if data.X_validation is not None and data.y_validation is not None
+            else None
+        )
+
+        feature_importance, feature_source = self._build_feature_importance(
+            estimator=estimator,
+            algorithm=algorithm,
+            feature_names=data.feature_names,
+            X_reference=selection_X,
+            y_reference=selection_y,
+            class_names=[],
+            problem_type="regression",
+        )
+
+        split_metrics = {
+            "train": train_result["metrics"],
+            "test": (test_result or selection_result)["metrics"],
+        }
+        if data.X_validation is not None and data.y_validation is not None:
+            split_metrics["validation"] = selection_result["metrics"]
+
+        generalization = self._build_regression_generalization_summary(split_metrics, selection_split)
+
+        result: dict[str, Any] = {
+            "metrics": selection_result["metrics"],
+            "confusion_matrix": {},
+            "roc_curve": {},
+            "visualization": self._diagnostics.build(
+                estimator=estimator,
+                data=data,
+                X_eval=selection_X,
+                y_eval=selection_y,
+                y_pred=selection_result["y_pred"],
+                y_scores=None,
+                split_name=selection_split,
+                split_metrics=split_metrics,
+                generalization=generalization,
+                feature_signal_source=feature_source,
+            ),
+            "evaluation_split": selection_split,
+            "feature_importance": feature_importance,
+            "feature_importance_source": feature_source,
+            "train_metrics": train_result["metrics"],
+        }
+        if test_result is not None:
+            result["test_metrics"] = test_result["metrics"]
+            result["test_confusion_matrix"] = {}
+            result["test_roc_curve"] = {}
+            result["test_visualization"] = self._diagnostics.build(
+                estimator=estimator,
+                data=data,
+                X_eval=data.X_test,
+                y_eval=data.y_test,
+                y_pred=test_result["y_pred"],
+                y_scores=None,
+                split_name="test",
+                split_metrics=split_metrics,
+                generalization=generalization,
+                feature_signal_source=feature_source,
+            )
+        return result
+
+    def _score_regression_holdout(
+        self,
+        *,
+        estimator: Any,
+        X: pd.DataFrame,
+        y: np.ndarray,
+    ) -> dict[str, Any]:
+        y_pred = np.asarray(estimator.predict(X), dtype=float)
+        return {
+            "metrics": self._build_regression_metrics(y, y_pred),
+            "y_pred": y_pred,
+        }
 
     def _score_holdout(
         self,
@@ -238,6 +335,7 @@ class TrainingMetricsService:
         X_reference: pd.DataFrame,
         y_reference: np.ndarray,
         class_names: list[str],
+        problem_type: str = "classification",
     ) -> tuple[list[dict[str, float | str]], str]:
         importances: np.ndarray | None = None
         source = "native"
@@ -253,7 +351,10 @@ class TrainingMetricsService:
 
         if importances is None or importances.size == 0 or float(np.abs(importances).sum()) == 0.0:
             sampled_X, sampled_y = self._sample_reference_frame(X_reference, y_reference, maximum_rows=250)
-            scoring = "f1_macro" if len(class_names) > 2 else "f1"
+            if problem_type == "regression":
+                scoring = "neg_root_mean_squared_error"
+            else:
+                scoring = "f1_macro" if len(class_names) > 2 else "f1"
             try:
                 result = permutation_importance(
                     estimator,
@@ -291,6 +392,29 @@ class TrainingMetricsService:
             ],
             source,
         )
+
+    def _build_regression_metrics(self, y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float | None]:
+        mae = float(mean_absolute_error(y_true, y_pred))
+        rmse = float(np.sqrt(mean_squared_error(y_true, y_pred)))
+        r2 = float(r2_score(y_true, y_pred))
+        try:
+            mape = float(mean_absolute_percentage_error(y_true, y_pred))
+        except ValueError:
+            mape = 0.0
+
+        return {
+            "accuracy": None,
+            "precision": None,
+            "recall": None,
+            "sensitivity": None,
+            "specificity": None,
+            "f1_score": None,
+            "auc": None,
+            "mae": round(mae, 4),
+            "rmse": round(rmse, 4),
+            "r2": round(r2, 4),
+            "mape": round(mape, 4),
+        }
 
     def _sample_reference_frame(
         self,
@@ -344,8 +468,61 @@ class TrainingMetricsService:
         return {
             "risk": risk,
             "selection_split": selection_split,
+            "primary_metric_name": "f1_score",
+            "primary_metric_direction": "higher_is_better",
             "train_minus_selection_f1": selection_gap,
             "train_minus_test_f1": test_gap,
+            "train_minus_selection": selection_gap,
+            "train_minus_test": test_gap,
+            "notes": notes,
+        }
+
+    def _build_regression_generalization_summary(
+        self,
+        split_metrics: dict[str, dict[str, float | None]],
+        selection_split: str,
+    ) -> dict[str, Any]:
+        train_metrics = split_metrics.get("train", {})
+        selection_metrics = split_metrics.get(selection_split, split_metrics.get("test", {}))
+        test_metrics = split_metrics.get("test", {})
+
+        train_rmse = float(train_metrics.get("rmse") or 0.0)
+        selection_rmse = float(selection_metrics.get("rmse") or 0.0)
+        test_rmse = float(test_metrics.get("rmse") or 0.0)
+        selection_gap = round(selection_rmse - train_rmse, 4)
+        test_gap = round(test_rmse - train_rmse, 4)
+
+        risk = "low"
+        if max(selection_gap, test_gap) >= 0.2:
+            risk = "high"
+        elif max(selection_gap, test_gap) >= 0.08:
+            risk = "moderate"
+
+        notes = []
+        if selection_gap >= 0.2:
+            notes.append(f"{selection_split.title()} RMSE is much higher than train RMSE. Overfitting is likely.")
+        elif selection_gap >= 0.08:
+            notes.append(f"{selection_split.title()} RMSE is noticeably higher than train RMSE.")
+        else:
+            notes.append(f"Train and {selection_split} RMSE are fairly close.")
+
+        if selection_split != "test":
+            if test_gap >= 0.2:
+                notes.append("Final test RMSE rises sharply versus train.")
+            elif test_gap >= 0.08:
+                notes.append("Final test RMSE is higher than train by a visible margin.")
+            else:
+                notes.append("Final test RMSE stays close to train.")
+
+        return {
+            "risk": risk,
+            "selection_split": selection_split,
+            "primary_metric_name": "rmse",
+            "primary_metric_direction": "lower_is_better",
+            "train_minus_selection_f1": None,
+            "train_minus_test_f1": None,
+            "train_minus_selection": selection_gap,
+            "train_minus_test": test_gap,
             "notes": notes,
         }
 

@@ -26,7 +26,7 @@ class TrainingService:
     def train(self, payload: TrainRequest, *, should_cancel: ShouldCancel | None = None) -> dict[str, Any]:
         data = self._dataset_builder.prepare(payload.session_id, payload.pipeline_config)
         raise_if_cancelled(should_cancel)
-        params = sanitize_model_params(payload.algorithm, payload.parameters)
+        params = sanitize_model_params(payload.algorithm, payload.parameters, data.problem_type)
         search_config = sanitize_search_config(payload.algorithm, payload.search_config)
 
         if payload.algorithm == "knn":
@@ -39,6 +39,7 @@ class TrainingService:
             X_train=data.X_train,
             y_train=data.y_train,
             class_names=data.class_names,
+            problem_type=data.problem_type,
             should_cancel=should_cancel,
         )
         raise_if_cancelled(should_cancel)
@@ -53,6 +54,7 @@ class TrainingService:
         return {
             "model_id": f"{payload.algorithm}-sklearn-v1",
             "model": payload.algorithm,
+            "problem_type": data.problem_type,
             "parameters": search_result.parameters,
             "search": search_result.summary,
             "_artifacts": {

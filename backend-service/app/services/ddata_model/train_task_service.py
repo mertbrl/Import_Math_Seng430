@@ -208,6 +208,7 @@ class TrainTaskService:
             "run_id": run_id,
             "model_id": resolved_model_id,
             "model": result["model"],
+            "problem_type": result.get("problem_type", "classification"),
             "parameters": result["parameters"],
             "metrics": result["metrics"],
             "confusion_matrix": result["confusion_matrix"],
