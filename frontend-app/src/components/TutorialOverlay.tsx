@@ -1,5 +1,6 @@
 import React, { CSSProperties, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ArrowRight, X } from 'lucide-react';
+import { useDomainStore } from '../store/useDomainStore';
 
 export interface TutorialStep {
   eyebrow: string;
@@ -114,11 +115,19 @@ export const TutorialOverlay: React.FC<TutorialOverlayProps> = ({ steps, storage
   const nextButtonRef = useRef<HTMLButtonElement | null>(null);
   const initialWindowScrollRef = useRef({ x: 0, y: 0 });
 
+  const setTutorialActive = useDomainStore((state) => state.setTutorialActive);
+
   const closeTutorial = useCallback(() => {
     saveTutorialState(storageKey);
     setIsOpen(false);
     window.scrollTo(initialWindowScrollRef.current.x, initialWindowScrollRef.current.y);
   }, [storageKey]);
+
+  // Sync isTutorialActive in the global store so toggleHelp can block chatbot opens.
+  useEffect(() => {
+    setTutorialActive(isOpen);
+    return () => { if (isOpen) setTutorialActive(false); };
+  }, [isOpen, setTutorialActive]);
 
   useEffect(() => {
     setIsOpen(startOpen && !hasCompletedTutorial(storageKey));

@@ -29,48 +29,7 @@ import {
   buildClassificationAutoPlan,
   buildRegressionAutoPlan,
 } from './standardTrainingProfiles';
-import { TutorialOverlay, TutorialStep } from '../../../components/TutorialOverlay';
 
-const STEP4_AUTO_TUTORIAL_STEPS: TutorialStep[] = [
-  {
-    eyebrow: 'Step 4 — Clinical Goal',
-    title: 'Pick the clinical priority for champion selection.',
-    body: 'High Sensitivity catches as many real cases as possible. High Precision only alerts when confident. Balanced keeps both errors in check. Step 5 ranks models according to your choice here.',
-    targetSelector: '[data-tutorial="step4-goals"]',
-    placement: 'bottom',
-  },
-  {
-    eyebrow: 'Step 4 — Model Selection',
-    title: 'Toggle models in or out of the training batch.',
-    body: 'All models are included by default. Click any card to exclude it. Fewer models train faster; more models give a broader performance comparison in Step 5.',
-    targetSelector: '[data-tutorial="step4-models"]',
-    placement: 'top',
-  },
-  {
-    eyebrow: 'Step 4 — Start Training',
-    title: 'Click Train to queue all selected models.',
-    body: 'The queue panel shows live status for each run. Once training finishes, Continue becomes available and takes you to Step 5 where the champion model is automatically identified.',
-    targetSelector: '[data-tutorial="step4-train-btn"]',
-    placement: 'top',
-  },
-];
-
-const STEP4_DS_TUTORIAL_STEPS: TutorialStep[] = [
-  {
-    eyebrow: 'Step 4 — Model Selector',
-    title: 'Pick a model from the tab bar to inspect it.',
-    body: 'Each tab shows parameters for one algorithm. Adjust hyperparameters, then click Queue Current Run to add it to the training queue. You can queue multiple models.',
-    targetSelector: '[data-tutorial="step4-ds-tabs"]',
-    placement: 'bottom',
-  },
-  {
-    eyebrow: 'Step 4 — Queue Panel',
-    title: 'The queue panel tracks every run in real time.',
-    body: 'Queued runs appear here. When all finish, Continue unlocks and takes you to Step 5 where results from all runs are compared side by side.',
-    targetSelector: '[data-tutorial="step4-ds-queue"]',
-    placement: 'left',
-  },
-];
 
 const ACTIVE_TASK_STATUSES: TaskStatus[] = ['queued', 'running', 'cancelling'];
 
@@ -293,11 +252,6 @@ export const Step4ModelTraining: React.FC = () => {
 
     return (
       <div className="space-y-6">
-        <TutorialOverlay
-          steps={STEP4_AUTO_TUTORIAL_STEPS}
-          storageKey="import-math-step4-auto-tutorial-v1"
-          reopenEventName="import-math-open-step4-tutorial"
-        />
         <div className="ha-card-muted p-6 sm:p-8">
           <div className="max-w-3xl">
             <p className="ha-section-label" style={{ color: 'var(--accent-ink)' }}>
@@ -466,11 +420,6 @@ export const Step4ModelTraining: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      <TutorialOverlay
-        steps={STEP4_DS_TUTORIAL_STEPS}
-        storageKey="import-math-step4-ds-tutorial-v1"
-        reopenEventName="import-math-open-step4-ds-tutorial"
-      />
       <div className="ha-card overflow-hidden p-0">
         <div className="border-b border-[var(--border)] bg-[radial-gradient(circle_at_top_left,_rgba(var(--accent-rgb),0.14),_transparent_34%),radial-gradient(circle_at_top_right,_rgba(var(--accent-rgb),0.08),_transparent_34%),linear-gradient(180deg,_#ffffff,_#f4fbfb)] px-6 py-7">
           <h2 className="flex items-center gap-2 text-2xl font-black tracking-tight text-[var(--text)]">

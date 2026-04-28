@@ -16,24 +16,7 @@ import FeatureSelectionTab from './tabs/FeatureSelectionTab';
 import ImbalanceTab from './tabs/ImbalanceTab';
 import PreprocessingReviewTab from './tabs/PreprocessingReviewTab';
 import { ClinicalAutoPrepView } from './ClinicalAutoPrepView';
-import { TutorialOverlay, TutorialStep } from '../../components/TutorialOverlay';
 
-const STEP3_DS_TUTORIAL_STEPS: TutorialStep[] = [
-  {
-    eyebrow: 'Step 3 — Prep Pipeline',
-    title: 'Work through each stage in this sidebar.',
-    body: 'Select a stage to configure it on the right. Completed stages turn green with a checkmark. Work through Cleaning, Split, Imputation, Outliers, Encoding, Scaling, and Feature Selection before the final Review.',
-    targetSelector: '[data-tutorial="step3-sidebar"]',
-    placement: 'right',
-  },
-  {
-    eyebrow: 'Step 3 — Configuration Panel',
-    title: 'Adjust settings and accept each stage.',
-    body: 'The right panel shows options for the selected stage. When you are satisfied, click Accept to mark it complete. All accepted decisions are bundled into the pipeline config before model training starts.',
-    targetSelector: '[data-tutorial="step3-content"]',
-    placement: 'left',
-  },
-];
 
 export const Step3_DataPreparation: React.FC = () => {
   const sessionId = useDomainStore((s) => s.sessionId);
@@ -80,11 +63,6 @@ export const Step3_DataPreparation: React.FC = () => {
 
   return (
     <div className="w-full space-y-6">
-      <TutorialOverlay
-        steps={STEP3_DS_TUTORIAL_STEPS}
-        storageKey="import-math-step3-ds-tutorial-v1"
-        reopenEventName="import-math-open-step3-tutorial"
-      />
       <div className="ha-card overflow-hidden">
         <div className="mx-4 mb-4 mt-4 rounded-[28px] border border-[rgba(190,201,193,0.4)] bg-[radial-gradient(circle_at_top_left,_rgba(195,236,215,0.5),_transparent_34%),radial-gradient(circle_at_top_right,_rgba(156,245,202,0.42),_transparent_35%),linear-gradient(180deg,_#fcfefd,_#eef7f1)] px-7 py-8 shadow-[0_18px_42px_rgba(0,89,62,0.06)] sm:px-10">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">

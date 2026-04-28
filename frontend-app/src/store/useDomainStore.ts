@@ -75,6 +75,8 @@ interface DomainState {
   workflowVersion: number;
   sessionId: string;
   isHelpOpen: boolean;
+  /** True while any TutorialOverlay is mounted and visible — blocks toggleHelp from opening the drawer. */
+  isTutorialActive: boolean;
   hasChosenMode: boolean;
   currentStep: number;
   step1Confirmed: boolean;
@@ -90,6 +92,7 @@ interface DomainState {
   setTheme: (theme: 'light' | 'dark') => void;
   resetApp: () => Promise<void>;
   toggleHelp: () => void;
+  setTutorialActive: (active: boolean) => void;
   setCurrentStep: (step: number) => void;
   confirmStep1: () => void;
   setSchemaValid: (valid: boolean) => void;
@@ -112,6 +115,7 @@ export const useDomainStore = create<DomainState>((set, get) => ({
   workflowVersion: 1,
   sessionId: createSessionId(DEFAULT_DOMAIN_ID, 1),
   isHelpOpen: false,
+  isTutorialActive: false,
   hasChosenMode: false,
   currentStep: 1,
   step1Confirmed: false,
@@ -144,6 +148,7 @@ export const useDomainStore = create<DomainState>((set, get) => ({
       hasChosenMode: true,
       currentStep: 1,
       step1Confirmed: false,
+      isHelpOpen: false,
     }),
 
   setUserMode: (mode: 'clinical' | 'data_scientist') =>
@@ -164,6 +169,7 @@ export const useDomainStore = create<DomainState>((set, get) => ({
         workflowVersion: nextWorkflowVersion,
         sessionId: createSessionId(DEFAULT_DOMAIN_ID, nextWorkflowVersion),
         isHelpOpen: false,
+        isTutorialActive: false,
         ...getInitialWorkflowState(hasChosenMode),
         schemaValid: false,
         step5Completed: false,
@@ -173,7 +179,17 @@ export const useDomainStore = create<DomainState>((set, get) => ({
     }
   },
 
-  toggleHelp: () => set((state) => ({ isHelpOpen: !state.isHelpOpen })),
+  toggleHelp: () => {
+    // Never open the chatbot while a tutorial is active — prevents accidental opens
+    // triggered by scrollIntoView / keyboard events when the tutorial spotlights the AI button.
+    if (get().isTutorialActive && !get().isHelpOpen) return;
+    set((state) => ({ isHelpOpen: !state.isHelpOpen }));
+  },
+
+  setTutorialActive: (active: boolean) => {
+    // Force-close the drawer whenever any tutorial becomes active.
+    set({ isTutorialActive: active, ...(active ? { isHelpOpen: false } : {}) });
+  },
 
   setCurrentStep: (step: number) => {
     const { currentStep, step1Confirmed, schemaValid, step5Completed, step6Completed } = get();

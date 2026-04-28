@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { BookOpen, HelpCircle, RotateCcw, SunMoon, Sun, Moon } from 'lucide-react';
+import { HelpCircle, RotateCcw, SunMoon, Sun, Moon } from 'lucide-react';
 import { useDomainStore } from '../store/useDomainStore';
 import { domains } from '../config/domainConfig';
 
@@ -116,15 +116,6 @@ export const TopNavbar: React.FC = () => {
             Step {currentStep} of {TOTAL_STEPS} · {progressPercent}%
           </div>
 
-          <button
-            type="button"
-            onClick={() => window.dispatchEvent(new Event('import-math-open-workflow-tutorial'))}
-            className="ha-button-secondary inline-flex h-11 w-11 items-center justify-center p-0"
-            aria-label="Open tutorial"
-            title="Tutorial"
-          >
-            <BookOpen size={17} />
-          </button>
 
           <button
             type="button"

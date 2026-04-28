@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   Sparkles,
   Stethoscope,
+  SunMoon,
 } from 'lucide-react';
 import { useDomainStore } from '../store/useDomainStore';
 import { TutorialOverlay, TutorialStep } from './TutorialOverlay';
@@ -105,23 +106,24 @@ const LANDING_TUTORIAL_STEPS: TutorialStep[] = [
     title: 'Choose your working style first.',
     body: 'Doctor Mode keeps the workflow guided and clinical. Data Scientist mode exposes more technical controls. Select the card that matches your role — you can switch modes anytime from the top bar inside the workflow.',
     targetSelector: '[data-tutorial="mode-selection"]',
-    placement: 'bottom',
+    placement: 'right',
   },
   {
     eyebrow: 'Welcome — Step 2 of 3',
     title: 'Click Start Exploring to enter the workflow.',
     body: 'Once you have chosen a mode, click this button to begin the 7-step journey: Clinical Context → Data Exploration → Preparation → Training → Results → Explainability → Final Audit.',
     targetSelector: '[data-tutorial="start-exploring"]',
-    placement: 'top',
+    placement: 'right',
   },
   {
     eyebrow: 'Welcome — Step 3 of 3',
     title: 'The Tutorial button is always available.',
     body: 'Use the Tutorial button at any time to replay these hints. Once inside the workflow, a floating AI assistant is ready to explain metrics, locked steps, feature importance, and explainability sliders.',
     targetSelector: '[data-tutorial="start-exploring"]',
-    placement: 'top',
+    placement: 'right',
   },
 ];
+
 
 function useCountUp(target: number, active: boolean, duration = 1400) {
   const [value, setValue] = useState(0);
@@ -184,6 +186,8 @@ const EvidenceCard: React.FC<{
 
 export const ExperienceModeScreen: React.FC = () => {
   const chooseMode = useDomainStore((state) => state.chooseMode);
+  const theme = useDomainStore((state) => state.theme);
+  const setTheme = useDomainStore((state) => state.setTheme);
   const [selectedMode, setSelectedMode] = useState<'clinical' | 'data_scientist'>('clinical');
   const [activeSlide, setActiveSlide] = useState(0);
 
@@ -211,6 +215,15 @@ export const ExperienceModeScreen: React.FC = () => {
               <span>Import Math AI</span>
             </div>
             <div className="flex items-center gap-3">
+              <button
+                type="button"
+                className="ha-ref-nav-ghost inline-flex h-10 w-10 items-center justify-center p-0"
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                aria-label="Toggle theme"
+                title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              >
+                <SunMoon size={17} />
+              </button>
               <button
                 type="button"
                 className="ha-ref-nav-ghost"

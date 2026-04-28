@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Step1_ClinicalContext } from "./components/Step1_ClinicalContext.tsx";
 import { Step2_DataExploration } from "./features/dataExploration/Step2_DataExploration.tsx";
 import { Step3_DataPreparation } from "./features/dataPreparation/Step3_DataPreparation.tsx";
@@ -12,6 +13,12 @@ import { useDomainStore } from "./store/useDomainStore.ts";
 function App() {
   const currentStep = useDomainStore((s) => s.currentStep);
   const hasChosenMode = useDomainStore((s) => s.hasChosenMode);
+  const theme = useDomainStore((s) => s.theme);
+
+  // Apply data-theme to <html> so dark CSS vars work everywhere including landing page
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
 
   if (!hasChosenMode) {
     return <ExperienceModeScreen />;

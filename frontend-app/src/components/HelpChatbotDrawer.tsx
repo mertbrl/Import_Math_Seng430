@@ -13,7 +13,8 @@ interface Message {
 }
 
 export const HelpChatbotDrawer: React.FC = () => {
-  const { isHelpOpen, toggleHelp, userMode, selectedDomainId, currentStep } = useDomainStore();
+  const { isHelpOpen, toggleHelp, userMode, selectedDomainId, currentStep, isTutorialActive } = useDomainStore();
+  const [mountedAt] = useState(() => Date.now());
   const edaStore = useEDAStore();
   const prepStore = useDataPrepStore();
   const modelStore = useModelStore();
@@ -160,8 +161,13 @@ export const HelpChatbotDrawer: React.FC = () => {
     <>
       <button
         type="button"
-        onClick={toggleHelp}
+        onClick={(e) => {
+          if (isTutorialActive) return;  // Never open during tutorial
+          if (Date.now() - mountedAt < 500 && e.detail === 0) return;
+          toggleHelp();
+        }}
         className={`ha-floating-ai-button ${isHelpOpen ? 'ha-floating-ai-button-open' : ''}`}
+        style={isTutorialActive ? { pointerEvents: 'none', opacity: 0.5 } : undefined}
         data-tutorial="floating-ai-chat"
         aria-label="Open HEALTH-AI Assistant"
         title="HEALTH-AI Assistant"
@@ -176,19 +182,19 @@ export const HelpChatbotDrawer: React.FC = () => {
         </span>
       </button>
 
-      {/* Backdrop overlay */}
+      {/* Backdrop overlay — hidden during tutorial */}
       <div 
-        onClick={toggleHelp}
+        onClick={isTutorialActive ? undefined : toggleHelp}
         className={`fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[60] transition-opacity duration-300 ${
-          isHelpOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+          isHelpOpen && !isTutorialActive ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
         aria-hidden="true"
       />
 
-      {/* Slide-over Drawer */}
+      {/* Slide-over Drawer — hidden during tutorial */}
       <div 
         className={`fixed top-0 right-0 h-full w-full sm:w-[420px] bg-slate-50 shadow-2xl z-[70] transform transition-transform duration-300 ease-in-out flex flex-col ${
-          isHelpOpen ? 'translate-x-0' : 'translate-x-full'
+          isHelpOpen && !isTutorialActive ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
         {/* Drawer Header */}

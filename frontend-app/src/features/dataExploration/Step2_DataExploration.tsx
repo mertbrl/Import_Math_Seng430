@@ -9,24 +9,7 @@ import { BACKEND_URL_HINT } from '../../config/apiConfig';
 import { checkBackendHealth, exploreDataset } from '../../services/pipelineApi';
 import ColumnConfigurator from './ColumnConfigurator';
 import PreAnalysisPreview from './PreAnalysisPreview';
-import { TutorialOverlay, TutorialStep } from '../../components/TutorialOverlay';
 
-const STEP2_TUTORIAL_STEPS: TutorialStep[] = [
-  {
-    eyebrow: 'Step 2 — Data Exploration',
-    title: 'Upload your dataset to begin analysis.',
-    body: 'Drag and drop or click to upload your CSV file. The backend will compute distributions, schema quality checks, and missingness automatically. Use the sample domain file if you do not have a dataset ready.',
-    targetSelector: '[data-tutorial="step2-upload"]',
-    placement: 'right',
-  },
-  {
-    eyebrow: 'Step 2 — Analysis Tabs',
-    title: 'Review each tab after the file loads.',
-    body: 'Data Preview shows raw rows. Data Health flags quality issues and alerts. Feature Explorer profiles each column. Missing Data maps gaps. Target Mapping confirms the prediction target column. Once satisfied, click Continue.',
-    targetSelector: '[data-tutorial="step2-tabs"]',
-    placement: 'bottom',
-  },
-];
 
 export const Step2_DataExploration: React.FC = () => {
   const selectedDomainId = useDomainStore((state) => state.selectedDomainId);
@@ -64,11 +47,6 @@ export const Step2_DataExploration: React.FC = () => {
 
   return (
     <div className="ha-step2-shell space-y-6" id="step-2">
-      <TutorialOverlay
-        steps={STEP2_TUTORIAL_STEPS}
-        storageKey="import-math-step2-tutorial-v1"
-        reopenEventName="import-math-open-step2-tutorial"
-      />
       <div className="ha-card overflow-hidden border-[rgba(190,201,193,0.38)] bg-white/85 shadow-[0_14px_40px_rgba(14,116,82,0.06)]">
         <div className="border-b border-[rgba(190,201,193,0.42)] bg-[linear-gradient(180deg,#f8fbf8,#f2f7f3)] px-7 py-8 sm:px-10">
           <div className="flex flex-wrap gap-6 lg:flex-row lg:items-end lg:justify-between">

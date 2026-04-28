@@ -982,6 +982,102 @@
     text-align: right;
   }
 
+  /* ── Dark mode overrides for landing page ── */
+  [data-theme='dark'] .ha-landing-hero {
+    background: #07110d;
+  }
+
+  [data-theme='dark'] .ha-ref-nav {
+    background: rgba(7, 17, 13, 0.92);
+    border-color: rgba(30, 41, 59, 0.8);
+  }
+
+  [data-theme='dark'] .ha-ref-brand {
+    color: #a7f3d0;
+  }
+
+  [data-theme='dark'] .ha-ref-nav-ghost {
+    border-color: rgba(30, 41, 59, 0.8);
+    background: rgba(17, 24, 39, 0.8);
+    color: #a7f3d0;
+  }
+
+  [data-theme='dark'] .ha-ref-title {
+    color: #6ee7b7;
+  }
+
+  [data-theme='dark'] .ha-ref-description {
+    color: var(--text2);
+  }
+
+  [data-theme='dark'] .ha-ref-primary {
+    background: linear-gradient(135deg, #005930 0%, #0d7a52 100%);
+    box-shadow: 0 18px 34px rgba(0, 89, 62, 0.4);
+  }
+
+  [data-theme='dark'] .ha-ref-modes-wrap {
+    background: #0a110e;
+  }
+
+  [data-theme='dark'] .ha-ref-mode-card {
+    background: rgba(17, 24, 20, 0.92);
+    border-color: rgba(30, 41, 35, 0.8);
+    color: var(--text);
+  }
+
+  [data-theme='dark'] .ha-ref-mode-title {
+    color: var(--text);
+  }
+
+  [data-theme='dark'] .ha-ref-mode-text {
+    color: var(--text2);
+  }
+
+  [data-theme='dark'] .ha-slider-card {
+    background: rgba(17, 24, 20, 0.92);
+    border-color: rgba(30, 41, 35, 0.8);
+  }
+
+  [data-theme='dark'] .ha-ref-highlights {
+    background: #07110d;
+  }
+
+  [data-theme='dark'] .ha-ref-feature-card {
+    background: rgba(17, 24, 20, 0.92);
+    border-color: rgba(30, 41, 35, 0.8);
+  }
+
+  [data-theme='dark'] .ha-ref-footer {
+    background: #050d09;
+    border-color: rgba(30, 41, 35, 0.8);
+  }
+
+  [data-theme='dark'] .ha-ref-footer-brand {
+    color: #6ee7b7;
+  }
+
+  [data-theme='dark'] .ha-ref-footer-copy {
+    color: var(--text3);
+  }
+
+  [data-theme='dark'] .ha-display {
+    color: var(--text);
+  }
+
+  [data-theme='dark'] .ha-body {
+    color: var(--text2);
+  }
+
+  [data-theme='dark'] .ha-section-label {
+    color: var(--text3);
+  }
+
+  [data-theme='dark'] .ha-pill {
+    background: rgba(17, 24, 20, 0.9);
+    border-color: rgba(30, 41, 35, 0.8);
+    color: var(--text2);
+  }
+
   .ha-tutorial-overlay {
     position: fixed;
     inset: 0;
