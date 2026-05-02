@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useDomainStore } from '../store/useDomainStore';
 import { TutorialOverlay, TutorialStep } from './TutorialOverlay';
+import { DataLensVisualizer } from './DataLensVisualizer';
 
 const MODE_OPTIONS = [
   {
@@ -249,13 +250,8 @@ export const ExperienceModeScreen: React.FC = () => {
               </button>
             </div>
 
-            <div className="ha-ref-visual">
-              <img
-                className="ha-ref-image"
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuCQrVHhXZh5oIf5MKfXYSX92adr7ilHqIpTY2dqfVj7mGWUAY3QSvTzRXHFA-K5EOaSWnyKUBSaJvjyeVSppiwDsNZTlTFmAYEhTx2j3g1HOdEdr0Cb4V3X9hiUVxz6nzditxBdBYZhqILUipWOSo99QHNqt6-O7_2JcUbIAfAZH58FyIL0qwaA8CbAepsKY0x7sjH9cQMonrqze_ywNSzWdt0TKNuLhv4rEUzAast6VoLpVfUISyjj7xppDV0A-jSkCg92JSil1Q"
-                alt="Medical AI visualization"
-              />
-              <div className="ha-ref-visual-overlay" />
+            <div className="ha-ref-visual relative overflow-hidden h-full min-h-[400px] !border-none !bg-transparent !shadow-none">
+              <DataLensVisualizer />
             </div>
           </div>
         </div>
