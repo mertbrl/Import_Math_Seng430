@@ -23,7 +23,7 @@ export type SvmGamma = 'scale' | 'auto';
 export type RFMaxFeatures = 'sqrt' | 'log2' | 'all';
 export type SearchScoring = 'auto' | 'accuracy' | 'f1' | 'precision' | 'recall' | 'roc_auc';
 export type ProblemType = 'classification' | 'multiclass' | 'regression';
-export type ChampionPreference = 'recall' | 'precision' | 'f1' | 'rmse';
+export type ChampionPreference = 'recall' | 'precision' | 'f1' | 'rmse' | 'mae' | 'r2';
 
 export interface ModelTask {
   taskId: string;
@@ -426,6 +426,24 @@ function compareResultsForPreference(
       return leftScore - rightScore;
     }
     return (rightMetrics.r2 ?? Number.NEGATIVE_INFINITY) - (leftMetrics.r2 ?? Number.NEGATIVE_INFINITY);
+  }
+
+  if (preference === 'mae') {
+    const leftScore = (leftMetrics.mae ?? Number.POSITIVE_INFINITY) + leftPenalty;
+    const rightScore = (rightMetrics.mae ?? Number.POSITIVE_INFINITY) + rightPenalty;
+    if (leftScore !== rightScore) {
+      return leftScore - rightScore;
+    }
+    return (leftMetrics.rmse ?? Number.POSITIVE_INFINITY) - (rightMetrics.rmse ?? Number.POSITIVE_INFINITY);
+  }
+
+  if (preference === 'r2') {
+    const leftScore = (leftMetrics.r2 ?? Number.NEGATIVE_INFINITY) - leftPenalty;
+    const rightScore = (rightMetrics.r2 ?? Number.NEGATIVE_INFINITY) - rightPenalty;
+    if (leftScore !== rightScore) {
+      return rightScore - leftScore;
+    }
+    return (leftMetrics.rmse ?? Number.POSITIVE_INFINITY) - (rightMetrics.rmse ?? Number.POSITIVE_INFINITY);
   }
 
   const metricKey = preference === 'recall' ? 'recall' : preference === 'precision' ? 'precision' : 'f1_score';

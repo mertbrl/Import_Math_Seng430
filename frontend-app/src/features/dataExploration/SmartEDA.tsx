@@ -51,7 +51,14 @@ const SmartEDA: React.FC<SmartEDAProps> = ({ data }) => {
           />
         );
       case 'target':
-        return <TargetMappingTab columns={data.columns} totalRows={data.summary.numObservations} />;
+        return (
+          <TargetMappingTab
+            columns={data.columns}
+            totalRows={data.summary.numObservations}
+            allColumnNames={data.preview.headers}
+            previewRows={data.preview.rows}
+          />
+        );
       case 'missing':
         return (
           <MissingDataTab

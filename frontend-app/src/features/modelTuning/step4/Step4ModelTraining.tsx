@@ -31,7 +31,8 @@ import {
 } from './standardTrainingProfiles';
 
 
-const ACTIVE_TASK_STATUSES: TaskStatus[] = ['queued', 'running', 'cancelling'];
+const POLLABLE_TASK_STATUSES: TaskStatus[] = ['queued', 'running', 'cancelling'];
+const BLOCKING_TASK_STATUSES: TaskStatus[] = ['queued', 'running'];
 
 const CLINICAL_GOALS = [
   {
@@ -56,10 +57,37 @@ const CLINICAL_GOALS = [
 
 type ClinicalGoal = (typeof CLINICAL_GOALS)[number]['value'];
 
+const REGRESSION_GOALS = [
+  {
+    value: 'rmse' as const,
+    title: 'Avoid the biggest prediction misses',
+    description: 'Best when a very wrong estimate could lead the team toward the wrong level of follow-up. Step 5 will favor models with lower RMSE, so larger mistakes are penalized more heavily while overfit-heavy runs are pushed down.',
+    icon: Siren,
+  },
+  {
+    value: 'mae' as const,
+    title: 'Keep the day-to-day error steady',
+    description: 'Best when clinicians want the typical bedside error to stay consistently small from patient to patient. Step 5 will favor lower MAE, which rewards tighter average prediction error without letting a few runs dominate the story.',
+    icon: ShieldCheck,
+  },
+  {
+    value: 'r2' as const,
+    title: 'Explain as much patient variation as possible',
+    description: 'Best when the goal is the strongest overall fit across mixed patient patterns. Step 5 will favor higher R², then filter down runs that look less trustworthy because of overfitting.',
+    icon: Scale,
+  },
+] as const;
+
+type RegressionGoal = (typeof REGRESSION_GOALS)[number]['value'];
+
 function goalToPreference(goal: ClinicalGoal): ChampionPreference {
   if (goal === 'high_sensitivity') return 'recall';
   if (goal === 'high_precision') return 'precision';
   return 'f1';
+}
+
+function regressionGoalToPreference(goal: RegressionGoal): ChampionPreference {
+  return goal;
 }
 
 export const Step4ModelTraining: React.FC = () => {
@@ -85,13 +113,16 @@ export const Step4ModelTraining: React.FC = () => {
   const [stopModalOpen, setStopModalOpen] = useState(false);
   const [queueingKey, setQueueingKey] = useState<string | null>(null);
   const [queueError, setQueueError] = useState<string | null>(null);
+  const [isStoppingRemaining, setIsStoppingRemaining] = useState(false);
   const [clinicalGoal, setClinicalGoal] = useState<ClinicalGoal>('balanced');
+  const [regressionGoal, setRegressionGoal] = useState<RegressionGoal>('rmse');
   const [excludedModels, setExcludedModels] = useState<ModelId[]>([]);
 
   const isRegression = mlTask === 'regression';
   const isAutoMode = userMode === 'clinical' || isRegression;
   const queueItems = useMemo(() => Object.values(tasks), [tasks]);
-  const activeTasks = queueItems.filter((task) => ACTIVE_TASK_STATUSES.includes(task.status)).length;
+  const activeTasks = queueItems.filter((task) => BLOCKING_TASK_STATUSES.includes(task.status)).length;
+  const stoppingTasks = queueItems.filter((task) => task.status === 'cancelling').length;
   const completedRuns = Object.keys(results).length;
 
   const autoModels = useMemo(
@@ -103,6 +134,11 @@ export const Step4ModelTraining: React.FC = () => {
     [autoModels, excludedModels],
   );
   const hasActiveBatch = activeTasks > 0;
+  const selectedChampionPreference = isRegression
+    ? regressionGoalToPreference(regressionGoal)
+    : userMode === 'clinical'
+      ? goalToPreference(clinicalGoal)
+      : 'f1';
 
   const queueSingleRun = async (
     model: ModelId,
@@ -145,7 +181,7 @@ export const Step4ModelTraining: React.FC = () => {
     setQueueError(null);
     setQueueingKey(model);
     setPhase('training');
-    setChampionPreference('f1');
+    setChampionPreference(selectedChampionPreference);
 
     try {
       await queueSingleRun(
@@ -172,7 +208,7 @@ export const Step4ModelTraining: React.FC = () => {
     setQueueError(null);
     setQueueingKey('auto-plan');
     setPhase('training');
-    setChampionPreference(isRegression ? 'rmse' : goalToPreference(clinicalGoal));
+    setChampionPreference(selectedChampionPreference);
 
     const plan = (isRegression
       ? buildRegressionAutoPlan(totalRows)
@@ -200,13 +236,15 @@ export const Step4ModelTraining: React.FC = () => {
     }
   };
 
-  const handleStopRemaining = async () => {
+  const handleStopRemaining = async (): Promise<boolean> => {
     const activeQueue = Object.values(useModelStore.getState().tasks).filter((task) =>
-      ACTIVE_TASK_STATUSES.includes(task.status),
+      POLLABLE_TASK_STATUSES.includes(task.status),
     );
-    if (activeQueue.length === 0) return;
+    if (activeQueue.length === 0) return true;
 
     try {
+      setIsStoppingRemaining(true);
+      setQueueError(null);
       await cancelTrainingTasks({
         session_id: sessionId,
         task_ids: activeQueue.map((task) => task.taskId),
@@ -219,20 +257,28 @@ export const Step4ModelTraining: React.FC = () => {
           status: task.status === 'queued' ? 'cancelled' : 'cancelling',
         });
       });
+      return true;
     } catch (error) {
       console.error(error);
+      setQueueError(error instanceof Error ? error.message : 'The remaining model runs could not be stopped.');
+      return false;
+    } finally {
+      setIsStoppingRemaining(false);
     }
   };
 
-  useEffect(() => {
-    if (isRegression) {
-      setChampionPreference('rmse');
+  const handleOpenResults = () => {
+    if (completedRuns === 0) return;
+    if (hasActiveBatch) {
+      setStopModalOpen(true);
       return;
     }
-    if (userMode === 'clinical') {
-      setChampionPreference(goalToPreference(clinicalGoal));
-    }
-  }, [clinicalGoal, isRegression, setChampionPreference, userMode]);
+    setCurrentStep(5);
+  };
+
+  useEffect(() => {
+    setChampionPreference(selectedChampionPreference);
+  }, [selectedChampionPreference, setChampionPreference]);
 
   useEffect(() => {
     setExcludedModels((current) => current.filter((modelId) => autoModels.includes(modelId)));
@@ -241,7 +287,7 @@ export const Step4ModelTraining: React.FC = () => {
   if (isAutoMode) {
     const pageTitle = isRegression ? 'Step 4: Regression Training' : 'Step 4: Model Training';
     const pageCopy = isRegression
-      ? 'Queue the full 11-model regression pack with stable default settings tuned for solid baseline performance without long searches.'
+      ? 'Choose what kind of regression behavior matters most for the clinical review, then queue the selected models in one click with standard defaults.'
       : 'Choose the clinical decision style once, then queue the selected models in one click with standard defaults.';
     const selectedCount = selectedAutoModels.length;
     const toggleModelExclusion = (modelId: ModelId) => {
@@ -264,39 +310,49 @@ export const Step4ModelTraining: React.FC = () => {
           </div>
         </div>
 
-        {!isRegression ? (
-          <div className="grid gap-4 lg:grid-cols-3" data-tutorial="step4-goals">
-            {CLINICAL_GOALS.map((goal) => {
-              const Icon = goal.icon;
-              const active = clinicalGoal === goal.value;
-              return (
-                <button
-                  key={goal.value}
-                  type="button"
-                  onClick={() => setClinicalGoal(goal.value)}
-                  className={`ha-card text-left transition-all ${
-                    active
-                      ? 'border-[rgba(0,89,62,0.4)] bg-[linear-gradient(180deg,#ffffff,#e8f6ee)] ring-2 ring-[rgba(0,89,62,0.16)] shadow-[0_18px_40px_rgba(0,89,62,0.14)]'
-                      : 'border-[rgba(190,201,193,0.48)] bg-white hover:border-[rgba(0,89,62,0.22)]'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className={`grid h-12 w-12 place-items-center rounded-2xl ${active ? 'bg-[var(--accent)] text-white' : 'bg-[var(--accent-soft)] text-[var(--accent)]'}`}>
-                      <Icon size={22} />
-                    </div>
-                    <span className={`rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] ${active ? 'bg-[var(--accent-soft)] text-[var(--accent-ink)]' : 'bg-slate-100 text-slate-600'}`}>
-                      {active ? 'Selected Mode' : 'Champion Rule'}
-                    </span>
+        <div className="grid gap-4 lg:grid-cols-3" data-tutorial="step4-goals">
+          {(isRegression ? REGRESSION_GOALS : CLINICAL_GOALS).map((goal) => {
+            const Icon = goal.icon;
+            const active = isRegression ? regressionGoal === goal.value : clinicalGoal === goal.value;
+            return (
+              <button
+                key={goal.value}
+                type="button"
+                onClick={() => {
+                  if (isRegression) {
+                    setRegressionGoal(goal.value as RegressionGoal);
+                    return;
+                  }
+                  setClinicalGoal(goal.value as ClinicalGoal);
+                }}
+                className={`ha-card text-left transition-all ${
+                  active
+                    ? 'border-[rgba(0,89,62,0.4)] bg-[linear-gradient(180deg,#ffffff,#e8f6ee)] ring-2 ring-[rgba(0,89,62,0.16)] shadow-[0_18px_40px_rgba(0,89,62,0.14)]'
+                    : 'border-[rgba(190,201,193,0.48)] bg-white hover:border-[rgba(0,89,62,0.22)]'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className={`grid h-12 w-12 place-items-center rounded-2xl ${active ? 'bg-[var(--accent)] text-white' : 'bg-[var(--accent-soft)] text-[var(--accent)]'}`}>
+                    <Icon size={22} />
                   </div>
-                  <h3 className="mt-5 text-lg font-black tracking-tight text-[var(--text)]">{goal.title}</h3>
-                  <p className="mt-3 text-sm leading-7 text-[var(--text2)]">{goal.description}</p>
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
+                  <span className={`rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] ${active ? 'bg-[var(--accent-soft)] text-[var(--accent-ink)]' : 'bg-slate-100 text-slate-600'}`}>
+                    {active ? 'Selected Mode' : 'Champion Rule'}
+                  </span>
+                </div>
+                <h3 className="mt-5 text-lg font-black tracking-tight text-[var(--text)]">{goal.title}</h3>
+                <p className="mt-3 text-sm leading-7 text-[var(--text2)]">{goal.description}</p>
+              </button>
+            );
+          })}
+        </div>
 
         <div className="space-y-6">
+          {stoppingTasks > 0 ? (
+            <div className="rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              Stop requested for {stoppingTasks} run{stoppingTasks === 1 ? '' : 's'}. Queued models stop right away. A model that is already fitting may need a short moment to exit cleanly.
+            </div>
+          ) : null}
+
           <div className="ha-card p-6" data-tutorial="step4-split">
             <div className="rounded-[18px] border border-[rgba(190,201,193,0.48)] bg-white/80 px-4 py-4">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -380,15 +436,17 @@ export const Step4ModelTraining: React.FC = () => {
                 void handleStopRemaining();
               }}
               emptyMessage="No training run has started yet."
+              stopDisabled={isStoppingRemaining}
+              stopLabel={isStoppingRemaining ? 'Stopping...' : 'Stop remaining'}
             />
           </div>
 
-          <div className="flex border-t border-[var(--border)] pt-5">
+          <div className="flex flex-wrap items-center gap-3 border-t border-[var(--border)] pt-5">
             <button
               type="button"
               data-tutorial="step4-train-btn"
               onClick={() => void queueAutoPlan()}
-              disabled={queueingKey !== null || hasActiveBatch}
+              disabled={queueingKey !== null || hasActiveBatch || isStoppingRemaining}
               className="ha-button-primary inline-flex items-center justify-center gap-3"
             >
               {queueingKey === 'auto-plan' ? <Loader2 size={18} className="animate-spin" /> : hasActiveBatch ? <Activity size={18} /> : <Play size={18} />}
@@ -396,6 +454,16 @@ export const Step4ModelTraining: React.FC = () => {
                 ? 'Batch Running'
                 : `Train ${selectedCount} Selected Model${selectedCount === 1 ? '' : 's'}`}
             </button>
+            {completedRuns > 0 ? (
+              <button
+                type="button"
+                onClick={handleOpenResults}
+                disabled={isStoppingRemaining}
+                className="ha-button-secondary inline-flex items-center justify-center gap-3"
+              >
+                {hasActiveBatch ? 'Continue With Finished Results' : 'Open Results'}
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -503,16 +571,29 @@ export const Step4ModelTraining: React.FC = () => {
               <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-ink-200 pt-4">
                 <p className="text-sm text-[var(--text2)]">
                   {activeTasks} active run{activeTasks === 1 ? '' : 's'}, {completedRuns} finished
+                  {stoppingTasks > 0 ? `, ${stoppingTasks} stopping` : ''}
                 </p>
-                <button
-                  type="button"
-                  onClick={() => void queueModel(activeVizModel)}
-                  disabled={queueingKey === activeVizModel}
-                  className="ha-button-primary inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {queueingKey === activeVizModel ? <Loader2 size={18} className="animate-spin" /> : <Play size={18} />}
-                  Queue current run
-                </button>
+                <div className="flex flex-wrap items-center gap-3">
+                  {completedRuns > 0 ? (
+                    <button
+                      type="button"
+                      onClick={handleOpenResults}
+                      disabled={isStoppingRemaining}
+                      className="ha-button-secondary inline-flex items-center gap-2"
+                    >
+                      {hasActiveBatch ? 'Continue With Finished Results' : 'Open Results'}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => void queueModel(activeVizModel)}
+                    disabled={queueingKey === activeVizModel || isStoppingRemaining}
+                    className="ha-button-primary inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {queueingKey === activeVizModel ? <Loader2 size={18} className="animate-spin" /> : <Play size={18} />}
+                    Queue current run
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -522,6 +603,8 @@ export const Step4ModelTraining: React.FC = () => {
             onStopRemaining={() => {
               void handleStopRemaining();
             }}
+            stopDisabled={isStoppingRemaining}
+            stopLabel={isStoppingRemaining ? 'Stopping...' : 'Stop remaining'}
           />
         </div>
       </div>
@@ -533,8 +616,10 @@ export const Step4ModelTraining: React.FC = () => {
         onConfirm={() => {
           setStopModalOpen(false);
           void (async () => {
-            await handleStopRemaining();
-            setCurrentStep(5);
+            const stopped = await handleStopRemaining();
+            if (stopped) {
+              setCurrentStep(5);
+            }
           })();
         }}
         onCancel={() => setStopModalOpen(false)}

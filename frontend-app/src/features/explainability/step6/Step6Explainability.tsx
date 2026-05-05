@@ -44,6 +44,7 @@ type RecordOption = {
   position: number;
   predicted_label: string;
   predicted_probability: number;
+  predicted_value?: number | null;
   confidence_band: 'low' | 'moderate' | 'high';
   top_feature_values?: Record<string, number | string>;
 };
@@ -59,10 +60,13 @@ type ScenarioFeature = { feature: string; impact: number; value: number; directi
 type ExplainabilityScenario = {
   record_id: string;
   prediction: {
+    prediction_mode?: 'classification' | 'multiclass' | 'regression' | string;
     target_class_index: number;
     target_class_label: string;
-    target_probability: number;
-    baseline_probability: number;
+    target_probability: number | null;
+    baseline_probability: number | null;
+    predicted_value?: number | null;
+    baseline_value?: number | null;
     delta_from_baseline: number;
     confidence_band: 'low' | 'moderate' | 'high';
     class_probabilities: Array<{ label: string; probability: number }>;
@@ -81,11 +85,14 @@ type ExplainabilityWorkbench = {
   summary: {
     algorithm: string;
     model_id: string;
+    problem_type?: 'classification' | 'multiclass' | 'regression' | string;
     class_count: number;
     cv_score: number;
     train_test_gap: number;
     stability_score: number;
     overfitting_risk: string;
+    primary_metric_name?: string;
+    primary_metric_direction?: 'higher_is_better' | 'lower_is_better' | string;
     selection_rationale: string;
   };
   global_explanation: {
@@ -121,6 +128,101 @@ function useDebouncedValue<T>(value: T, delay: number) {
 function formatPercent(value?: number | null): string {
   if (value == null) return 'N/A';
   return `${(value * 100).toFixed(1)}%`;
+}
+
+function formatNumber(value?: number | null, digits = 3): string {
+  if (value == null || Number.isNaN(value)) return 'N/A';
+  return Number(value).toFixed(digits);
+}
+
+function formatSignedNumber(value?: number | null, digits = 3): string {
+  if (value == null || Number.isNaN(value)) return 'N/A';
+  return `${value >= 0 ? '+' : ''}${Number(value).toFixed(digits)}`;
+}
+
+function formatPredictionLabel(value?: string | null): string {
+  if (!value) return 'N/A';
+  return formatFriendlyLabel(String(value));
+}
+
+function formatMetricValue(value?: number | null, metric?: string | null): string {
+  const raw = String(metric ?? '').toLowerCase();
+  if (raw === 'rmse' || raw === 'mae' || raw === 'r2') {
+    return formatNumber(value);
+  }
+  return formatPercent(value);
+}
+
+function formatImpactValue(value: number, problemType: 'classification' | 'multiclass' | 'regression'): string {
+  if (problemType === 'regression') {
+    return formatSignedNumber(value);
+  }
+  return `${value >= 0 ? '+' : ''}${(value * 100).toFixed(2)}%`;
+}
+
+function getGlobalExplainabilityCopy(
+  source: string,
+  problemType: 'classification' | 'multiclass' | 'regression',
+): string {
+  if (problemType === 'regression') {
+    return `Source: ${source}. Higher bars show which features move the numeric prediction most across the sample.`;
+  }
+  if (problemType === 'multiclass') {
+    return `Source: ${source}. Higher bars show which features separate class decisions most strongly across the sample.`;
+  }
+  return `Source: ${source}. Hover any bar to see feature distribution details.`;
+}
+
+function getLocalImpactLabels(
+  problemType: 'classification' | 'multiclass' | 'regression',
+): { title: string; increase: string; decrease: string; positiveTone: string; negativeTone: string } {
+  if (problemType === 'regression') {
+    return {
+      title: 'Value Contributions',
+      increase: 'Raises value',
+      decrease: 'Lowers value',
+      positiveTone: 'Prediction moved upward',
+      negativeTone: 'Prediction moved downward',
+    };
+  }
+  if (problemType === 'multiclass') {
+    return {
+      title: 'Class Support Contributions',
+      increase: 'Raises class support',
+      decrease: 'Lowers class support',
+      positiveTone: 'Increases support for this class',
+      negativeTone: 'Decreases support for this class',
+    };
+  }
+  return {
+    title: 'Feature Impacts',
+    increase: 'Increases risk',
+    decrease: 'Decreases risk',
+    positiveTone: 'Increases risk',
+    negativeTone: 'Decreases risk',
+  };
+}
+
+function getExplainabilityProblemType(run?: ModelResult | null, workbench?: ExplainabilityWorkbench | null): 'classification' | 'multiclass' | 'regression' {
+  const raw = String(run?.problem_type ?? workbench?.summary.problem_type ?? '').toLowerCase();
+  if (raw === 'regression') return 'regression';
+  if (raw === 'multiclass') return 'multiclass';
+  return 'classification';
+}
+
+function compareExplainabilityRuns(left: ModelResult, right: ModelResult): number {
+  const problemType = getExplainabilityProblemType(left);
+  const leftMetrics = left.test_metrics ?? left.metrics;
+  const rightMetrics = right.test_metrics ?? right.metrics;
+
+  if (problemType === 'regression') {
+    const rmseDiff = (leftMetrics.rmse ?? Number.POSITIVE_INFINITY) - (rightMetrics.rmse ?? Number.POSITIVE_INFINITY);
+    if (rmseDiff !== 0) return rmseDiff;
+    return (rightMetrics.r2 ?? Number.NEGATIVE_INFINITY) - (leftMetrics.r2 ?? Number.NEGATIVE_INFINITY);
+  }
+
+  const f1Diff = (rightMetrics.f1_score ?? 0) - (leftMetrics.f1_score ?? 0);
+  return f1Diff !== 0 ? f1Diff : (rightMetrics.accuracy ?? 0) - (leftMetrics.accuracy ?? 0);
 }
 
 function clinicalRiskLabel(value?: string | null): string {
@@ -174,7 +276,14 @@ function formatRecordLabel(record: RecordOption): string {
   return `#${record.position} · ${record.confidence_band.toUpperCase()} confidence · Predicted: ${label} (${pct}%)`;
 }
 
-function formatClinicalRecordLabel(record: RecordOption): string {
+function formatClinicalRecordLabel(
+  record: RecordOption,
+  problemType: 'classification' | 'multiclass' | 'regression' = 'classification',
+): string {
+  if (problemType === 'regression') {
+    return `Patient ${record.position} · Estimated value: ${formatNumber(record.predicted_value)}`;
+  }
+
   const pct = (record.predicted_probability * 100).toFixed(0);
   const label = decodeClinicalClassLabel(record.predicted_label).full;
   return `Patient ${record.position} · Suggested: ${label} (${pct}%)`;
@@ -419,14 +528,7 @@ export const Step6Explainability: React.FC = () => {
 
   const runs = useMemo(() => Object.values(resultsMap), [resultsMap]);
   const runLabels = useMemo(() => buildRunLabels(resultsMap, tasks), [resultsMap, tasks]);
-  const sortedRuns = useMemo(() => {
-    return [...runs].sort((l, r) => {
-      const lm = l.test_metrics ?? l.metrics;
-      const rm = r.test_metrics ?? r.metrics;
-      const d = (rm.f1_score ?? 0) - (lm.f1_score ?? 0);
-      return d !== 0 ? d : (rm.accuracy ?? 0) - (lm.accuracy ?? 0);
-    });
-  }, [runs]);
+  const sortedRuns = useMemo(() => [...runs].sort(compareExplainabilityRuns), [runs]);
 
   const champion = useMemo(() => {
     if (!bestResultTaskId) return sortedRuns[0];
@@ -451,6 +553,9 @@ export const Step6Explainability: React.FC = () => {
 
   const selectedRun = runs.find((r) => r.taskId === selectedTaskId) ?? champion;
   const isNonChampion = Boolean(selectedRun && champion && selectedRun.taskId !== champion.taskId);
+  const problemType = getExplainabilityProblemType(selectedRun, workbench);
+  const isRegression = problemType === 'regression';
+  const isMulticlass = problemType === 'multiclass' || (!isRegression && (workbench?.summary.class_count ?? 0) > 2);
 
   // Fetch workbench when run changes
   useEffect(() => {
@@ -539,7 +644,9 @@ export const Step6Explainability: React.FC = () => {
                 <p className="text-[11px] font-black uppercase tracking-[0.22em] font-mono text-slate-500">Step 6</p>
                 <h1 className="ha-step6-hero-title mt-2 text-3xl font-black tracking-tight text-slate-900">Clinical Review Summary</h1>
                 <p className="ha-step6-hero-copy mt-3 max-w-3xl text-sm leading-relaxed text-slate-600">
-                  Review the recommended system version, the main patient findings, and how the decision changes when key findings are adjusted.
+                  {problemType === 'regression'
+                    ? 'Review the recommended system version, the main patient findings, and how the estimated value changes when key findings are adjusted.'
+                    : 'Review the recommended system version, the main patient findings, and how the decision changes when key findings are adjusted.'}
                 </p>
               </div>
 
@@ -588,6 +695,7 @@ export const Step6Explainability: React.FC = () => {
               summary={workbench?.summary}
               runnerUp={runnerUp}
               clinicalMode
+              problemType={problemType}
             />
 
             {error && (
@@ -601,7 +709,7 @@ export const Step6Explainability: React.FC = () => {
               <WorkbenchSkeleton />
             ) : (
               <div className="grid gap-6 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
-                <GlobalFeaturePanel globalExplanation={workbench.global_explanation} clinicalMode />
+                <GlobalFeaturePanel globalExplanation={workbench.global_explanation} clinicalMode problemType={problemType} />
                 <LocalExplainabilityPanel
                   simulatorMode={workbench.simulator.computation_mode}
                   recordOptions={workbench.simulator.record_options}
@@ -639,6 +747,7 @@ export const Step6Explainability: React.FC = () => {
                   onFeatureChange={(feat, val) => setActiveFeatureValues((cur) => ({ ...cur, [feat]: val }))}
                   isSimulating={isSimulating}
                   clinicalMode
+                  problemType={problemType}
                 />
               </div>
             )}
@@ -956,7 +1065,11 @@ export const Step6Explainability: React.FC = () => {
               <p className="text-[11px] font-black uppercase tracking-[0.22em] font-mono text-slate-500">Step 6</p>
               <h1 className="ha-step6-hero-title mt-2 text-3xl font-black tracking-tight text-slate-900">Model Explainability</h1>
               <p className="ha-step6-hero-copy mt-3 max-w-3xl text-sm leading-relaxed text-slate-600">
-                Inspect why the champion model won, which features drive the global pattern, and how a single record shifts when you change its values.
+                {isRegression
+                  ? 'Inspect why the champion model stayed stable, which features move the predicted value most, and how a single record changes when you adjust its inputs.'
+                  : isMulticlass
+                    ? 'Inspect why the champion model won, which features support each class decision, and how a single record shifts when you change its values.'
+                    : 'Inspect why the champion model won, which features drive the global pattern, and how a single record shifts when you change its values.'}
               </p>
             </div>
 
@@ -988,14 +1101,16 @@ export const Step6Explainability: React.FC = () => {
             <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
               <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-600" />
               <span>
-                <strong>Note:</strong> This model has a higher overfitting risk. The{' '}
+                <strong>Note:</strong> {isRegression
+                  ? 'This model is less stable on holdout regression performance. The '
+                  : 'This model has a higher overfitting risk. The '}
                 <button
                   className="font-black underline underline-offset-2 hover:text-amber-700"
                   onClick={() => setSelectedTaskId(champion.taskId)}
                 >
                   Champion model
                 </button>{' '}
-                is recommended for final decisions.
+                {isRegression ? 'is recommended for the clearest explanation view.' : 'is recommended for final decisions.'}
               </span>
             </div>
           )}
@@ -1007,6 +1122,7 @@ export const Step6Explainability: React.FC = () => {
             runLabels={runLabels}
             summary={workbench?.summary}
             runnerUp={runnerUp}
+            problemType={problemType}
           />
 
           {/* ── Error ── */}
@@ -1022,7 +1138,7 @@ export const Step6Explainability: React.FC = () => {
             <WorkbenchSkeleton />
           ) : (
             <div className="grid gap-6 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
-              <GlobalFeaturePanel globalExplanation={workbench.global_explanation} />
+              <GlobalFeaturePanel globalExplanation={workbench.global_explanation} problemType={problemType} />
               <LocalExplainabilityPanel
                 simulatorMode={workbench.simulator.computation_mode}
                 recordOptions={workbench.simulator.record_options}
@@ -1057,6 +1173,7 @@ export const Step6Explainability: React.FC = () => {
                   setActiveFeatureValues((cur) => ({ ...cur, [feat]: val }))
                 }
                 isSimulating={isSimulating}
+                problemType={problemType}
               />
             </div>
           )}
@@ -1076,10 +1193,34 @@ const ChampionJustificationBanner: React.FC<{
   summary?: ExplainabilityWorkbench['summary'];
   runnerUp?: ModelResult;
   clinicalMode?: boolean;
-}> = ({ champion, selectedRun, runLabels, summary, clinicalMode }) => {
+  problemType?: 'classification' | 'multiclass' | 'regression';
+}> = ({ champion, selectedRun, runLabels, summary, clinicalMode, problemType = 'classification' }) => {
   const championLabel = runLabels[champion.taskId] ?? getModelCatalogEntry(champion.model, champion.problem_type ?? 'classification').name;
   const selectedLabel = runLabels[selectedRun.taskId] ?? getModelCatalogEntry(selectedRun.model, selectedRun.problem_type ?? 'classification').name;
   const selectedMetrics = selectedRun.test_metrics ?? selectedRun.metrics;
+  const isRegression = problemType === 'regression';
+  const isMulticlass = problemType === 'multiclass';
+  const isClinicalRegression = clinicalMode && isRegression;
+  const primaryMetricLabel = isRegression ? 'Holdout RMSE' : isMulticlass ? 'CV F1 Score' : 'CV Score';
+  const primaryMetricValue = summary
+    ? formatMetricValue(summary.cv_score, isRegression ? 'rmse' : summary.primary_metric_name)
+    : '…';
+  const gapValue = summary
+    ? isRegression
+      ? formatNumber(summary.train_test_gap)
+      : formatPercent(summary.train_test_gap)
+    : '…';
+  const gapTone = isRegression
+    ? summary && summary.train_test_gap <= 0.1
+      ? 'text-emerald-700'
+      : summary && summary.train_test_gap >= 0.25
+        ? 'text-rose-700'
+        : 'text-amber-700'
+    : summary && summary.train_test_gap <= 0.05
+      ? 'text-emerald-700'
+      : summary && summary.train_test_gap >= 0.15
+        ? 'text-rose-700'
+        : 'text-amber-700';
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
@@ -1105,21 +1246,21 @@ const ChampionJustificationBanner: React.FC<{
         {/* Metric pills */}
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
           <SummaryMetric
-            label={clinicalMode ? 'Overall Success' : 'CV Score'}
-            value={summary ? formatPercent(summary.cv_score) : '…'}
-            subtext={clinicalMode ? 'Across reviewed cases' : 'Cross-validation'}
+            label={clinicalMode ? isRegression ? 'Holdout RMSE' : 'Overall Success' : primaryMetricLabel}
+            value={primaryMetricValue}
+            subtext={clinicalMode ? isRegression ? 'Lower error is better for patient-level estimates.' : 'Across reviewed cases' : isRegression ? 'Lower holdout error is better' : 'Cross-validation'}
             tone="text-slate-900"
           />
           <SummaryMetric
-            label={clinicalMode ? 'Consistency' : 'Train-Test Gap'}
-            value={summary ? formatPercent(summary.train_test_gap) : '…'}
-            subtext={clinicalMode ? clinicalConsistencyGuidance(summary?.train_test_gap) : 'Lower is better'}
-            tone={summary && summary.train_test_gap <= 0.05 ? 'text-emerald-700' : summary && summary.train_test_gap >= 0.15 ? 'text-rose-700' : 'text-amber-700'}
+            label={clinicalMode ? isRegression ? 'Error Gap' : 'Consistency' : isRegression ? 'Error Gap' : 'Train-Test Gap'}
+            value={gapValue}
+            subtext={clinicalMode ? isRegression ? 'Lower drift between training and holdout error is preferred.' : clinicalConsistencyGuidance(summary?.train_test_gap) : isRegression ? 'Lower error drift is better' : 'Lower is better'}
+            tone={gapTone}
           />
           <SummaryMetric
-            label={clinicalMode ? 'Reliability' : 'Stability'}
+            label={clinicalMode ? isRegression ? 'Stability' : 'Reliability' : 'Stability'}
             value={summary ? formatPercent(summary.stability_score) : '…'}
-            subtext={clinicalMode ? clinicalReliabilityGuidance(summary?.stability_score) : 'Generalisation score'}
+            subtext={clinicalMode ? isRegression ? 'Generalisation score for the estimated value.' : clinicalReliabilityGuidance(summary?.stability_score) : 'Generalisation score'}
             tone={summary && summary.stability_score >= 0.8 ? 'text-emerald-700' : 'text-amber-700'}
           />
         </div>
@@ -1135,35 +1276,61 @@ const ChampionJustificationBanner: React.FC<{
           </div>
           <div>
             <p className={`text-[11px] font-black uppercase tracking-[0.18em] ${clinicalMode ? 'font-mono text-[#5f766b]' : 'text-sky-600'}`}>{clinicalMode ? 'Current Review' : 'Current View'}</p>
-            <h3 className="text-lg font-black tracking-tight text-slate-900">{clinicalMode ? 'Support quality snapshot' : selectedLabel}</h3>
+            <h3 className="text-lg font-black tracking-tight text-slate-900">{clinicalMode ? isClinicalRegression ? 'Estimate quality snapshot' : 'Support quality snapshot' : selectedLabel}</h3>
           </div>
         </div>
 
         <div className="mt-5 space-y-3">
-          <ComparisonRow
-            label={clinicalMode ? 'Decision Balance' : 'F1 Score'}
-            current={selectedMetrics.f1_score}
-            baseline={null}
-            currentLabel={undefined}
-            subtext={clinicalMode ? clinicalDecisionBalanceGuidance(selectedMetrics.f1_score) : undefined}
-          />
-          <ComparisonRow label={clinicalMode ? 'Successful Reviews' : 'Accuracy'} current={selectedMetrics.accuracy} baseline={null} />
-          <ComparisonRow
-            label={clinicalMode ? 'Caution Level' : 'Overfit Risk'}
-            currentLabel={
-              <span
-                className={`rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wide ${
-                  summary?.overfitting_risk === 'low'
-                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                    : summary?.overfitting_risk === 'high'
-                    ? 'border-rose-200 bg-rose-50 text-rose-700'
-                    : 'border-amber-200 bg-amber-50 text-amber-700'
-                }`}
-              >
-                {clinicalMode ? clinicalRiskLabel(summary?.overfitting_risk) : summary?.overfitting_risk ?? 'computing…'}
-              </span>
-            }
-          />
+          {isRegression ? (
+            <>
+              <ComparisonRow
+                label="RMSE"
+                currentLabel={formatMetricValue(selectedMetrics.rmse, 'rmse')}
+                subtext="Lower holdout error is better."
+              />
+              <ComparisonRow
+                label="MAE"
+                currentLabel={formatMetricValue(selectedMetrics.mae, 'mae')}
+                subtext="Average absolute error on the selected split."
+              />
+              <ComparisonRow
+                label="R² Score"
+                currentLabel={formatMetricValue(selectedMetrics.r2, 'r2')}
+                subtext="Higher values mean the model explains more variance."
+              />
+            </>
+          ) : (
+            <>
+              <ComparisonRow
+                label={clinicalMode ? 'Decision Balance' : isMulticlass ? 'Macro F1' : 'F1 Score'}
+                current={selectedMetrics.f1_score}
+                baseline={null}
+                currentLabel={undefined}
+                subtext={clinicalMode ? clinicalDecisionBalanceGuidance(selectedMetrics.f1_score) : undefined}
+              />
+              <ComparisonRow
+                label={clinicalMode ? 'Successful Reviews' : 'Accuracy'}
+                current={selectedMetrics.accuracy}
+                baseline={null}
+              />
+              <ComparisonRow
+                label={clinicalMode ? 'Caution Level' : 'Overfit Risk'}
+                currentLabel={
+                  <span
+                    className={`rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wide ${
+                      summary?.overfitting_risk === 'low'
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : summary?.overfitting_risk === 'high'
+                        ? 'border-rose-200 bg-rose-50 text-rose-700'
+                        : 'border-amber-200 bg-amber-50 text-amber-700'
+                    }`}
+                  >
+                    {clinicalMode ? clinicalRiskLabel(summary?.overfitting_risk) : summary?.overfitting_risk ?? 'computing…'}
+                  </span>
+                }
+              />
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -1172,12 +1339,17 @@ const ChampionJustificationBanner: React.FC<{
 
 // ─── Global Feature Panel ─────────────────────────────────────────────────────
 
-const GlobalFeaturePanel: React.FC<{ globalExplanation: ExplainabilityWorkbench['global_explanation'] }> = ({
+const GlobalFeaturePanel: React.FC<{
+  globalExplanation: ExplainabilityWorkbench['global_explanation'];
+  problemType?: 'classification' | 'multiclass' | 'regression';
+}> = ({
   globalExplanation,
   clinicalMode,
+  problemType = 'classification',
 }: {
   globalExplanation: ExplainabilityWorkbench['global_explanation'];
   clinicalMode?: boolean;
+  problemType?: 'classification' | 'multiclass' | 'regression';
 }) => (
   <div className={`ha-step6-global-panel rounded-[28px] border p-6 shadow-sm min-w-0 overflow-x-auto min-h-[200px] ${
     clinicalMode ? 'border-emerald-100 bg-[#f7fbf8]' : 'border-emerald-100 bg-[#f7fbf8]'
@@ -1191,12 +1363,18 @@ const GlobalFeaturePanel: React.FC<{ globalExplanation: ExplainabilityWorkbench[
           {clinicalMode ? 'Clinical Factors' : 'Global Explainability'}
         </p>
         <h3 className="ha-step6-panel-title text-lg font-black tracking-tight text-slate-900">
-          {clinicalMode ? 'Most relevant patient findings' : 'Most influential features'}
+          {clinicalMode
+            ? 'Most relevant patient findings'
+            : problemType === 'regression'
+              ? 'Features with the strongest effect on predictions'
+              : problemType === 'multiclass'
+                ? 'Features that separate class decisions most'
+                : 'Most influential features'}
         </h3>
         <p className={`ha-step6-panel-copy mt-1 text-sm ${clinicalMode ? 'text-slate-600' : 'text-slate-500'}`}>
           {clinicalMode
             ? 'These findings had the strongest influence across similar reviewed patients.'
-            : `Source: ${globalExplanation.source}. Hover any bar to see feature distribution details.`}
+            : getGlobalExplainabilityCopy(globalExplanation.source, problemType)}
         </p>
       </div>
     </div>
@@ -1244,6 +1422,7 @@ const LocalExplainabilityPanel: React.FC<{
   onFeatureChange: (feature: string, value: number) => void;
   isSimulating: boolean;
   clinicalMode?: boolean;
+  problemType?: 'classification' | 'multiclass' | 'regression';
 }> = ({
   simulatorMode,
   recordOptions,
@@ -1255,10 +1434,15 @@ const LocalExplainabilityPanel: React.FC<{
   onFeatureChange,
   isSimulating,
   clinicalMode,
-}) => (
-  <div className={`ha-step6-local-panel rounded-[28px] border p-6 shadow-sm ${
-    clinicalMode ? 'border-emerald-100 bg-[#f8fbf9]' : 'border-emerald-100 bg-[#f8fbf9]'
-  }`}>
+  problemType = 'classification',
+}) => {
+  const impactLabels = getLocalImpactLabels(problemType);
+  const isClinicalRegression = clinicalMode && problemType === 'regression';
+
+  return (
+    <div className={`ha-step6-local-panel rounded-[28px] border p-6 shadow-sm ${
+      clinicalMode ? 'border-emerald-100 bg-[#f8fbf9]' : 'border-emerald-100 bg-[#f8fbf9]'
+    }`}>
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
       <div className="flex items-start gap-3">
         <div className={`rounded-2xl p-3 ${clinicalMode ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-100 text-emerald-700'}`}>
@@ -1266,15 +1450,27 @@ const LocalExplainabilityPanel: React.FC<{
         </div>
         <div>
           <p className={`text-[11px] font-black uppercase tracking-[0.18em] ${clinicalMode ? 'font-mono text-[#5f766b]' : 'font-mono text-[#5f766b]'}`}>
-            {clinicalMode ? 'Patient Review' : 'What-If Simulator'}
+            {clinicalMode ? isClinicalRegression ? 'Patient Estimate' : 'Patient Review' : 'What-If Simulator'}
           </p>
           <h3 className="ha-step6-panel-title text-lg font-black tracking-tight text-slate-900">
-            {clinicalMode ? 'Patient-specific decision summary' : 'Local explanation & live prediction shift'}
+            {clinicalMode
+              ? isClinicalRegression ? 'Patient-specific outcome summary' : 'Patient-specific decision summary'
+              : problemType === 'regression'
+                ? 'Local explanation & live value shift'
+                : problemType === 'multiclass'
+                  ? 'Local explanation & class support shift'
+                  : 'Local explanation & live prediction shift'}
           </h3>
           <p className="ha-step6-panel-copy mt-1 text-sm text-slate-500">
             {clinicalMode
-              ? 'Adjust the three strongest clinical factors to see whether the patient-level estimate moves.'
-              : `Mode: ${simulatorMode}. Slider changes debounce before firing the inference API.`}
+              ? isClinicalRegression
+                ? 'Adjust the strongest clinical factors to see how the patient-level estimated value moves.'
+                : 'Adjust the three strongest clinical factors to see whether the patient-level estimate moves.'
+              : problemType === 'regression'
+                ? `Mode: ${simulatorMode}. Slider changes debounce before firing the inference API and update the predicted numeric value.`
+                : problemType === 'multiclass'
+                  ? `Mode: ${simulatorMode}. Slider changes debounce before firing the inference API and update support for the selected class.`
+                  : `Mode: ${simulatorMode}. Slider changes debounce before firing the inference API.`}
           </p>
         </div>
       </div>
@@ -1293,7 +1489,11 @@ const LocalExplainabilityPanel: React.FC<{
         >
           {recordOptions.map((record) => (
             <option key={record.record_id} value={record.record_id}>
-              {clinicalMode ? formatClinicalRecordLabel(record) : formatRecordLabel(record)}
+              {clinicalMode
+                ? formatClinicalRecordLabel(record, problemType)
+                : problemType === 'regression'
+                  ? `#${record.position} · ${record.top_feature_values ? Object.entries(record.top_feature_values).slice(0, 2).map(([key, val]) => `${key}: ${val}`).join(' · ') : 'Regression sample'} · Predicted value: ${formatNumber(record.predicted_value)}`
+                  : formatRecordLabel(record)}
             </option>
           ))}
         </select>
@@ -1304,10 +1504,20 @@ const LocalExplainabilityPanel: React.FC<{
           return (
             <div className="mt-2 flex items-center gap-2">
               <span className={`ha-step6-confidence-pill rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide ${confidenceBadgeClass(sel.confidence_band)}`}>
-                {clinicalMode ? `${sel.confidence_band} review confidence` : `${sel.confidence_band} confidence`}
+                {isClinicalRegression
+                  ? `${sel.confidence_band} estimate band`
+                  : clinicalMode
+                  ? `${sel.confidence_band} review confidence`
+                  : problemType === 'regression'
+                    ? `${sel.confidence_band} value range`
+                    : `${sel.confidence_band} confidence`}
               </span>
               <span className="ha-step6-predicted-copy text-xs text-slate-500">
-                {clinicalMode ? 'Suggested class' : 'Predicted'}: <strong>{decodeClinicalClassLabel(sel.predicted_label).full}</strong> ({(sel.predicted_probability * 100).toFixed(1)}%)
+                {isClinicalRegression
+                  ? <>Estimated value: <strong>{formatNumber(sel.predicted_value)}</strong></>
+                  : problemType === 'regression'
+                  ? <>Predicted value: <strong>{formatNumber(sel.predicted_value)}</strong></>
+                  : <>{clinicalMode ? 'Suggested class' : 'Predicted'}: <strong>{clinicalMode ? decodeClinicalClassLabel(sel.predicted_label).full : formatPredictionLabel(sel.predicted_label)}</strong> ({(sel.predicted_probability * 100).toFixed(1)}%)</>}
               </span>
             </div>
           );
@@ -1316,7 +1526,32 @@ const LocalExplainabilityPanel: React.FC<{
     </div>
 
     {/* Prediction summary metrics */}
-    {clinicalMode ? (
+    {isClinicalRegression ? (
+      <div className="mt-6 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="overflow-hidden rounded-2xl border border-emerald-100 bg-white">
+          <div className="grid gap-3 px-5 py-4 sm:grid-cols-[1fr_auto] sm:items-center">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-[0.16em] font-mono text-slate-500">Estimated Value</p>
+              <p className="mt-1 text-5xl font-black tracking-tight text-emerald-700">
+                {formatNumber(scenario.prediction.predicted_value)}
+              </p>
+            </div>
+            <div className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-3 text-right">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] font-mono text-emerald-700">Estimate Shift</p>
+              <p className={`text-2xl font-black ${scenario.prediction.delta_from_baseline >= 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
+                {formatSignedNumber(scenario.prediction.delta_from_baseline)}
+              </p>
+            </div>
+          </div>
+        </div>
+        <SummaryMetric
+          label="Baseline Value"
+          value={formatNumber(scenario.prediction.baseline_value)}
+          tone="text-sky-700"
+          subtext={scenario.prediction.delta_from_baseline >= 0 ? 'Current estimate is above baseline.' : 'Current estimate is below baseline.'}
+        />
+      </div>
+    ) : clinicalMode ? (
       <div className="mt-6 overflow-hidden rounded-2xl border border-emerald-100 bg-white">
         <div className="grid gap-3 px-5 py-4 sm:grid-cols-[1fr_auto] sm:items-center">
           <div>
@@ -1336,6 +1571,25 @@ const LocalExplainabilityPanel: React.FC<{
           </div>
         </div>
       </div>
+    ) : problemType === 'regression' ? (
+      <div className="mt-6 grid gap-4 lg:grid-cols-3">
+        <SummaryMetric
+          label="Predicted Value"
+          value={formatNumber(scenario.prediction.predicted_value)}
+          tone="text-slate-900"
+        />
+        <SummaryMetric
+          label="Baseline Estimate"
+          value={formatNumber(scenario.prediction.baseline_value)}
+          tone="text-sky-700"
+        />
+        <SummaryMetric
+          label="Delta From Baseline"
+          value={formatSignedNumber(scenario.prediction.delta_from_baseline)}
+          tone={scenario.prediction.delta_from_baseline >= 0 ? 'text-rose-700' : 'text-emerald-700'}
+          subtext={scenario.prediction.delta_from_baseline >= 0 ? 'Prediction moved upward' : 'Prediction moved downward'}
+        />
+      </div>
     ) : (
       <div className="mt-6 grid gap-4 lg:grid-cols-3">
         <SummaryMetric
@@ -1343,20 +1597,24 @@ const LocalExplainabilityPanel: React.FC<{
           value={
             clinicalMode
               ? `${decodeClinicalClassLabel(scenario.prediction.target_class_label, scenario.prediction.target_class_index).short} (${decodeClinicalClassLabel(scenario.prediction.target_class_label, scenario.prediction.target_class_index).full})`
-              : scenario.prediction.target_class_label
+              : formatPredictionLabel(scenario.prediction.target_class_label)
           }
-          tone={scenario.prediction.target_class_index === 0 ? 'text-emerald-700' : 'text-rose-700'}
+          tone={problemType === 'multiclass' ? 'text-sky-700' : scenario.prediction.target_class_index === 0 ? 'text-emerald-700' : 'text-rose-700'}
         />
         <SummaryMetric
-          label={clinicalMode ? 'Confidence' : 'Risk Probability'}
+          label={clinicalMode ? 'Confidence' : problemType === 'multiclass' ? 'Prediction Confidence' : 'Risk Probability'}
           value={formatPercent(scenario.prediction.target_probability)}
-          tone={scenario.prediction.target_probability >= 0.65 ? 'text-rose-700' : scenario.prediction.target_probability >= 0.4 ? 'text-amber-700' : 'text-emerald-700'}
+          tone={problemType === 'multiclass'
+            ? (scenario.prediction.target_probability ?? 0) >= 0.65 ? 'text-sky-700' : (scenario.prediction.target_probability ?? 0) >= 0.4 ? 'text-amber-700' : 'text-slate-700'
+            : (scenario.prediction.target_probability ?? 0) >= 0.65 ? 'text-rose-700' : (scenario.prediction.target_probability ?? 0) >= 0.4 ? 'text-amber-700' : 'text-emerald-700'}
         />
         <SummaryMetric
           label={clinicalMode ? 'Change From Baseline' : 'Delta From Baseline'}
           value={`${scenario.prediction.delta_from_baseline >= 0 ? '+' : ''}${formatPercent(scenario.prediction.delta_from_baseline)}`}
-          tone={scenario.prediction.delta_from_baseline >= 0 ? 'text-rose-700' : 'text-emerald-700'}
-          subtext={clinicalMode ? scenario.prediction.delta_from_baseline >= 0 ? 'Clinical concern increased' : 'Clinical concern decreased' : scenario.prediction.delta_from_baseline >= 0 ? 'Risk increased' : 'Risk decreased'}
+          tone={problemType === 'multiclass'
+            ? scenario.prediction.delta_from_baseline >= 0 ? 'text-sky-700' : 'text-amber-700'
+            : scenario.prediction.delta_from_baseline >= 0 ? 'text-rose-700' : 'text-emerald-700'}
+          subtext={clinicalMode ? scenario.prediction.delta_from_baseline >= 0 ? 'Clinical concern increased' : 'Clinical concern decreased' : problemType === 'multiclass' ? scenario.prediction.delta_from_baseline >= 0 ? 'Support for this class increased' : 'Support for this class decreased' : scenario.prediction.delta_from_baseline >= 0 ? 'Risk increased' : 'Risk decreased'}
         />
       </div>
     )}
@@ -1367,15 +1625,15 @@ const LocalExplainabilityPanel: React.FC<{
         <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-white/80 backdrop-blur-sm">
           <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 shadow-sm">
             <Loader2 size={14} className="animate-spin" />
-            {clinicalMode ? 'Updating review...' : 'Updating prediction...'}
+            {clinicalMode ? isClinicalRegression ? 'Updating estimate...' : 'Updating review...' : 'Updating prediction...'}
           </div>
         </div>
       )}
       <div className="mb-3 flex items-center gap-3">
-        <h4 className="ha-step6-impact-title text-sm font-black text-slate-800">{clinicalMode ? 'Patient-specific drivers' : 'Feature Impacts'}</h4>
+        <h4 className="ha-step6-impact-title text-sm font-black text-slate-800">{clinicalMode ? isClinicalRegression ? impactLabels.title : 'Patient-specific drivers' : impactLabels.title}</h4>
         <div className="flex items-center gap-3 text-xs font-semibold text-slate-500">
-          <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-rose-500" /> {clinicalMode ? 'Raises concern' : 'Increases risk'}</span>
-          <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> {clinicalMode ? 'Lowers concern' : 'Decreases risk'}</span>
+          <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-rose-500" /> {clinicalMode ? isClinicalRegression ? impactLabels.increase : 'Raises concern' : impactLabels.increase}</span>
+          <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> {clinicalMode ? isClinicalRegression ? impactLabels.decrease : 'Lowers concern' : impactLabels.decrease}</span>
         </div>
       </div>
       <div className={`ha-step6-impact-chart h-[300px] rounded-2xl border p-3 ${clinicalMode ? 'border-emerald-100 bg-[#f3f8f5]' : 'border-emerald-100 bg-[#f3f8f5]'}`}>
@@ -1394,7 +1652,7 @@ const LocalExplainabilityPanel: React.FC<{
             <XAxis type="number" stroke={clinicalMode ? '#5f766b' : '#5f766b'} tick={{ fontSize: 11 }} />
             <YAxis dataKey="displayFeature" type="category" width={190} stroke={clinicalMode ? '#5f766b' : '#5f766b'} tick={{ fontSize: 12, fontWeight: 600 }} />
             <ReferenceLine x={0} stroke={clinicalMode ? '#7f948a' : '#94a3b8'} strokeWidth={1.5} label={{ value: clinicalMode ? 'typical patient' : 'baseline', position: 'insideTopLeft', fontSize: 10, fill: clinicalMode ? '#7f948a' : '#94a3b8' }} />
-            <Tooltip content={<ImpactTooltip clinicalMode={clinicalMode} />} />
+            <Tooltip content={<ImpactTooltip clinicalMode={clinicalMode} problemType={problemType} />} />
             <Bar dataKey="impact" radius={[0, 6, 6, 0]}>
               {[...getDisplayedImpactFeatures(scenario, controlFeatures, clinicalMode)].reverse().map((item) => (
                 <Cell
@@ -1441,7 +1699,7 @@ const LocalExplainabilityPanel: React.FC<{
                   {impact && (
                     <span className={`ha-step6-slider-delta flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold ${isRisky ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
                       {isRisky ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-                      {clinicalMode ? (isRisky ? 'Raises concern' : 'Lowers concern') : `${isRisky ? '+' : ''}${(impact.impact * 100).toFixed(2)}%`}
+                      {clinicalMode ? isClinicalRegression ? formatImpactValue(impact.impact, problemType) : (isRisky ? 'Raises concern' : 'Lowers concern') : formatImpactValue(impact.impact, problemType)}
                     </span>
                   )}
                   <input
@@ -1485,7 +1743,8 @@ const LocalExplainabilityPanel: React.FC<{
       </div>
     )}
   </div>
-);
+  );
+};
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -1549,11 +1808,13 @@ const FeatureTooltip: React.FC<any> = ({ active, payload, clinicalMode }) => {
   );
 };
 
-const ImpactTooltip: React.FC<any> = ({ active, payload, clinicalMode }) => {
+const ImpactTooltip: React.FC<any> = ({ active, payload, clinicalMode, problemType = 'classification' }) => {
   if (!active || !payload?.length) return null;
   const feat: ScenarioFeature = payload[0].payload;
   // Use the explicit direction field — not the sign of impact — for semantic color coding
   const increasesRisk = feat.direction === 'increase';
+  const impactLabels = getLocalImpactLabels(problemType);
+  const isClinicalRegression = clinicalMode && problemType === 'regression';
   return (
     <div className={`w-56 rounded-2xl border p-4 shadow-xl ${
       increasesRisk
@@ -1566,12 +1827,18 @@ const ImpactTooltip: React.FC<any> = ({ active, payload, clinicalMode }) => {
         increasesRisk ? 'text-rose-700' : 'text-emerald-700'
       }`}>
         {increasesRisk ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-        {clinicalMode ? (increasesRisk ? 'Raises concern' : 'Lowers concern') : `${increasesRisk ? '+' : ''}${feat.impact.toFixed(4)} impact`}
+        {clinicalMode
+          ? isClinicalRegression ? formatImpactValue(feat.impact, problemType) : (increasesRisk ? 'Raises concern' : 'Lowers concern')
+          : formatImpactValue(feat.impact, problemType)}
       </div>
       <p className={`mt-1 text-[11px] font-semibold ${
         increasesRisk ? 'text-rose-500' : 'text-emerald-500'
       }`}>
-        {clinicalMode ? (increasesRisk ? 'Moves estimate upward' : 'Moves estimate downward') : increasesRisk ? '▲ Increases risk' : '▼ Decreases risk'}
+        {clinicalMode
+          ? isClinicalRegression ? (increasesRisk ? impactLabels.positiveTone : impactLabels.negativeTone) : (increasesRisk ? 'Moves estimate upward' : 'Moves estimate downward')
+          : increasesRisk
+            ? `▲ ${impactLabels.positiveTone}`
+            : `▼ ${impactLabels.negativeTone}`}
       </p>
     </div>
   );

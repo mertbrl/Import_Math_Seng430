@@ -7,6 +7,8 @@ import { ActivitySquare, CheckCircle2, ChevronDown, Save, Target } from 'lucide-
 interface TargetMappingTabProps {
   columns: ColumnStats[];
   totalRows: number;
+  allColumnNames?: string[];
+  previewRows?: Record<string, string | number | null>[];
 }
 
 const PROBLEM_TYPES = [
@@ -33,7 +35,53 @@ const TYPE_TONES: Record<ColumnStats['type'], string> = {
   Boolean: 'bg-amber-100 text-amber-800',
 };
 
-const TargetMappingTab: React.FC<TargetMappingTabProps> = ({ columns, totalRows }) => {
+interface CandidateColumnMeta {
+  name: string;
+  type: ColumnStats['type'];
+  distinct: number | null;
+  missingPct: number | null;
+  includedInAnalysis: boolean;
+}
+
+function inferColumnTypeFromPreview(
+  previewRows: Record<string, string | number | null>[],
+  columnName: string,
+): ColumnStats['type'] {
+  const samples = previewRows
+    .map((row) => row[columnName])
+    .filter((value) => value !== null && value !== undefined);
+
+  if (samples.length === 0) {
+    return 'Categorical';
+  }
+
+  const normalized = samples.map((value) => String(value).trim().toLowerCase());
+  const uniqueValues = new Set(normalized);
+  const isBooleanLike =
+    uniqueValues.size === 2 &&
+    [
+      ['0', '1'],
+      ['true', 'false'],
+      ['yes', 'no'],
+    ].some((pair) => pair.every((item) => uniqueValues.has(item)));
+
+  if (isBooleanLike) {
+    return 'Boolean';
+  }
+
+  if (samples.every((value) => typeof value === 'number')) {
+    return 'Numeric';
+  }
+
+  return 'Categorical';
+}
+
+const TargetMappingTab: React.FC<TargetMappingTabProps> = ({
+  columns,
+  totalRows,
+  allColumnNames = [],
+  previewRows = [],
+}) => {
   const setSchemaValid = useDomainStore((s) => s.setSchemaValid);
   const setCurrentStep = useDomainStore((s) => s.setCurrentStep);
   const schemaValid = useDomainStore((s) => s.schemaValid);
@@ -54,9 +102,35 @@ const TargetMappingTab: React.FC<TargetMappingTabProps> = ({ columns, totalRows 
   >(initialProblemType);
   const [showSuccess, setShowSuccess] = useState(false);
 
+  const candidateColumns = useMemo<CandidateColumnMeta[]>(() => {
+    const statsByName = new Map(columns.map((column) => [column.name, column]));
+    const orderedNames = allColumnNames.length > 0 ? allColumnNames : columns.map((column) => column.name);
+
+    return orderedNames.map((columnName) => {
+      const stats = statsByName.get(columnName);
+      if (stats) {
+        return {
+          name: stats.name,
+          type: stats.type,
+          distinct: stats.distinct,
+          missingPct: stats.missingPct,
+          includedInAnalysis: true,
+        };
+      }
+
+      return {
+        name: columnName,
+        type: inferColumnTypeFromPreview(previewRows, columnName),
+        distinct: null,
+        missingPct: null,
+        includedInAnalysis: false,
+      };
+    });
+  }, [allColumnNames, columns, previewRows]);
+
   const selectedColumnMeta = useMemo(
-    () => columns.find((column) => column.name === targetColumn) ?? null,
-    [columns, targetColumn],
+    () => candidateColumns.find((column) => column.name === targetColumn) ?? null,
+    [candidateColumns, targetColumn],
   );
   const persistedProblemType =
     persistedTask === 'regression'
@@ -100,7 +174,7 @@ const TargetMappingTab: React.FC<TargetMappingTabProps> = ({ columns, totalRows 
           <div className="ha-target-map-scope rounded-[18px] border border-[rgba(190,201,193,0.5)] bg-[linear-gradient(180deg,#ffffff,#f5faf6)] px-5 py-4 shadow-[0_10px_26px_rgba(14,116,82,0.05)]">
             <p className="ha-section-label">Dataset Scope</p>
             <p className="mt-2 text-sm font-semibold text-[var(--text)]">
-              {totalRows.toLocaleString()} rows · {columns.length} candidate columns
+              {totalRows.toLocaleString()} rows | {candidateColumns.length} candidate columns
             </p>
           </div>
         </div>
@@ -115,6 +189,7 @@ const TargetMappingTab: React.FC<TargetMappingTabProps> = ({ columns, totalRows 
             </label>
             <div className="relative">
               <select
+                aria-label="Target Column"
                 value={targetColumn}
                 onChange={(e) => {
                   setTargetColumn(e.target.value);
@@ -123,9 +198,9 @@ const TargetMappingTab: React.FC<TargetMappingTabProps> = ({ columns, totalRows 
                 className="ha-target-map-select w-full appearance-none rounded-[16px] border border-[rgba(190,201,193,0.7)] bg-[linear-gradient(180deg,#ffffff,#f6faf6)] px-4 py-3.5 pr-11 text-[14px] font-semibold text-[var(--text)] outline-none transition focus:border-[var(--accent)] focus:ring-4 focus:ring-[rgba(0,89,62,0.08)]"
               >
                 <option value="">Choose the outcome column</option>
-                {columns.map((column) => (
+                {candidateColumns.map((column) => (
                   <option key={column.name} value={column.name}>
-                    {column.name} ({column.type})
+                    {column.name} ({column.type}{column.includedInAnalysis ? '' : ', analysis skipped'})
                   </option>
                 ))}
               </select>
@@ -140,6 +215,7 @@ const TargetMappingTab: React.FC<TargetMappingTabProps> = ({ columns, totalRows 
             </label>
             <div className="relative">
               <select
+                aria-label="ML Problem Type"
                 value={problemType}
                 onChange={(e) => {
                   setProblemType(e.target.value as typeof problemType);
@@ -196,12 +272,19 @@ const TargetMappingTab: React.FC<TargetMappingTabProps> = ({ columns, totalRows 
             {selectedColumnMeta ? (
               <div className="mt-3 flex flex-wrap gap-2">
                 <span className={`ha-badge ${TYPE_TONES[selectedColumnMeta.type]}`}>{selectedColumnMeta.type}</span>
-                <span className="ha-badge bg-slate-100 text-slate-700">
-                  Distinct: {selectedColumnMeta.distinct}
-                </span>
-                <span className="ha-badge bg-slate-100 text-slate-700">
-                  Missing: {selectedColumnMeta.missingPct}%
-                </span>
+                {selectedColumnMeta.distinct !== null ? (
+                  <span className="ha-badge bg-slate-100 text-slate-700">
+                    Distinct: {selectedColumnMeta.distinct}
+                  </span>
+                ) : null}
+                {selectedColumnMeta.missingPct !== null ? (
+                  <span className="ha-badge bg-slate-100 text-slate-700">
+                    Missing: {selectedColumnMeta.missingPct}%
+                  </span>
+                ) : null}
+                {!selectedColumnMeta.includedInAnalysis ? (
+                  <span className="ha-badge bg-amber-100 text-amber-800">Hidden from EDA analysis</span>
+                ) : null}
               </div>
             ) : null}
           </div>

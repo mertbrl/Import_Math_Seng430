@@ -1,8 +1,11 @@
 import time
 
+import numpy as np
+import pandas as pd
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.services.model_training import dataset_builder as dataset_builder_module
 from app.services.session_service import session_service
 
 CLIENT = TestClient(app)
@@ -37,6 +40,46 @@ def _pipeline_config(session_id: str) -> dict:
         "basic_cleaning": {},
         "sampling": {},
         "data_split": {"enabled": True, "strategy": "2-way", "train": 0.8, "val": 0.0, "test": 0.2, "stratify": True},
+        "imputation": {},
+        "outliers": {},
+        "transformation": {},
+        "encoding": {},
+        "scaling": {},
+        "dimensionality_reduction": {},
+        "feature_selection": {},
+        "imbalance": {},
+    }
+
+
+def _seed_regression_session(session_id: str) -> None:
+    session_service._sessions.pop(session_id, None)
+    state = session_service.get_or_create(session_id)
+    state.dataset = {
+        "source": "upload",
+        "file_name": "synthetic-regression.csv",
+        "target_column": "target_value",
+        "row_count": 120,
+        "column_count": 4,
+    }
+    state.mapping = {
+        "problem_type": "regression",
+        "target_column": "target_value",
+        "roles": {"target_value": "target"},
+    }
+    state.mapping_validated = True
+    state.preprocessing_result = {"ready": True}
+    state.preprocessing = {"ready": True}
+
+
+def _regression_pipeline_config(session_id: str) -> dict:
+    return {
+        "session_id": session_id,
+        "target_column": "target_value",
+        "problem_type": "regression",
+        "excluded_columns": [],
+        "basic_cleaning": {},
+        "sampling": {},
+        "data_split": {"enabled": True, "strategy": "2-way", "train": 0.8, "val": 0.0, "test": 0.2, "stratify": False},
         "imputation": {},
         "outliers": {},
         "transformation": {},
@@ -107,5 +150,79 @@ def test_explainability_workbench_and_simulation_endpoints_return_dynamic_payloa
 
     simulation_payload = simulate.json()["scenario"]
     assert 0.0 <= simulation_payload["prediction"]["target_probability"] <= 1.0
+    assert simulation_payload["feature_values"][first_control["feature"]] == next_value
+    assert len(simulation_payload["local_explanation"]["top_features"]) > 0
+
+
+def test_explainability_workbench_supports_regression_runs(monkeypatch) -> None:
+    session_id = "explainability-workbench-regression"
+    _seed_regression_session(session_id)
+
+    df = pd.DataFrame(
+        {
+            "feature_a": np.linspace(0, 10, 120),
+            "feature_b": np.sin(np.linspace(0, 8, 120)),
+            "feature_c": np.tile([0, 1, 2], 40),
+        }
+    )
+    df["target_value"] = 4.5 * df["feature_a"] - 2.0 * df["feature_b"] + 1.2 * df["feature_c"]
+    monkeypatch.setattr(dataset_builder_module, "load_dataframe", lambda _: df.copy())
+
+    start = CLIENT.post(
+        "/api/v1/models/train/start",
+        json={
+            "session_id": session_id,
+            "model": "lr",
+            "parameters": {"fit_intercept": True},
+            "pipeline_config": _regression_pipeline_config(session_id),
+        },
+    )
+    assert start.status_code == 200, start.text
+    task_id = start.json()["task_id"]
+
+    payload = None
+    for _ in range(50):
+        status = CLIENT.get(f"/api/v1/models/train/status/{task_id}")
+        assert status.status_code == 200, status.text
+        payload = status.json()
+        if payload["status"] in {"completed", "failed"}:
+            break
+        time.sleep(0.1)
+
+    assert payload is not None
+    assert payload["status"] == "completed", payload
+
+    run_id = payload["result"]["run_id"]
+    workbench = CLIENT.post(
+        "/api/v1/insights/explain/workbench",
+        json={"session_id": session_id, "run_id": run_id},
+    )
+    assert workbench.status_code == 200, workbench.text
+
+    workbench_payload = workbench.json()
+    assert workbench_payload["summary"]["problem_type"] == "regression"
+    assert workbench_payload["summary"]["primary_metric_name"] == "rmse"
+    assert workbench_payload["simulator"]["selected_scenario"]["prediction"]["predicted_value"] is not None
+
+    first_control = workbench_payload["simulator"]["control_features"][0]
+    selected_scenario = workbench_payload["simulator"]["selected_scenario"]
+    original_value = selected_scenario["feature_values"][first_control["feature"]]
+    next_value = first_control["max"] if first_control["max"] != original_value else first_control["min"]
+
+    simulate = CLIENT.post(
+        "/api/v1/insights/explain/simulate",
+        json={
+            "session_id": session_id,
+            "run_id": run_id,
+            "record_id": selected_scenario["record_id"],
+            "feature_overrides": {first_control["feature"]: next_value},
+        },
+    )
+    assert simulate.status_code == 200, simulate.text
+
+    simulation_payload = simulate.json()["scenario"]
+    assert simulation_payload["prediction"]["prediction_mode"] == "regression"
+    assert simulation_payload["prediction"]["predicted_value"] is not None
+    assert simulation_payload["prediction"]["target_probability"] is None
     assert simulation_payload["feature_values"][first_control["feature"]] == next_value
     assert len(simulation_payload["local_explanation"]["top_features"]) > 0

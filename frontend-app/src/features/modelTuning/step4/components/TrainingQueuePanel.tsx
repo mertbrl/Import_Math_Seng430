@@ -4,7 +4,8 @@ import { buildApiUrl } from '../../../../config/apiConfig';
 import { getModelCatalogEntry } from '../../modelCatalog';
 import { ModelId, TaskStatus, useModelStore } from '../../../../store/useModelStore';
 
-const ACTIVE_TASK_STATUSES: TaskStatus[] = ['queued', 'running', 'cancelling'];
+const ACTIONABLE_TASK_STATUSES: TaskStatus[] = ['queued', 'running'];
+const POLLABLE_TASK_STATUSES: TaskStatus[] = ['queued', 'running', 'cancelling'];
 const FINAL_TASK_STATUSES: TaskStatus[] = ['completed', 'failed', 'cancelled'];
 
 function getTaskSortRank(task: { status: TaskStatus }): number {
@@ -46,15 +47,17 @@ export const TrainingQueuePanel: React.FC<{
   catalogCount: number;
   onStopRemaining: () => void;
   emptyMessage?: string;
-}> = ({ onStopRemaining, emptyMessage }) => {
+  stopDisabled?: boolean;
+  stopLabel?: string;
+}> = ({ onStopRemaining, emptyMessage, stopDisabled = false, stopLabel = 'Stop remaining' }) => {
   const tasks = useModelStore((state) => state.tasks);
   const setTask = useModelStore((state) => state.setTask);
   const setResult = useModelStore((state) => state.setResult);
   const queueItems = useMemo(() => Object.values(tasks), [tasks]);
-  const activeTasks = queueItems.filter((item) => ACTIVE_TASK_STATUSES.includes(item.status)).length;
+  const activeTasks = queueItems.filter((item) => ACTIONABLE_TASK_STATUSES.includes(item.status)).length;
   const hasFinishedHistory = queueItems.some((item) => FINAL_TASK_STATUSES.includes(item.status));
   const pollableTaskIds = useMemo(
-    () => queueItems.filter((item) => ACTIVE_TASK_STATUSES.includes(item.status)).map((item) => item.taskId),
+    () => queueItems.filter((item) => POLLABLE_TASK_STATUSES.includes(item.status)).map((item) => item.taskId),
     [queueItems],
   );
 
@@ -158,9 +161,10 @@ export const TrainingQueuePanel: React.FC<{
           <button
             type="button"
             onClick={onStopRemaining}
+            disabled={stopDisabled}
             className="ha-step4-queue-stop-btn rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50"
           >
-            Stop remaining
+            {stopLabel}
           </button>
         )}
       </div>

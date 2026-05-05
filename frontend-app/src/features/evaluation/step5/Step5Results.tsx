@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ArrowRight, BarChart3, Gauge, LineChart, ShieldCheck, Target, Trophy } from 'lucide-react';
 import InfoPopover from '../../../components/common/InfoPopover';
 import { useDomainStore } from '../../../store/useDomainStore';
-import { ModelResult, useModelStore } from '../../../store/useModelStore';
+import { ChampionPreference, ModelResult, useModelStore } from '../../../store/useModelStore';
 import { getModelCatalogEntry } from '../../modelTuning/modelCatalog';
 import { buildRunLabel } from '../../modelTuning/runLabeling';
 import ModelDiagnosticsPanel from './ModelDiagnosticsPanel';
@@ -43,7 +43,35 @@ function getChampionPenalty(run: ModelResult): number {
   return riskPenalty + Math.max(0, gap) * 0.6;
 }
 
-function sortRunsByPreference(runs: ModelResult[], preference: 'recall' | 'precision' | 'f1' | 'rmse') {
+function getPreferenceLabel(preference: ChampionPreference) {
+  if (preference === 'recall') return 'recall';
+  if (preference === 'precision') return 'precision';
+  if (preference === 'rmse') return 'RMSE';
+  if (preference === 'mae') return 'MAE';
+  if (preference === 'r2') return 'R²';
+  return 'F1';
+}
+
+function getRegressionPreferenceCopy(preference: ChampionPreference) {
+  if (preference === 'mae') {
+    return {
+      hero: 'Compare all 11 regression runs, then keep the model with the lowest MAE and the smallest generalization penalty.',
+      table: 'Runs are ranked by lower MAE, then lower overfit risk, then lower RMSE.',
+    };
+  }
+  if (preference === 'r2') {
+    return {
+      hero: 'Compare all 11 regression runs, then keep the model with the highest R² while still pushing unstable runs down.',
+      table: 'Runs are ranked by higher R², then lower overfit risk, then lower RMSE.',
+    };
+  }
+  return {
+    hero: 'Compare all 11 regression runs, then keep the model with the lowest RMSE and the smallest generalization penalty.',
+    table: 'Runs are ranked by lower RMSE, then lower overfit risk, then higher R².',
+  };
+}
+
+function sortRunsByPreference(runs: ModelResult[], preference: ChampionPreference) {
   return [...runs].sort((left, right) => {
     const leftMetrics = getRunMetrics(left);
     const rightMetrics = getRunMetrics(right);
@@ -57,6 +85,24 @@ function sortRunsByPreference(runs: ModelResult[], preference: 'recall' | 'preci
         return leftScore - rightScore;
       }
       return (rightMetrics.r2 ?? Number.NEGATIVE_INFINITY) - (leftMetrics.r2 ?? Number.NEGATIVE_INFINITY);
+    }
+
+    if (preference === 'mae') {
+      const leftScore = (leftMetrics.mae ?? Number.POSITIVE_INFINITY) + leftPenalty;
+      const rightScore = (rightMetrics.mae ?? Number.POSITIVE_INFINITY) + rightPenalty;
+      if (leftScore !== rightScore) {
+        return leftScore - rightScore;
+      }
+      return (leftMetrics.rmse ?? Number.POSITIVE_INFINITY) - (rightMetrics.rmse ?? Number.POSITIVE_INFINITY);
+    }
+
+    if (preference === 'r2') {
+      const leftScore = (leftMetrics.r2 ?? Number.NEGATIVE_INFINITY) - leftPenalty;
+      const rightScore = (rightMetrics.r2 ?? Number.NEGATIVE_INFINITY) - rightPenalty;
+      if (leftScore !== rightScore) {
+        return rightScore - leftScore;
+      }
+      return (leftMetrics.rmse ?? Number.POSITIVE_INFINITY) - (rightMetrics.rmse ?? Number.POSITIVE_INFINITY);
     }
 
     const metricKey = preference === 'recall' ? 'recall' : preference === 'precision' ? 'precision' : 'f1_score';
@@ -85,14 +131,7 @@ export const Step5Results: React.FC = () => {
   const tasks = useModelStore((state) => state.tasks);
   const bestResultTaskId = useModelStore((state) => state.bestResultTaskId);
   const championPreference = useModelStore((state) => state.championPreference);
-  const preferenceLabel =
-    championPreference === 'recall'
-      ? 'recall'
-      : championPreference === 'precision'
-        ? 'precision'
-        : championPreference === 'rmse'
-          ? 'RMSE'
-          : 'F1';
+  const preferenceLabel = getPreferenceLabel(championPreference);
 
   const trainedRuns = useMemo(() => {
     return Object.values(resultsMap).map((result) => ({
@@ -181,6 +220,7 @@ export const Step5Results: React.FC = () => {
     const regressionRuns = sortedRuns;
     const selectedRegressionRun = trainedRuns.find((run) => run.taskId === selectedTaskId) ?? champion;
     const selectedRegressionMetrics = getRunMetrics(selectedRegressionRun);
+    const regressionPreferenceCopy = getRegressionPreferenceCopy(championPreference);
 
     return (
       <div className="space-y-6 px-4 py-8">
@@ -190,9 +230,7 @@ export const Step5Results: React.FC = () => {
               <div>
                 <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Step 5</p>
                 <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Regression Results & Evaluation</h1>
-                <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600">
-                  Compare all 11 regression runs, then keep the model with the lowest RMSE and the smallest generalization penalty.
-                </p>
+                <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600">{regressionPreferenceCopy.hero}</p>
               </div>
 
               <div className="rounded-[28px] border border-slate-200 bg-white/90 p-5 shadow-sm">
@@ -315,28 +353,7 @@ export const Step5Results: React.FC = () => {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-[32px] border border-emerald-200 bg-gradient-to-r from-emerald-50 via-teal-50 to-sky-50 shadow-sm">
-          <div className="flex flex-col items-center gap-6 px-8 py-8 text-center sm:flex-row sm:text-left">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg">
-              <Trophy size={26} className="text-white" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-600">Evaluation Complete</p>
-              <h3 className="mt-1 text-xl font-black tracking-tight text-slate-900">Ready to continue with the champion regression model?</h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-600">
-                Step 6 will open with <strong>{championLabel}</strong> as the selected run.
-              </p>
-            </div>
-            <button
-              id="proceed-to-explainability-btn"
-              onClick={completeStep5}
-              className="flex shrink-0 items-center gap-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4 text-sm font-black text-white shadow-lg transition-all duration-200 hover:scale-[1.03] hover:shadow-xl active:scale-[0.98]"
-            >
-              Complete Training &amp; Proceed
-              <ArrowRight size={18} />
-            </button>
-          </div>
-        </div>
+        <Step5ContinueButton onClick={completeStep5} />
       </div>
     );
   }
@@ -398,6 +415,8 @@ export const Step5Results: React.FC = () => {
             </div>
           </div>
         </div>
+
+        <Step5ContinueButton onClick={completeStep5} />
 
       </div>
     );
@@ -650,6 +669,7 @@ export const Step5Results: React.FC = () => {
         </div>
       </div>
 
+      <Step5ContinueButton onClick={completeStep5} />
     </div>
   );
 };
@@ -694,6 +714,19 @@ const MetricCard: React.FC<{ label: string; value?: number | null }> = ({ label,
   <div className="rounded-2xl bg-white/75 p-4">
     <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">{label}</p>
     <p className="mt-2 text-2xl font-black text-slate-900">{percent(value)}</p>
+  </div>
+);
+
+const Step5ContinueButton: React.FC<{ onClick: () => void }> = ({ onClick }) => (
+  <div className="flex justify-end px-4 pb-8">
+    <button
+      id="proceed-to-explainability-btn"
+      onClick={onClick}
+      className="inline-flex items-center gap-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4 text-sm font-black text-white shadow-lg transition-all duration-200 hover:scale-[1.03] hover:shadow-xl active:scale-[0.98]"
+    >
+      Continue
+      <ArrowRight size={18} />
+    </button>
   </div>
 );
 

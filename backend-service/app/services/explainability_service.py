@@ -31,6 +31,7 @@ class CachedExplainabilityRun:
     run_id: str
     model_id: str
     algorithm: str
+    problem_type: str
     class_names: list[str]
     selection_split: str
     summary: dict[str, Any]
@@ -43,6 +44,7 @@ class CachedExplainabilityRun:
     default_record_id: str
     simulator_mode: str
     surrogate_baseline: list[float]
+    prediction_stats: dict[str, float] = field(default_factory=dict)
     global_weight_map: dict[str, float] = field(default_factory=dict)
     surrogate_model: Any | None = None
     surrogate_explainer: Any | None = None
@@ -74,10 +76,16 @@ class ExplainabilityService:
         if reference_frame.empty:
             raise PipelineError("Explainability requires a non-empty reference split.", status_code=400)
 
-        probability_matrix = self._predict_probability_matrix(estimator, reference_frame, data.class_names)
+        is_regression = data.problem_type == "regression"
+        prediction_matrix = (
+            self._predict_regression_values(estimator, reference_frame)
+            if is_regression
+            else self._predict_probability_matrix(estimator, reference_frame, data.class_names)
+        )
         summary = self._build_summary(
             algorithm=algorithm,
             model_id=model_id,
+            problem_type=data.problem_type,
             class_names=data.class_names,
             train_metrics=train_metrics or {},
             final_metrics=final_metrics or {},
@@ -102,23 +110,41 @@ class ExplainabilityService:
         }
 
         top_feature_names = [item["feature"] for item in global_payload.get("features", [])]
-        record_frame, record_options = self._build_record_catalog(reference_frame, reference_ids, probability_matrix, data.class_names, top_feature_names)
+        record_frame, record_options = (
+            self._build_regression_record_catalog(reference_frame, reference_ids, prediction_matrix, top_feature_names)
+            if is_regression
+            else self._build_record_catalog(reference_frame, reference_ids, prediction_matrix, data.class_names, top_feature_names)
+        )
         if record_frame.empty or not record_options:
             raise PipelineError("Explainability requires at least one candidate record.", status_code=400)
 
-        background_probabilities = self._predict_probability_matrix(estimator, background_frame, data.class_names)
+        background_predictions = (
+            self._predict_regression_values(estimator, background_frame)
+            if is_regression
+            else self._predict_probability_matrix(estimator, background_frame, data.class_names)
+        )
         surrogate_frame = pd.concat([background_frame, reference_frame], ignore_index=True)
-        surrogate_targets = np.vstack([background_probabilities, probability_matrix])
+        surrogate_targets = (
+            np.concatenate([background_predictions, prediction_matrix], axis=0)
+            if is_regression
+            else np.vstack([background_predictions, prediction_matrix])
+        )
         surrogate_model = self._train_surrogate(surrogate_frame, surrogate_targets)
-        surrogate_baseline = self._build_surrogate_baseline(surrogate_targets, data.class_names)
+        surrogate_baseline = (
+            self._build_regression_baseline(surrogate_targets)
+            if is_regression
+            else self._build_surrogate_baseline(surrogate_targets, data.class_names)
+        )
         surrogate_explainer = self._build_surrogate_explainer(surrogate_model)
         simulator_mode = "surrogate_tree_shap" if surrogate_explainer is not None else "surrogate_proxy"
+        prediction_stats = self._build_prediction_stats(surrogate_targets)
 
         bundle = CachedExplainabilityRun(
             session_id=session_id,
             run_id=run_id,
             model_id=model_id,
             algorithm=algorithm,
+            problem_type=data.problem_type,
             class_names=data.class_names,
             selection_split=data.selection_split,
             summary=summary,
@@ -131,6 +157,7 @@ class ExplainabilityService:
             default_record_id=str(record_options[0]["record_id"]),
             simulator_mode=simulator_mode,
             surrogate_baseline=surrogate_baseline,
+            prediction_stats=prediction_stats,
             global_weight_map=self._build_weight_map(global_payload),
             surrogate_model=surrogate_model,
             surrogate_explainer=surrogate_explainer,
@@ -222,16 +249,24 @@ class ExplainabilityService:
             scenario_row[feature] = self._coerce_override_value(raw_value, bundle.control_specs[feature])
 
         scenario_frame = pd.DataFrame([scenario_row], columns=bundle.record_frame.columns)
-        probability_vector = self._predict_from_surrogate(bundle, scenario_frame)
-        target_index = int(np.argmax(probability_vector))
-        target_probability = float(probability_vector[target_index])
-        base_value = float(bundle.surrogate_baseline[target_index]) if target_index < len(bundle.surrogate_baseline) else 0.0
+        if bundle.problem_type == "regression":
+            target_index = 0
+            predicted_value = self._predict_regression_from_surrogate(bundle, scenario_frame)
+            target_label = "Predicted value"
+            base_value = float(bundle.surrogate_baseline[0]) if bundle.surrogate_baseline else 0.0
+            probability_vector = np.asarray([], dtype=float)
+        else:
+            probability_vector = self._predict_from_surrogate(bundle, scenario_frame)
+            target_index = int(np.argmax(probability_vector))
+            predicted_value = float(probability_vector[target_index])
+            target_label = bundle.class_names[target_index]
+            base_value = float(bundle.surrogate_baseline[target_index]) if target_index < len(bundle.surrogate_baseline) else 0.0
 
         if bundle.surrogate_explainer is not None:
             contribution_vector = self._local_shap_vector(bundle, scenario_frame, target_index)
             local_mode = bundle.simulator_mode
         else:
-            contribution_vector = self._proxy_local_vector(bundle, scenario_row, target_index, base_value, target_probability)
+            contribution_vector = self._proxy_local_vector(bundle, scenario_row, target_index, base_value, predicted_value)
             local_mode = "surrogate_proxy"
 
         ordered_contributions = self._rank_local_contributions(
@@ -244,19 +279,30 @@ class ExplainabilityService:
         scenario_payload = {
             "record_id": str(record_id),
             "prediction": {
+                "prediction_mode": bundle.problem_type,
                 "target_class_index": target_index,
-                "target_class_label": bundle.class_names[target_index],
-                "target_probability": round(target_probability, 6),
-                "baseline_probability": round(base_value, 6),
-                "delta_from_baseline": round(target_probability - base_value, 6),
-                "confidence_band": self._confidence_band(target_probability),
-                "class_probabilities": [
-                    {
-                        "label": label,
-                        "probability": round(float(probability), 6),
-                    }
-                    for label, probability in zip(bundle.class_names, probability_vector, strict=False)
-                ],
+                "target_class_label": target_label,
+                "target_probability": round(predicted_value, 6) if bundle.problem_type != "regression" else None,
+                "baseline_probability": round(base_value, 6) if bundle.problem_type != "regression" else None,
+                "predicted_value": round(predicted_value, 6) if bundle.problem_type == "regression" else None,
+                "baseline_value": round(base_value, 6) if bundle.problem_type == "regression" else None,
+                "delta_from_baseline": round(predicted_value - base_value, 6),
+                "confidence_band": (
+                    self._regression_value_band(predicted_value, bundle.prediction_stats)
+                    if bundle.problem_type == "regression"
+                    else self._confidence_band(predicted_value)
+                ),
+                "class_probabilities": (
+                    []
+                    if bundle.problem_type == "regression"
+                    else [
+                        {
+                            "label": label,
+                            "probability": round(float(probability), 6),
+                        }
+                        for label, probability in zip(bundle.class_names, probability_vector, strict=False)
+                    ]
+                ),
             },
             "feature_values": {
                 feature: self._round_value(float(scenario_row[feature]))
@@ -266,7 +312,7 @@ class ExplainabilityService:
             "local_explanation": {
                 "computation_mode": local_mode,
                 "base_value": round(base_value, 6),
-                "predicted_value": round(target_probability, 6),
+                "predicted_value": round(predicted_value, 6),
                 "top_features": ordered_contributions,
             },
         }
@@ -282,12 +328,43 @@ class ExplainabilityService:
         *,
         algorithm: str,
         model_id: str,
+        problem_type: str,
         class_names: list[str],
         train_metrics: dict[str, Any],
         final_metrics: dict[str, Any],
         generalization: dict[str, Any],
         search_summary: dict[str, Any],
     ) -> dict[str, Any]:
+        if problem_type == "regression":
+            holdout_score = float(final_metrics.get("rmse") or final_metrics.get("mae") or 0.0)
+            train_score = float(train_metrics.get("rmse") or holdout_score)
+            train_test_gap = round(max(0.0, holdout_score - train_score), 4)
+            relative_gap = train_test_gap / max(abs(holdout_score), 1e-6)
+            stability_score = round(max(0.0, min(1.0, 1.0 - relative_gap)), 4)
+            overfitting_risk = str(generalization.get("risk") or self._risk_from_gap(train_test_gap))
+
+            rationale = (
+                "This model kept RMSE low while staying close to its training performance, so the numeric predictions look stable."
+                if stability_score >= 0.85 and train_test_gap <= 0.1
+                else "The prediction error stays reasonably close between training and holdout data, which supports using this model for explanation."
+                if stability_score >= 0.7 and train_test_gap <= 0.25
+                else "The holdout error rises relative to training, so regression explanations should be reviewed with extra caution."
+            )
+
+            return {
+                "algorithm": algorithm,
+                "model_id": model_id,
+                "problem_type": problem_type,
+                "class_count": 0,
+                "cv_score": round(holdout_score, 4),
+                "train_test_gap": train_test_gap,
+                "stability_score": stability_score,
+                "overfitting_risk": overfitting_risk,
+                "primary_metric_name": "rmse",
+                "primary_metric_direction": "lower_is_better",
+                "selection_rationale": rationale,
+            }
+
         holdout_score = float(final_metrics.get("f1_score") or final_metrics.get("accuracy") or 0.0)
         cv_score = float(search_summary.get("best_score") or holdout_score)
         train_score = float(train_metrics.get("f1_score") or train_metrics.get("accuracy") or holdout_score)
@@ -307,11 +384,14 @@ class ExplainabilityService:
         return {
             "algorithm": algorithm,
             "model_id": model_id,
+            "problem_type": problem_type,
             "class_count": len(class_names),
             "cv_score": round(cv_score, 4),
             "train_test_gap": train_test_gap,
             "stability_score": stability_score,
             "overfitting_risk": overfitting_risk,
+            "primary_metric_name": "f1_score",
+            "primary_metric_direction": "higher_is_better",
             "selection_rationale": rationale,
         }
 
@@ -482,6 +562,52 @@ class ExplainabilityService:
 
         return ranked_frame, options
 
+    def _build_regression_record_catalog(
+        self,
+        reference_frame: pd.DataFrame,
+        record_ids: list[str],
+        predictions: np.ndarray,
+        top_feature_names: list[str] | None = None,
+    ) -> tuple[pd.DataFrame, list[dict[str, Any]]]:
+        if reference_frame.empty or predictions.size == 0:
+            return pd.DataFrame(columns=reference_frame.columns), []
+
+        flattened_predictions = np.asarray(predictions, dtype=float).reshape(-1)
+        prediction_stats = self._build_prediction_stats(flattened_predictions)
+        baseline = float(prediction_stats.get("median", 0.0))
+        selection_order = np.unique(np.linspace(0, len(reference_frame) - 1, num=min(MAX_REFERENCE_ROWS, len(reference_frame)), dtype=int))
+        ranked_indices = selection_order[np.argsort(np.abs(flattened_predictions[selection_order] - baseline))[::-1]]
+        ranked_frame = reference_frame.iloc[ranked_indices].reset_index(drop=True)
+        ranked_ids = [record_ids[index] if index < len(record_ids) else f"record-{index + 1}" for index in ranked_indices]
+        ranked_predictions = flattened_predictions[ranked_indices]
+
+        context_features: list[str] = []
+        if top_feature_names:
+            context_features = [f for f in top_feature_names if f in ranked_frame.columns][:2]
+
+        options: list[dict[str, Any]] = []
+        for local_index, (record_id, predicted_value) in enumerate(zip(ranked_ids, ranked_predictions, strict=False)):
+            row = ranked_frame.iloc[local_index]
+            top_feature_values: dict[str, float | int] = {}
+            for feat in context_features:
+                raw = row[feat]
+                numeric = float(raw) if not pd.isna(raw) else 0.0
+                top_feature_values[feat] = int(numeric) if numeric == int(numeric) else round(numeric, 2)
+
+            options.append(
+                {
+                    "record_id": str(record_id),
+                    "position": local_index + 1,
+                    "predicted_label": "Predicted value",
+                    "predicted_probability": 0.0,
+                    "predicted_value": round(float(predicted_value), 6),
+                    "confidence_band": self._regression_value_band(float(predicted_value), prediction_stats),
+                    "top_feature_values": top_feature_values,
+                }
+            )
+
+        return ranked_frame, options
+
     def _train_surrogate(self, reference_frame: pd.DataFrame, probability_matrix: np.ndarray) -> RandomForestRegressor | None:
         if reference_frame.empty or probability_matrix.size == 0:
             return None
@@ -518,6 +644,28 @@ class ExplainabilityService:
         if probability_matrix.size == 0:
             return [0.0 for _ in class_names]
         return [round(float(value), 6) for value in probability_matrix.mean(axis=0).tolist()]
+
+    def _build_regression_baseline(self, predictions: np.ndarray) -> list[float]:
+        numeric = np.asarray(predictions, dtype=float).reshape(-1)
+        if numeric.size == 0:
+            return [0.0]
+        return [round(float(numeric.mean()), 6)]
+
+    def _build_prediction_stats(self, predictions: np.ndarray) -> dict[str, float]:
+        numeric = np.asarray(predictions, dtype=float).reshape(-1)
+        if numeric.size == 0:
+            return {"min": 0.0, "max": 0.0, "median": 0.0, "scale": 1.0}
+
+        minimum = float(np.min(numeric))
+        maximum = float(np.max(numeric))
+        median = float(np.median(numeric))
+        scale = float(max(np.std(numeric, ddof=0), (maximum - minimum) / 6.0, 1e-6))
+        return {
+            "min": minimum,
+            "max": maximum,
+            "median": median,
+            "scale": scale,
+        }
 
     def _build_weight_map(self, global_payload: dict[str, Any]) -> dict[str, float]:
         features = global_payload.get("features", [])
@@ -597,6 +745,10 @@ class ExplainabilityService:
                 scores[index, int(predicted)] = 1.0
         return self._normalize_probability_matrix(scores, class_names)
 
+    def _predict_regression_values(self, estimator: Any, frame: pd.DataFrame) -> np.ndarray:
+        predictions = np.asarray(estimator.predict(frame), dtype=float)
+        return predictions.reshape(-1)
+
     def _predict_from_surrogate(self, bundle: CachedExplainabilityRun, scenario_frame: pd.DataFrame) -> np.ndarray:
         if bundle.surrogate_model is not None:
             raw = np.asarray(bundle.surrogate_model.predict(scenario_frame), dtype=float)
@@ -606,6 +758,13 @@ class ExplainabilityService:
             return probabilities[0]
 
         return np.asarray(bundle.surrogate_baseline, dtype=float)
+
+    def _predict_regression_from_surrogate(self, bundle: CachedExplainabilityRun, scenario_frame: pd.DataFrame) -> float:
+        if bundle.surrogate_model is not None:
+            raw = np.asarray(bundle.surrogate_model.predict(scenario_frame), dtype=float).reshape(-1)
+            if raw.size > 0:
+                return float(raw[0])
+        return float(bundle.surrogate_baseline[0]) if bundle.surrogate_baseline else 0.0
 
     def _local_shap_vector(self, bundle: CachedExplainabilityRun, scenario_frame: pd.DataFrame, output_index: int) -> np.ndarray:
         explainer = bundle.surrogate_explainer
@@ -755,6 +914,16 @@ class ExplainabilityService:
         if probability >= 0.75:
             return "high"
         if probability >= 0.45:
+            return "moderate"
+        return "low"
+
+    def _regression_value_band(self, value: float, stats: dict[str, float]) -> str:
+        center = float(stats.get("median", 0.0))
+        scale = max(float(stats.get("scale", 1.0)), 1e-6)
+        z_score = abs((value - center) / scale)
+        if z_score >= 1.2:
+            return "high"
+        if z_score >= 0.5:
             return "moderate"
         return "low"
 
