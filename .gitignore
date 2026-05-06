@@ -21,3 +21,7 @@ frontend-app/dist/
 # Env
 .env
 *.env.local
+
+# Runtime session data
+backend-service/temp_sessions/
+temp_sessions/

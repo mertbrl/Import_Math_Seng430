@@ -18,8 +18,10 @@ class Settings(BaseSettings):
             "http://127.0.0.1:5173",
             "http://localhost:5174",
             "http://127.0.0.1:5174",
+            "http://localhost:3000",
             "https://mertbrl.github.io",
             "https://mertbrl.github.io/Import_Math_Seng430",
+            "https://yusuf06p-import-math-backend.hf.space",
         ]
     )
 

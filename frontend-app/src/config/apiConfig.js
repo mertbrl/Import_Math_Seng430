@@ -1,4 +1,4 @@
-const DEFAULT_API_BASE_URL = 'https://import-math-seng430.onrender.com/api/v1';
+const DEFAULT_API_BASE_URL = 'https://yusuf06p-import-math-backend.hf.space/api/v1';
 const configuredApiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').trim();
 
 export const API_BASE_URL = (configuredApiBaseUrl || DEFAULT_API_BASE_URL).replace(/\/+$/, '');
